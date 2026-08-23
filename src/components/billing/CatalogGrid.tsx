@@ -228,11 +228,6 @@ export function CatalogGrid() {
                           {item.duration_mins} min
                         </span>
                       )}
-                      {!isService && item.stock_qty !== undefined && (
-                        <span className="text-[10px] text-zinc-400">
-                          Stock: {item.stock_qty} pcs
-                        </span>
-                      )}
                     </div>
 
                     <button

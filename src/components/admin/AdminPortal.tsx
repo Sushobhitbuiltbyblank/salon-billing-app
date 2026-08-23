@@ -123,7 +123,6 @@ export function AdminPortal() {
     duration_mins: 45,
     cost_price: 150,
     sku: "",
-    stock_qty: 10,
     is_active: true,
   });
 
@@ -236,7 +235,6 @@ export function AdminPortal() {
       duration_mins: type === "service" ? 45 : undefined,
       cost_price: 200,
       sku: type === "product" ? `SKU-${Date.now().toString().slice(-4)}` : "",
-      stock_qty: type === "product" ? 15 : undefined,
       is_active: true,
     });
     setIsCatalogModalOpen(true);
@@ -261,7 +259,6 @@ export function AdminPortal() {
       duration_mins: catalogFormData.type === "service" ? Number(catalogFormData.duration_mins) || 30 : undefined,
       cost_price: Number(catalogFormData.cost_price) || 0,
       sku: catalogFormData.type === "product" ? catalogFormData.sku : undefined,
-      stock_qty: catalogFormData.type === "product" ? Number(catalogFormData.stock_qty) || 0 : undefined,
       is_active: true,
       created_at: editingCatalogItem?.created_at || new Date().toISOString(),
     };
@@ -916,7 +913,7 @@ export function AdminPortal() {
             <div>
               <h3 className="text-base font-bold text-white">Services & Products Catalog</h3>
               <p className="text-xs text-zinc-400">
-                Add, update pricing, duration, stock inventory, and active status.
+                Add, update pricing, duration, categories, and active status.
               </p>
             </div>
 
@@ -1041,10 +1038,12 @@ export function AdminPortal() {
                             )}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-[10px] text-zinc-400 px-1">
-                          <span>Stock Available:</span>
-                          <span className="font-mono font-bold text-zinc-300">{item.stock_qty || 0} units</span>
-                        </div>
+                        {item.sku && (
+                          <div className="flex items-center justify-between text-[10px] text-zinc-400 px-1">
+                            <span>SKU / Code:</span>
+                            <span className="font-mono font-bold text-zinc-300">{item.sku}</span>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="grid grid-cols-2 gap-2 text-xs bg-zinc-950/60 p-2 rounded-xl border border-zinc-800/60 mb-3">
@@ -1600,7 +1599,7 @@ export function AdminPortal() {
             <DialogTitle>
               {editingCatalogItem ? "Edit Catalog Item" : `Add New ${catalogFormData.type === "service" ? "Service" : "Product"}`}
             </DialogTitle>
-            <DialogDescription>Set prices, category, duration, and stock.</DialogDescription>
+            <DialogDescription>Set prices, category, and duration.</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-3">
@@ -1712,27 +1711,15 @@ export function AdminPortal() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-zinc-400 mb-1 block">Stock Quantity</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={catalogFormData.stock_qty ?? 25}
-                      onChange={(e) => setCatalogFormData({ ...catalogFormData, stock_qty: Number(e.target.value) })}
-                      className="w-full h-9 px-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-zinc-400 mb-1 block">SKU / Barcode</label>
-                    <input
-                      type="text"
-                      value={catalogFormData.sku || ""}
-                      onChange={(e) => setCatalogFormData({ ...catalogFormData, sku: e.target.value })}
-                      placeholder="e.g. PRD-LRL-01"
-                      className="w-full h-9 px-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
-                    />
-                  </div>
+                <div>
+                  <label className="text-xs font-medium text-zinc-400 mb-1 block">SKU / Barcode</label>
+                  <input
+                    type="text"
+                    value={catalogFormData.sku || ""}
+                    onChange={(e) => setCatalogFormData({ ...catalogFormData, sku: e.target.value })}
+                    placeholder="e.g. PRD-LRL-01"
+                    className="w-full h-9 px-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
+                  />
                 </div>
               </div>
             ) : (
