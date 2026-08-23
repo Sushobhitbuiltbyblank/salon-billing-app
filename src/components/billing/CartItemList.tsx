@@ -13,6 +13,7 @@ import {
   Sparkles,
   ShoppingBag,
   Clock,
+  AlertCircle,
 } from "lucide-react";
 import { SplitStaffModal } from "./SplitStaffModal";
 import { formatCurrency } from "@/lib/utils";
@@ -52,13 +53,18 @@ export function CartItemList() {
     <div className="space-y-2.5">
       {draftItems.map((item, index) => {
         const isService = item.item_type === "service";
+        const isStylistMissing = isService && !item.primary_staff_id;
         const primaryName = getStaffName(item.primary_staff_id);
         const secondaryName = getStaffName(item.secondary_staff_id);
 
         return (
           <div
             key={item.id}
-            className="group relative rounded-2xl border border-zinc-800/90 bg-zinc-950/80 p-3.5 backdrop-blur-xl transition-all duration-200 hover:border-purple-500/40 hover:bg-zinc-900/90"
+            className={`group relative rounded-2xl border p-3.5 backdrop-blur-xl transition-all duration-200 ${
+              isStylistMissing
+                ? "border-amber-500/60 bg-amber-950/15 hover:border-amber-500/80 shadow-md shadow-amber-950/20"
+                : "border-zinc-800/90 bg-zinc-950/80 hover:border-purple-500/40 hover:bg-zinc-900/90"
+            }`}
           >
             {/* ROW 1: ITEM NAME, BADGE, AND LINE TOTAL */}
             <div className="flex items-start justify-between gap-2">
@@ -76,6 +82,12 @@ export function CartItemList() {
                   >
                     {isService ? "Service" : "Product"}
                   </Badge>
+                  {isStylistMissing && (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                      <AlertCircle className="h-2.5 w-2.5" />
+                      Stylist Required
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -171,15 +183,21 @@ export function CartItemList() {
             <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-zinc-900/60 flex-wrap">
               {/* STYLIST SELECTOR & SPLIT BUTTON */}
               <div className="flex items-center gap-1.5 flex-1 min-w-[220px]">
-                <User className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                <User className={`h-3.5 w-3.5 shrink-0 ${isStylistMissing ? "text-amber-400" : "text-purple-400"}`} />
                 <select
                   value={item.primary_staff_id || ""}
                   onChange={(e) =>
                     updateDraftItem(item.id, { primary_staff_id: e.target.value || undefined })
                   }
-                  className="h-7 px-2 text-xs bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium flex-1 max-w-[180px]"
+                  className={`h-7 px-2 text-xs rounded-lg font-medium flex-1 max-w-[200px] transition-all focus:outline-none focus:ring-1 ${
+                    isStylistMissing
+                      ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
+                      : "bg-zinc-900 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
+                  }`}
                 >
-                  <option value="">-- Assign Stylist --</option>
+                  <option value="">
+                    {isService ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
+                  </option>
                   {staff.map((s) => (
                     <option key={s.id} value={s.id} disabled={s.status !== "active"}>
                       {s.name} ({s.role}) {s.status === "on_leave" ? "[Leave]" : ""}

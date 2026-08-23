@@ -514,8 +514,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // POS DRAFT HELPERS
   const addDraftItem = (item: CatalogItem, defaultStaffId?: string) => {
-    const activeStaff = staff.filter((s) => s.status === "active");
-    const primaryStaffId = defaultStaffId || (activeStaff.length > 0 ? activeStaff[0].id : undefined);
+    const primaryStaffId = defaultStaffId || undefined;
 
     setDraftItems((prev) => {
       const existingIdx = prev.findIndex((i) => i.item_id === item.id);

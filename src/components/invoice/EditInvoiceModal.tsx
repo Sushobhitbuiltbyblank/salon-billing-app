@@ -162,9 +162,6 @@ export function EditInvoiceModal() {
     const catItem = catalog.find((c) => c.id === selectedCatalogId);
     if (!catItem) return;
 
-    const activeStaff = staff.filter((s) => s.status === "active");
-    const defaultStaffId = activeStaff.length > 0 ? activeStaff[0].id : undefined;
-
     const newItem: InvoiceItem = {
       id: `edit-item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       item_id: catItem.id,
@@ -174,7 +171,7 @@ export function EditInvoiceModal() {
       unit_price: catItem.price,
       discount: 0,
       total_price: catItem.price,
-      primary_staff_id: defaultStaffId,
+      primary_staff_id: undefined,
       primary_split_ratio: 100,
       secondary_split_ratio: 0,
     };
@@ -190,6 +187,18 @@ export function EditInvoiceModal() {
     }
     if (items.length === 0) {
       alert("Please have at least one line item in the invoice.");
+      return;
+    }
+
+    // VALIDATE STYLIST FOR EVERY SERVICE
+    const unassignedServices = items.filter(
+      (item) => item.item_type === "service" && !item.primary_staff_id
+    );
+    if (unassignedServices.length > 0) {
+      const listText = unassignedServices.map((s, idx) => `• ${s.item_name}`).join("\n");
+      alert(
+        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each of the following service(s) before saving:\n\n${listText}`
+      );
       return;
     }
 
@@ -470,14 +479,22 @@ export function EditInvoiceModal() {
 
                     {/* STYLIST SELECTOR & SPLIT */}
                     <div>
-                      <span className="text-[10px] text-zinc-400 block mb-0.5">Stylist & Split</span>
+                      <span className="text-[10px] text-zinc-400 block mb-0.5">
+                        Stylist & Split {isService && !item.primary_staff_id && <span className="text-amber-400 font-bold">*</span>}
+                      </span>
                       <div className="flex items-center gap-1">
                         <select
                           value={item.primary_staff_id || ""}
                           onChange={(e) => handleItemStaffChange(item.id, e.target.value)}
-                          className="h-7 px-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500 flex-1 min-w-0"
+                          className={`h-7 px-1.5 text-xs rounded-lg focus:outline-none focus:ring-1 flex-1 min-w-0 font-medium ${
+                            isService && !item.primary_staff_id
+                              ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
+                              : "bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
+                          }`}
                         >
-                          <option value="">-- Stylist --</option>
+                          <option value="">
+                            {isService ? "-- Select Stylist * --" : "-- Staff (Optional) --"}
+                          </option>
                           {staff.map((s) => (
                             <option key={s.id} value={s.id}>
                               {s.name}

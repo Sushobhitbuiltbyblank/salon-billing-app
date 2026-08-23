@@ -30,7 +30,7 @@ export function SplitStaffModal({
 
   useEffect(() => {
     if (open && item) {
-      setPrimaryStaffId(item.primary_staff_id || (staff.length > 0 ? staff[0].id : ""));
+      setPrimaryStaffId(item.primary_staff_id || "");
       setSecondaryStaffId(item.secondary_staff_id || "");
       setPrimaryRatio(item.primary_split_ratio ?? 100);
       setSecondaryRatio(item.secondary_split_ratio ?? 0);
@@ -101,6 +101,11 @@ export function SplitStaffModal({
   }
 
   const handleConfirm = () => {
+    if (item.item_type === "service" && !primaryStaffId) {
+      alert("⚠️ Stylist Selection Required\n\nPlease select a primary stylist for this service.");
+      return;
+    }
+
     onSave({
       primary_staff_id: primaryStaffId || undefined,
       secondary_staff_id: secondaryStaffId ? secondaryStaffId : undefined,

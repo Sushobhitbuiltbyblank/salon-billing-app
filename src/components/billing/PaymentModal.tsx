@@ -93,6 +93,19 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
   const handleCheckout = () => {
     if (draftItems.length === 0) return;
 
+    // VALIDATE STYLIST FOR EVERY SERVICE
+    const unassignedServices = draftItems.filter(
+      (item) => item.item_type === "service" && !item.primary_staff_id
+    );
+    if (unassignedServices.length > 0) {
+      const listText = unassignedServices.map((s, idx) => `• ${s.item_name}`).join("\n");
+      alert(
+        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each of the following service(s) before completing payment:\n\n${listText}`
+      );
+      onOpenChange(false);
+      return;
+    }
+
     // VALIDATE GENDER ONLY IF A NAMED CUSTOMER IS BEING ADDED
     if (hasNamedCustomer && (!draftCustomer?.gender || draftCustomer.gender === "unspecified")) {
       alert("⚠️ Gender Selection Required\n\nPlease select the customer's gender (Female, Male, or Other) for this customer profile.");

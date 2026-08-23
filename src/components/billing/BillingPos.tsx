@@ -17,6 +17,7 @@ import {
   ShoppingBag,
   ArrowLeft,
   ChevronRight,
+  AlertCircle,
 } from "lucide-react";
 
 export function BillingPos() {
@@ -40,6 +41,26 @@ export function BillingPos() {
     taxEnabled: settings.tax_enabled,
     taxRate: settings.tax_rate,
   });
+
+  // Check unassigned services (services without primary stylist)
+  const unassignedServices = draftItems.filter(
+    (item) => item.item_type === "service" && !item.primary_staff_id
+  );
+
+  const handleOpenPayment = () => {
+    if (draftItems.length === 0) return;
+
+    if (unassignedServices.length > 0) {
+      const listText = unassignedServices.map((s, idx) => `• ${s.item_name}`).join("\n");
+      alert(
+        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each of the following service(s) before checkout:\n\n${listText}`
+      );
+      setMobileTab("ticket");
+      return;
+    }
+
+    setIsPaymentOpen(true);
+  };
 
   return (
     <div className="max-w-[1700px] mx-auto w-full">
@@ -209,14 +230,28 @@ export function BillingPos() {
               </div>
             </div>
 
+            {/* WARNING ALERT IF STYLISTS ARE UNASSIGNED */}
+            {unassignedServices.length > 0 && (
+              <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 animate-pulse" />
+                <span className="font-medium">
+                  {unassignedServices.length} service{unassignedServices.length > 1 ? "s" : ""} require{unassignedServices.length === 1 ? "s" : ""} a stylist selection
+                </span>
+              </div>
+            )}
+
             {/* ACTION BUTTONS */}
             <div className="flex items-center gap-2 pt-1">
               <Button
-                variant="glow"
+                variant={unassignedServices.length > 0 ? "secondary" : "glow"}
                 size="lg"
-                onClick={() => setIsPaymentOpen(true)}
+                onClick={handleOpenPayment}
                 disabled={draftItems.length === 0}
-                className="flex-1 text-sm font-bold h-12"
+                className={`flex-1 text-sm font-bold h-12 ${
+                  unassignedServices.length > 0
+                    ? "border-amber-500/50 text-amber-300 hover:bg-amber-950/40"
+                    : ""
+                }`}
               >
                 <CreditCard className="h-4 w-4 mr-1.5" />
                 Collect & Settle ({formatCurrency(totals.grandTotal, settings.currency_symbol)})
