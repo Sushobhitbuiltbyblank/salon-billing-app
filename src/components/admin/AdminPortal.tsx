@@ -1,0 +1,1930 @@
+"use client";
+
+import React, { useState } from "react";
+import { useApp } from "@/context/AppContext";
+import {
+  AppUser,
+  CatalogItem,
+  Category,
+  Customer,
+  ItemType,
+  SalonSettings,
+  Staff,
+  StaffStatus,
+} from "@/types";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { CustomerModal } from "@/components/customer/CustomerModal";
+import { AdminAnalyticsDashboard } from "@/components/admin/AdminAnalyticsDashboard";
+import { AdminInvoiceManagement } from "@/components/admin/AdminInvoiceManagement";
+import { formatCurrency, formatDate, generateUUID } from "@/lib/utils";
+import {
+  Shield,
+  Users,
+  UserCheck,
+  User,
+  Package,
+  Layers,
+  Settings,
+  Plus,
+  Edit2,
+  Trash2,
+  Check,
+  X,
+  Sparkles,
+  Scissors,
+  Phone,
+  Mail,
+  Gift,
+  Heart,
+  Percent,
+  Clock,
+  KeyRound,
+  Store,
+  DollarSign,
+  Search,
+  CheckCircle2,
+  Save,
+  Lock,
+  Eye,
+  EyeOff,
+  ShoppingCart,
+  BarChart3,
+  Receipt,
+} from "lucide-react";
+
+export function AdminPortal() {
+  const {
+    currentUser,
+    users,
+    saveUser,
+    deleteUser,
+    staff,
+    addStaff,
+    updateStaff,
+    deleteStaff,
+    toggleStaffStatus,
+    catalog,
+    addCatalogItem,
+    saveCatalogItem,
+    deleteCatalogItem,
+    categories,
+    addCategory,
+    saveCategory,
+    deleteCategory,
+    customers,
+    saveCustomer,
+    deleteCustomer,
+    invoices,
+    setDraftCustomer,
+    setActiveTab,
+    settings,
+    updateSettings,
+  } = useApp();
+
+  const [activeAdminTab, setActiveAdminTab] = useState<
+    "analytics" | "invoices" | "customers" | "staff" | "catalog" | "categories" | "users" | "settings"
+  >("analytics");
+
+  // CUSTOMER CRM STATE
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const [customerGenderFilter, setCustomerGenderFilter] = useState<string>("all");
+
+  const [visiblePins, setVisiblePins] = useState<Record<string, boolean>>({});
+
+  // STAFF MODAL STATES
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [staffFormData, setStaffFormData] = useState<Partial<Staff>>({
+    name: "",
+    role: "Stylist",
+    phone: "",
+    commission_rate: 15,
+    commission_type: "percent",
+    product_commission_rate: 10,
+    product_commission_type: "percent",
+    status: "active",
+    color: "#8b5cf6",
+    notes: "",
+  });
+
+  // CATALOG MODAL STATES
+  const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
+  const [editingCatalogItem, setEditingCatalogItem] = useState<CatalogItem | null>(null);
+  const [catalogFormData, setCatalogFormData] = useState<Partial<CatalogItem>>({
+    name: "",
+    type: "service",
+    category_id: categories[0]?.id || "",
+    price: 1000,
+    duration_mins: 45,
+    cost_price: 150,
+    sku: "",
+    stock_qty: 10,
+    is_active: true,
+  });
+
+  // CATEGORY MODAL STATES
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [categoryFormData, setCategoryFormData] = useState<Partial<Category>>({
+    name: "",
+    type: "service",
+    icon: "Scissors",
+  });
+
+  // USER MODAL STATES
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+  const [userFormData, setUserFormData] = useState<Partial<AppUser>>({
+    name: "",
+    email: "",
+    role: "receptionist",
+    pin: "1111",
+    avatar_color: "#ec4899",
+    phone: "",
+    is_active: true,
+  });
+
+  // SETTINGS FORM STATE
+  const [settingsFormData, setSettingsFormData] = useState<SalonSettings>({ ...settings });
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // SEARCH FILTERS
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogTypeFilter, setCatalogTypeFilter] = useState<"all" | "service" | "product">("all");
+
+  // STAFF HANDLERS
+  const handleOpenAddStaff = () => {
+    setEditingStaff(null);
+    setStaffFormData({
+      name: "",
+      role: "Stylist",
+      phone: "",
+      commission_rate: 15,
+      commission_type: "percent",
+      product_commission_rate: 10,
+      product_commission_type: "percent",
+      status: "active",
+      color: "#8b5cf6",
+      notes: "",
+    });
+    setIsStaffModalOpen(true);
+  };
+
+  const handleOpenEditStaff = (st: Staff) => {
+    setEditingStaff(st);
+    setStaffFormData({
+      ...st,
+      commission_type: st.commission_type || "percent",
+      product_commission_rate: st.product_commission_rate !== undefined ? st.product_commission_rate : (st.commission_rate ?? 10),
+      product_commission_type: st.product_commission_type || "percent",
+    });
+    setIsStaffModalOpen(true);
+  };
+
+  const handleSaveStaff = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!staffFormData.name) return;
+
+    if (editingStaff) {
+      updateStaff({
+        ...editingStaff,
+        ...staffFormData,
+        name: staffFormData.name || editingStaff.name,
+        commission_rate: Number(staffFormData.commission_rate) || 0,
+        commission_type: staffFormData.commission_type || "percent",
+        product_commission_rate: staffFormData.product_commission_rate !== undefined ? Number(staffFormData.product_commission_rate) : (Number(staffFormData.commission_rate) || 0),
+        product_commission_type: staffFormData.product_commission_type || "percent",
+      } as Staff);
+    } else {
+      addStaff({
+        id: generateUUID(),
+        name: staffFormData.name,
+        role: staffFormData.role || "Stylist",
+        phone: staffFormData.phone || "",
+        commission_rate: Number(staffFormData.commission_rate) || 15,
+        commission_type: staffFormData.commission_type || "percent",
+        product_commission_rate: staffFormData.product_commission_rate !== undefined ? Number(staffFormData.product_commission_rate) : 10,
+        product_commission_type: staffFormData.product_commission_type || "percent",
+        status: (staffFormData.status as StaffStatus) || "active",
+        color: staffFormData.color || "#8b5cf6",
+        notes: staffFormData.notes || "",
+        created_at: new Date().toISOString(),
+      });
+    }
+    setIsStaffModalOpen(false);
+  };
+
+  const handleDeleteStaff = (st: Staff) => {
+    if (confirm(`Are you sure you want to remove staff member "${st.name}"?`)) {
+      deleteStaff(st.id);
+    }
+  };
+
+  // CATALOG HANDLERS
+  const handleOpenAddCatalog = (type: ItemType = "service") => {
+    setEditingCatalogItem(null);
+    setCatalogFormData({
+      name: "",
+      type,
+      category_id: categories.find((c) => c.type === type)?.id || categories[0]?.id || "",
+      price: type === "service" ? 1200 : 1500,
+      duration_mins: type === "service" ? 45 : undefined,
+      cost_price: 200,
+      sku: type === "product" ? `SKU-${Date.now().toString().slice(-4)}` : "",
+      stock_qty: type === "product" ? 15 : undefined,
+      is_active: true,
+    });
+    setIsCatalogModalOpen(true);
+  };
+
+  const handleOpenEditCatalog = (item: CatalogItem) => {
+    setEditingCatalogItem(item);
+    setCatalogFormData({ ...item });
+    setIsCatalogModalOpen(true);
+  };
+
+  const handleSaveCatalog = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!catalogFormData.name) return;
+
+    const itemPayload: CatalogItem = {
+      id: editingCatalogItem ? editingCatalogItem.id : generateUUID(),
+      name: catalogFormData.name,
+      type: catalogFormData.type || "service",
+      category_id: catalogFormData.category_id,
+      price: Number(catalogFormData.price) || 0,
+      duration_mins: catalogFormData.type === "service" ? Number(catalogFormData.duration_mins) || 30 : undefined,
+      cost_price: Number(catalogFormData.cost_price) || 0,
+      sku: catalogFormData.type === "product" ? catalogFormData.sku : undefined,
+      stock_qty: catalogFormData.type === "product" ? Number(catalogFormData.stock_qty) || 0 : undefined,
+      is_active: true,
+      created_at: editingCatalogItem?.created_at || new Date().toISOString(),
+    };
+
+    saveCatalogItem(itemPayload);
+    setIsCatalogModalOpen(false);
+  };
+
+  const handleDeleteCatalogItem = (item: CatalogItem) => {
+    if (confirm(`Are you sure you want to delete "${item.name}" from catalog?`)) {
+      deleteCatalogItem(item.id);
+    }
+  };
+
+  // CATEGORY HANDLERS
+  const handleOpenAddCategory = (type: ItemType = "service") => {
+    setEditingCategory(null);
+    setCategoryFormData({ name: "", type, icon: "Scissors" });
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleOpenEditCategory = (cat: Category) => {
+    setEditingCategory(cat);
+    setCategoryFormData({ name: cat.name, type: cat.type, icon: cat.icon || "Scissors" });
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleSaveCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!categoryFormData.name) return;
+
+    if (editingCategory) {
+      saveCategory({
+        ...editingCategory,
+        name: categoryFormData.name,
+        type: categoryFormData.type || "service",
+        icon: categoryFormData.icon || "Scissors",
+      });
+    } else {
+      addCategory({
+        id: generateUUID(),
+        name: categoryFormData.name,
+        type: categoryFormData.type || "service",
+        icon: categoryFormData.icon || "Scissors",
+        created_at: new Date().toISOString(),
+      });
+    }
+    setIsCategoryModalOpen(false);
+    setEditingCategory(null);
+    setCategoryFormData({ name: "", type: "service", icon: "Scissors" });
+  };
+
+  // USER / RECEPTIONIST HANDLERS
+  const handleOpenAddUser = () => {
+    setEditingUser(null);
+    setUserFormData({
+      name: "",
+      email: "",
+      role: "receptionist",
+      pin: "1234",
+      avatar_color: "#ec4899",
+      phone: "",
+      is_active: true,
+    });
+    setIsUserModalOpen(true);
+  };
+
+  const handleOpenEditUser = (usr: AppUser) => {
+    setEditingUser(usr);
+    setUserFormData({ ...usr });
+    setIsUserModalOpen(true);
+  };
+
+  const handleSaveUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userFormData.name || !userFormData.email || !userFormData.pin) return;
+
+    const payload: AppUser = {
+      id: editingUser ? editingUser.id : generateUUID(),
+      name: userFormData.name,
+      email: userFormData.email,
+      role: userFormData.role || "receptionist",
+      pin: userFormData.pin,
+      avatar_color: userFormData.avatar_color || "#ec4899",
+      phone: userFormData.phone || "",
+      is_active: true,
+      created_at: editingUser?.created_at || new Date().toISOString(),
+    };
+
+    saveUser(payload);
+    setIsUserModalOpen(false);
+  };
+
+  const handleDeleteUser = (usr: AppUser) => {
+    if (usr.role === "admin") {
+      alert("Cannot delete the primary Admin account.");
+      return;
+    }
+    if (confirm(`Are you sure you want to remove user "${usr.name}"?`)) {
+      deleteUser(usr.id);
+    }
+  };
+
+  // SETTINGS SAVE
+  const handleSaveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateSettings(settingsFormData);
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 3000);
+  };
+
+  // Filtered Catalog
+  const filteredCatalog = catalog.filter((item) => {
+    if (catalogTypeFilter !== "all" && item.type !== catalogTypeFilter) return false;
+    if (catalogSearch.trim()) {
+      const q = catalogSearch.toLowerCase().trim();
+      return (
+        item.name.toLowerCase().includes(q) ||
+        (item.sku && item.sku.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
+
+  return (
+    <div className="space-y-5 max-w-[1500px] mx-auto pb-16">
+      {/* MANAGEMENT HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-600/30">
+            <Package className="h-6 w-6" />
+          </div>
+          <div>
+            <h2 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
+              Catalog & Management Portal
+              <Badge
+                variant={currentUser?.role === "admin" ? "purple" : "secondary"}
+                className="text-[10px] py-0 px-2 font-bold"
+              >
+                {currentUser?.role === "admin" ? "👑 Admin Access" : "💼 Receptionist Access"}
+              </Badge>
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Manage services & retail products, categories, stylists & commission splits, and salon configuration.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ADMIN SUB-TABS NAVIGATION */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar bg-zinc-900/80 p-1.5 rounded-2xl border border-zinc-800/80">
+        {[
+          { id: "analytics", label: "Executive Analytics", icon: BarChart3 },
+          {
+            id: "invoices",
+            label: currentUser?.role === "admin" ? "Invoices Audit & Delete" : "Invoices Audit",
+            icon: Receipt,
+            count: invoices.length,
+          },
+          { id: "customers", label: "Clients & CRM", icon: UserCheck, count: customers.length },
+          { id: "staff", label: "Staff & Commissions", icon: Users, count: staff.length },
+          { id: "catalog", label: "Services & Products", icon: Package, count: catalog.length },
+          { id: "categories", label: "Categories", icon: Layers, count: categories.length },
+          ...(currentUser?.role === "admin"
+            ? [
+                { id: "users", label: "Receptionists & PINs", icon: KeyRound, count: users.length },
+                { id: "settings", label: "Salon Business Config", icon: Store },
+              ]
+            : []),
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeAdminTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveAdminTab(tab.id as any)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                isActive
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30 font-black"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              <span>{tab.label}</span>
+              {tab.count !== undefined && (
+                <span
+                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                    isActive ? "bg-purple-950 text-white font-black" : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* =========================================================================
+          TAB: EXECUTIVE ALL-TIME ANALYTICS DASHBOARD
+          ========================================================================= */}
+      {activeAdminTab === "analytics" && (
+        <AdminAnalyticsDashboard />
+      )}
+
+      {/* =========================================================================
+          TAB: INVOICE AUDIT & MASTER MANAGEMENT (ADMIN ONLY)
+          ========================================================================= */}
+      {activeAdminTab === "invoices" && (
+        <AdminInvoiceManagement />
+      )}
+
+      {/* =========================================================================
+          TAB: CLIENTS & CRM MANAGEMENT
+          ========================================================================= */}
+      {activeAdminTab === "customers" && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>Customer Directory & CRM</span>
+                <Badge variant="purple" className="text-[10px] font-mono">
+                  {customers.length} Registered
+                </Badge>
+              </h3>
+              <p className="text-xs text-zinc-400">
+                View customer histories, edit details, birthdays, notes, or quickly start a new bill.
+              </p>
+            </div>
+
+            <Button
+              variant="glow"
+              size="sm"
+              onClick={() => {
+                setEditingCustomer(null);
+                setIsCustomerModalOpen(true);
+              }}
+              className="gap-1.5 text-xs font-bold shrink-0 cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Register New Client</span>
+            </Button>
+          </div>
+
+          {/* SEARCH & GENDER FILTERS */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-zinc-950/60 p-2.5 rounded-2xl border border-zinc-800">
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search by name, mobile, email, notes..."
+                value={customerSearchQuery}
+                onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                className="w-full h-9 pl-9 pr-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+              {customerSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setCustomerSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto">
+              {[
+                { id: "all", label: "All Genders" },
+                { id: "female", label: "👩 Female" },
+                { id: "male", label: "👨 Male" },
+                { id: "other", label: "⚧ Other" },
+              ].map((g) => (
+                <button
+                  key={g.id}
+                  onClick={() => setCustomerGenderFilter(g.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    customerGenderFilter === g.id
+                      ? "bg-purple-600 text-white font-bold"
+                      : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+                  }`}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* CUSTOMERS LIST / TABLE */}
+          {(() => {
+            const map = new Map<string, Customer>();
+
+            customers.forEach((cust) => {
+              const cleanPhone = cust.phone ? cust.phone.replace(/\D/g, "").trim() : "";
+              const cleanName = (cust.name || "").toLowerCase().trim();
+              const key = cleanPhone || cleanName;
+              if (key) map.set(key, { ...cust });
+            });
+
+            invoices.forEach((inv) => {
+              if (inv.status === "void") return;
+              const rawName = inv.customer_name?.trim() || "";
+              const isAnonymous = !rawName || rawName.toLowerCase() === "walk-in guest";
+              const cleanPhone = inv.customer_phone ? inv.customer_phone.replace(/\D/g, "").trim() : "";
+
+              if (!isAnonymous || cleanPhone) {
+                const key = cleanPhone || rawName.toLowerCase();
+                if (!key) return;
+
+                const existing = map.get(key);
+                if (existing) {
+                  if (inv.created_at && (!existing.last_visit || new Date(inv.created_at) > new Date(existing.last_visit))) {
+                    existing.last_visit = inv.created_at;
+                  }
+                  if (!existing.email && inv.customer_email) existing.email = inv.customer_email;
+                  if (!existing.phone && inv.customer_phone) existing.phone = inv.customer_phone;
+                } else {
+                  map.set(key, {
+                    id: inv.customer_id || generateUUID(),
+                    name: rawName || (cleanPhone ? `Guest (${cleanPhone})` : "Guest"),
+                    phone: inv.customer_phone || "",
+                    email: inv.customer_email || undefined,
+                    gender: "unspecified",
+                    total_visits: 0,
+                    total_spent: 0,
+                    last_visit: inv.created_at,
+                    created_at: inv.created_at || new Date().toISOString(),
+                  });
+                }
+              }
+            });
+
+            const allUnified = Array.from(map.values()).map((cust) => {
+              const cleanPhone = cust.phone ? cust.phone.replace(/\D/g, "").trim() : "";
+              const custName = (cust.name || "").toLowerCase().trim();
+
+              const custInvoices = invoices.filter((inv) => {
+                if (inv.status === "void") return false;
+                const invPhone = inv.customer_phone ? inv.customer_phone.replace(/\D/g, "").trim() : "";
+                const invName = (inv.customer_name || "").toLowerCase().trim();
+
+                if (cleanPhone && invPhone) return cleanPhone === invPhone;
+                if (cust.id && inv.customer_id) return cust.id === inv.customer_id;
+                return custName && custName === invName && custName !== "walk-in guest";
+              });
+
+              return {
+                ...cust,
+                total_visits: Math.max(cust.total_visits || 0, custInvoices.length),
+                total_spent: Math.max(
+                  cust.total_spent || 0,
+                  custInvoices.reduce((sum, inv) => sum + (inv.grand_total || 0), 0)
+                ),
+              };
+            });
+
+            const filteredCustomers = allUnified.filter((c) => {
+              const q = customerSearchQuery.toLowerCase().trim();
+              const matchSearch =
+                !q ||
+                c.name.toLowerCase().includes(q) ||
+                c.phone.includes(q) ||
+                (c.email && c.email.toLowerCase().includes(q)) ||
+                (c.notes && c.notes.toLowerCase().includes(q));
+
+              const matchGender =
+                customerGenderFilter === "all" ||
+                c.gender === customerGenderFilter;
+
+              return matchSearch && matchGender;
+            });
+
+            if (filteredCustomers.length === 0) {
+              return (
+                <Card className="p-8 text-center bg-zinc-950/40 border-zinc-800">
+                  <UserCheck className="h-10 w-10 text-zinc-600 mx-auto mb-2" />
+                  <h4 className="text-sm font-bold text-zinc-300">No Customers Found</h4>
+                  <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">
+                    {customerSearchQuery
+                      ? `No clients matched "${customerSearchQuery}".`
+                      : "You haven't added any clients yet."}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEditingCustomer(null);
+                      setIsCustomerModalOpen(true);
+                    }}
+                    className="mt-3 gap-1.5 text-xs text-purple-400 hover:text-white"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add First Client</span>
+                  </Button>
+                </Card>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {filteredCustomers.map((cust) => {
+                  const isVIP = cust.total_visits > 5;
+                  const genderEmoji =
+                    cust.gender === "female" ? "👩" : cust.gender === "male" ? "👨" : cust.gender === "other" ? "⚧" : "👤";
+
+                  return (
+                    <Card
+                      key={cust.id}
+                      className="p-3.5 bg-zinc-950/80 border-zinc-800/90 hover:border-purple-500/40 transition-all flex flex-col justify-between group"
+                    >
+                      <div className="space-y-2.5">
+                        {/* HEADER: AVATAR & NAME */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-purple-600/30 to-pink-600/20 border border-purple-500/30 text-purple-300 flex items-center justify-center font-black text-sm shrink-0 shadow-sm">
+                              {cust.name ? cust.name.charAt(0).toUpperCase() : "G"}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <h4 className="text-sm font-bold text-white group-hover:text-purple-300 transition-colors">
+                                  {cust.name}
+                                </h4>
+                                {isVIP && (
+                                  <Badge variant="purple" className="text-[9px] py-0 px-1.5 font-bold">
+                                    <Sparkles className="h-2 w-2 text-amber-400 mr-0.5" /> VIP
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+                                <span>{genderEmoji} {cust.gender ? cust.gender.toUpperCase() : "UNSPECIFIED"}</span>
+                                {cust.phone && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="font-mono text-zinc-300">{cust.phone}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* STATS ROW */}
+                        <div className="grid grid-cols-2 gap-2 p-2 rounded-xl bg-zinc-900/90 border border-zinc-800/80 text-xs">
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block uppercase font-semibold">Total Visits</span>
+                            <span className="font-bold text-white">{cust.total_visits || 0} visits</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block uppercase font-semibold">Total Spent</span>
+                            <span className="font-bold text-emerald-400 font-mono">
+                              {formatCurrency(cust.total_spent || 0, settings.currency_symbol)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* EMAIL / BIRTHDAY / NOTES PREVIEWS */}
+                        {(cust.email || cust.birthday || cust.notes) && (
+                          <div className="space-y-1 text-[11px] text-zinc-400 pt-1 border-t border-zinc-900">
+                            {cust.email && (
+                              <div className="flex items-center gap-1.5 truncate">
+                                <Mail className="h-3 w-3 text-zinc-500 shrink-0" />
+                                <span className="truncate">{cust.email}</span>
+                              </div>
+                            )}
+                            {cust.birthday && (
+                              <div className="flex items-center gap-1.5 text-pink-400">
+                                <Gift className="h-3 w-3 shrink-0" />
+                                <span>Birthday: {cust.birthday}</span>
+                              </div>
+                            )}
+                            {cust.notes && (
+                              <p className="text-[11px] text-zinc-400 bg-zinc-900/60 p-1.5 rounded-lg border border-zinc-800/60 italic line-clamp-2">
+                                "{cust.notes}"
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* CARD ACTIONS */}
+                      <div className="flex items-center justify-between gap-1.5 pt-3 mt-2 border-t border-zinc-800/80">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraftCustomer(cust);
+                            setActiveTab("pos");
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                          title="Start billing this customer"
+                        >
+                          <ShoppingCart className="h-3 w-3" />
+                          <span>Bill Now</span>
+                        </button>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCustomer(cust);
+                              setIsCustomerModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+                            title="Edit customer details"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to delete customer "${cust.name}"?`)) {
+                                deleteCustomer(cust.id);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                            title="Delete customer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 1: STAFF & STYLISTS MANAGEMENT
+          ========================================================================= */}
+      {activeAdminTab === "staff" && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-white">Stylists & Staff Team</h3>
+              <p className="text-xs text-zinc-400">
+                Configure commission split rates, active availability, and roles.
+              </p>
+            </div>
+
+            <Button variant="glow" size="sm" onClick={handleOpenAddStaff} className="gap-1.5 text-xs font-bold">
+              <Plus className="h-4 w-4" />
+              <span>Add New Stylist</span>
+            </Button>
+          </div>
+
+          {/* STAFF CARDS GRID */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {staff.map((st) => {
+              const isActive = st.status === "active";
+
+              return (
+                <div
+                  key={st.id}
+                  className="rounded-2xl border border-zinc-800/90 bg-zinc-900/70 p-4 backdrop-blur-xl shadow-lg flex flex-col justify-between hover:border-purple-500/40 transition-all"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="flex h-11 w-11 items-center justify-center rounded-2xl font-extrabold text-base text-white shadow-md"
+                          style={{ backgroundColor: st.color || "#8b5cf6" }}
+                        >
+                          {st.name.charAt(0)}
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-white leading-tight">{st.name}</h4>
+                          <span className="text-[11px] text-purple-300 font-medium">{st.role}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => toggleStaffStatus(st.id)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer ${
+                          isActive
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                            : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                        }`}
+                        title="Click to toggle status"
+                      >
+                        {isActive ? "● Active" : "○ On Leave"}
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 text-xs bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800/60 mb-3">
+                      <div className="flex justify-between items-center text-zinc-400">
+                        <span>Service Incentive:</span>
+                        <span className="font-mono font-bold text-emerald-400">
+                          {st.commission_type === "fixed"
+                            ? `${formatCurrency(st.commission_rate, settings.currency_symbol)} Flat`
+                            : `${st.commission_rate}% Rate`}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-zinc-400">
+                        <span>Product Incentive:</span>
+                        <span className="font-mono font-bold text-purple-400">
+                          {st.product_commission_type === "fixed"
+                            ? `${formatCurrency(st.product_commission_rate ?? st.commission_rate, settings.currency_symbol)} Flat`
+                            : `${st.product_commission_rate ?? 10}% Rate`}
+                        </span>
+                      </div>
+                      {st.phone && (
+                        <div className="flex justify-between items-center text-zinc-400 pt-1 border-t border-zinc-900">
+                          <span>Phone:</span>
+                          <span className="font-mono text-zinc-300">{st.phone}</span>
+                        </div>
+                      )}
+                      {st.notes && (
+                        <p className="text-[10px] text-zinc-500 line-clamp-1 italic pt-1 border-t border-zinc-900">
+                          "{st.notes}"
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ACTIONS */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-zinc-800/60">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenEditStaff(st)}
+                      className="flex-1 text-xs h-8 gap-1"
+                    >
+                      <Edit2 className="h-3.5 w-3.5 text-purple-400" />
+                      <span>Edit</span>
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteStaff(st)}
+                      className="h-8 w-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors"
+                      title="Delete staff"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 2: CATALOG (SERVICES & PRODUCTS) CRUD
+          ========================================================================= */}
+      {activeAdminTab === "catalog" && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-white">Services & Products Catalog</h3>
+              <p className="text-xs text-zinc-400">
+                Add, update pricing, duration, stock inventory, and active status.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="glow"
+                size="sm"
+                onClick={() => handleOpenAddCatalog("service")}
+                className="gap-1.5 text-xs font-bold"
+              >
+                <Plus className="h-4 w-4" />
+                <span>+ Add Service</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleOpenAddCatalog("product")}
+                className="gap-1.5 text-xs font-bold"
+              >
+                <Plus className="h-4 w-4" />
+                <span>+ Add Product</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* SEARCH & FILTER BAR */}
+          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between bg-zinc-900/70 p-2.5 rounded-2xl border border-zinc-800">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search catalog by name or SKU..."
+                value={catalogSearch}
+                onChange={(e) => setCatalogSearch(e.target.value)}
+                className="w-full h-9 pl-9 pr-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+
+            <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800 shrink-0">
+              <button
+                onClick={() => setCatalogTypeFilter("all")}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                  catalogTypeFilter === "all" ? "bg-purple-600 text-white" : "text-zinc-400"
+                }`}
+              >
+                All ({catalog.length})
+              </button>
+              <button
+                onClick={() => setCatalogTypeFilter("service")}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                  catalogTypeFilter === "service" ? "bg-purple-600 text-white" : "text-zinc-400"
+                }`}
+              >
+                Services ({catalog.filter((i) => i.type === "service").length})
+              </button>
+              <button
+                onClick={() => setCatalogTypeFilter("product")}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                  catalogTypeFilter === "product" ? "bg-purple-600 text-white" : "text-zinc-400"
+                }`}
+              >
+                Retail ({catalog.filter((i) => i.type === "product").length})
+              </button>
+            </div>
+          </div>
+
+          {/* CATALOG TABLE / GRID */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredCatalog.map((item) => {
+              const isService = item.type === "service";
+              const category = categories.find((c) => c.id === item.category_id);
+
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-zinc-800/90 bg-zinc-900/70 p-3.5 backdrop-blur-xl shadow-lg flex flex-col justify-between hover:border-purple-500/40 transition-all"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-1.5 mb-1.5">
+                      <span
+                        className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+                          isService ? "bg-purple-500/15 text-purple-300" : "bg-amber-500/15 text-amber-300"
+                        }`}
+                      >
+                        {isService ? "Service" : "Retail Product"}
+                      </span>
+                      {category && (
+                        <span className="text-[10px] text-zinc-400 font-medium">
+                          {category.name}
+                        </span>
+                      )}
+                    </div>
+
+                    <h4 className="text-xs sm:text-sm font-bold text-white leading-tight mb-2">
+                      {item.name}
+                    </h4>
+
+                    {!isService ? (
+                      <div className="space-y-2 mb-3">
+                        <div className="grid grid-cols-2 gap-2 text-xs bg-zinc-950/60 p-2 rounded-xl border border-zinc-800/60">
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block">Sale Price (4x)</span>
+                            <span className="font-mono font-extrabold text-emerald-400">
+                              {formatCurrency(item.price, settings.currency_symbol)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block">Purchase Cost</span>
+                            <span className="font-mono font-semibold text-zinc-300">
+                              {formatCurrency(item.cost_price || 0, settings.currency_symbol)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] bg-emerald-950/30 border border-emerald-800/40 px-2.5 py-1.5 rounded-lg text-emerald-300">
+                          <span className="font-medium">Unit Profit:</span>
+                          <span className="font-mono font-extrabold">
+                            +{formatCurrency(Math.max(0, item.price - (item.cost_price || 0)), settings.currency_symbol)}
+                            {item.price > 0 && (
+                              <span className="text-[10px] ml-1 font-semibold opacity-80">
+                                ({(((item.price - (item.cost_price || 0)) / item.price) * 100).toFixed(0)}% margin)
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-zinc-400 px-1">
+                          <span>Stock Available:</span>
+                          <span className="font-mono font-bold text-zinc-300">{item.stock_qty || 0} units</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-zinc-950/60 p-2 rounded-xl border border-zinc-800/60 mb-3">
+                        <div>
+                          <span className="text-[10px] text-zinc-500 block">Price</span>
+                          <span className="font-mono font-extrabold text-emerald-400">
+                            {formatCurrency(item.price, settings.currency_symbol)}
+                          </span>
+                        </div>
+                        {item.duration_mins ? (
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block">Duration</span>
+                            <span className="font-mono text-zinc-300 flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-zinc-400" />
+                              {item.duration_mins}m
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block">Type</span>
+                            <span className="font-medium text-zinc-300">Service</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2 border-t border-zinc-800/60">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenEditCatalog(item)}
+                      className="flex-1 text-xs h-7 gap-1"
+                    >
+                      <Edit2 className="h-3 w-3 text-purple-400" />
+                      <span>Edit Price/Details</span>
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCatalogItem(item)}
+                      className="h-7 w-7 flex items-center justify-center rounded-lg bg-zinc-900 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors"
+                      title="Delete item"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 3: CATEGORIES CRUD
+          ========================================================================= */}
+      {activeAdminTab === "categories" && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-white">Catalog Categories</h3>
+              <p className="text-xs text-zinc-400">
+                Organize services and retail products into intuitive groups.
+              </p>
+            </div>
+
+            <Button
+              variant="glow"
+              size="sm"
+              onClick={() => handleOpenAddCategory("service")}
+              className="gap-1.5 text-xs font-bold"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Category</span>
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {categories.map((cat) => (
+              <div
+                key={cat.id}
+                className="flex items-center justify-between p-3.5 rounded-2xl bg-zinc-900/70 border border-zinc-800"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center">
+                    <Scissors className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white">{cat.name}</h4>
+                    <span className="text-[10px] text-zinc-400 capitalize">{cat.type} Category</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditCategory(cat)}
+                    className="p-1.5 text-zinc-400 hover:text-purple-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                    title="Edit Category"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Delete category "${cat.name}"?`)) {
+                        deleteCategory(cat.id);
+                      }
+                    }}
+                    className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                    title="Delete Category"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 4: USER & RECEPTIONIST ACCOUNTS (PIN MANAGEMENT)
+          ========================================================================= */}
+      {activeAdminTab === "users" && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-white">Staff Users & PIN Credentials</h3>
+              <p className="text-xs text-zinc-400">
+                Manage 4-digit PINs, receptionist accounts, and admin privileges.
+              </p>
+            </div>
+
+            <Button variant="glow" size="sm" onClick={handleOpenAddUser} className="gap-1.5 text-xs font-bold">
+              <Plus className="h-4 w-4" />
+              <span>+ Add Receptionist</span>
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            {users.map((usr) => {
+              const isAdmin = usr.role === "admin";
+
+              return (
+                <div
+                  key={usr.id}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 shadow-lg flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div
+                        className="h-10 w-10 rounded-xl font-extrabold text-sm text-white flex items-center justify-center shadow-inner"
+                        style={{ backgroundColor: usr.avatar_color }}
+                      >
+                        {usr.name.charAt(0)}
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          isAdmin ? "bg-purple-500/20 text-purple-300" : "bg-pink-500/20 text-pink-300"
+                        }`}
+                      >
+                        {isAdmin ? "👑 Admin" : "💼 Receptionist"}
+                      </span>
+                    </div>
+
+                    <h4 className="text-sm font-bold text-white leading-tight">{usr.name}</h4>
+                    <p className="text-xs text-zinc-400 font-mono mt-0.5">{usr.email}</p>
+
+                    <div className="mt-3 p-2.5 rounded-xl bg-zinc-950 border border-zinc-800/80 flex items-center justify-between text-xs font-mono">
+                      <span className="text-zinc-500">4-Digit PIN:</span>
+                      <div className="flex items-center gap-2">
+                        <strong className="text-amber-400 text-sm tracking-wider">
+                          {visiblePins[usr.id] ? usr.pin : "••••"}
+                        </strong>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setVisiblePins((prev) => ({
+                              ...prev,
+                              [usr.id]: !prev[usr.id],
+                            }))
+                          }
+                          className="text-zinc-500 hover:text-zinc-300 p-1 rounded hover:bg-zinc-800 transition-colors"
+                          title={visiblePins[usr.id] ? "Hide PIN" : "Show PIN"}
+                        >
+                          {visiblePins[usr.id] ? (
+                            <EyeOff className="h-3.5 w-3.5" />
+                          ) : (
+                            <Eye className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-3 mt-3 border-t border-zinc-800">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenEditUser(usr)}
+                      className="flex-1 text-xs h-8 gap-1"
+                    >
+                      <Edit2 className="h-3 w-3 text-purple-400" />
+                      <span>Edit PIN / Profile</span>
+                    </Button>
+                    {!isAdmin && (
+                      <button
+                        onClick={() => handleDeleteUser(usr)}
+                        className="h-8 w-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 5: SALON BUSINESS & TAX CONFIGURATION
+          ========================================================================= */}
+      {activeAdminTab === "settings" && (
+        <form onSubmit={handleSaveSettings} className="space-y-5 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold text-white">Salon Identity & Billing Setup</h3>
+              <p className="text-xs text-zinc-400">
+                Configure GSTIN, UPI ID, invoice prefix, and thermal print width.
+              </p>
+            </div>
+
+            <Button variant="glow" type="submit" className="gap-2">
+              {settingsSaved ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                  <span>Saved Successfully!</span>
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  <span>Save Configuration</span>
+                </>
+              )}
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-purple-300 mb-3 flex items-center gap-1.5">
+                <Store className="h-4 w-4 text-purple-400" /> Salon Store Details
+              </h4>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-zinc-400 block mb-1">Salon Name</label>
+                  <input
+                    type="text"
+                    value={settingsFormData.salon_name}
+                    onChange={(e) => setSettingsFormData({ ...settingsFormData, salon_name: e.target.value })}
+                    className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 block mb-1">Tagline</label>
+                  <input
+                    type="text"
+                    value={settingsFormData.tagline}
+                    onChange={(e) => setSettingsFormData({ ...settingsFormData, tagline: e.target.value })}
+                    className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-zinc-400 block mb-1">Store Address</label>
+                  <input
+                    type="text"
+                    value={settingsFormData.address}
+                    onChange={(e) => setSettingsFormData({ ...settingsFormData, address: e.target.value })}
+                    className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-zinc-400 block mb-1">Phone</label>
+                    <input
+                      type="text"
+                      value={settingsFormData.phone}
+                      onChange={(e) => setSettingsFormData({ ...settingsFormData, phone: e.target.value })}
+                      className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-400 block mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={settingsFormData.email}
+                      onChange={(e) => setSettingsFormData({ ...settingsFormData, email: e.target.value })}
+                      className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-purple-300 mb-3 flex items-center gap-1.5">
+                <DollarSign className="h-4 w-4 text-purple-400" /> Tax & Payment Gateway
+              </h4>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-zinc-400 block mb-1">GST / Tax Number</label>
+                    <input
+                      type="text"
+                      value={settingsFormData.gst_number}
+                      onChange={(e) => setSettingsFormData({ ...settingsFormData, gst_number: e.target.value })}
+                      className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-400 block mb-1">GST Rate (%)</label>
+                    <input
+                      type="number"
+                      value={settingsFormData.tax_rate}
+                      onChange={(e) => setSettingsFormData({ ...settingsFormData, tax_rate: Number(e.target.value) || 0 })}
+                      className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs text-zinc-400 block mb-1">UPI ID (For Dynamic QR Code)</label>
+                  <input
+                    type="text"
+                    value={settingsFormData.upi_id}
+                    onChange={(e) => setSettingsFormData({ ...settingsFormData, upi_id: e.target.value })}
+                    className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-zinc-400 block mb-1">Invoice Prefix</label>
+                    <input
+                      type="text"
+                      value={settingsFormData.invoice_prefix}
+                      onChange={(e) => setSettingsFormData({ ...settingsFormData, invoice_prefix: e.target.value })}
+                      className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-400 block mb-1">Thermal Receipt Format</label>
+                    <select
+                      value={settingsFormData.thermal_width}
+                      onChange={(e) => setSettingsFormData({ ...settingsFormData, thermal_width: e.target.value as any })}
+                      className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+                    >
+                      <option value="80mm">80mm (Standard POS)</option>
+                      <option value="58mm">58mm (Compact POS)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </form>
+      )}
+
+      {/* =========================================================================
+          MODALS: STAFF ADD/EDIT MODAL
+          ========================================================================= */}
+      <Dialog open={isStaffModalOpen} onOpenChange={setIsStaffModalOpen} maxWidth="md">
+        <form onSubmit={handleSaveStaff}>
+          <DialogHeader>
+            <DialogTitle>{editingStaff ? "Edit Stylist Profile" : "Add New Stylist"}</DialogTitle>
+            <DialogDescription>Configure staff commission, role, and details.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-3">
+            <div>
+              <label className="text-xs font-medium text-zinc-400 mb-1 block">Full Name *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Rahul Sharma"
+                value={staffFormData.name || ""}
+                onChange={(e) => setStaffFormData({ ...staffFormData, name: e.target.value })}
+                className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium text-zinc-400 mb-1 block">Designation / Role</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Master Colorist"
+                  value={staffFormData.role || ""}
+                  onChange={(e) => setStaffFormData({ ...staffFormData, role: e.target.value })}
+                  className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-zinc-400 mb-1 block">Phone (Optional)</label>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={10}
+                  placeholder="e.g. 9876500000"
+                  value={staffFormData.phone || ""}
+                  onChange={(e) =>
+                    setStaffFormData({
+                      ...staffFormData,
+                      phone: e.target.value.replace(/\D/g, "").slice(0, 10),
+                    })
+                  }
+                  className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            {/* INCENTIVE & COMMISSION SCHEME */}
+            <div className="p-3 bg-zinc-950/80 rounded-2xl border border-zinc-800 space-y-3">
+              <h5 className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                Staff Incentive & Commission Scheme
+              </h5>
+
+              {/* 1. SERVICE INCENTIVE */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-zinc-300">Service Incentive</label>
+                  <div className="flex items-center bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => setStaffFormData({ ...staffFormData, commission_type: "percent" })}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${
+                        staffFormData.commission_type !== "fixed"
+                          ? "bg-purple-600 text-white"
+                          : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      % Percentage
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStaffFormData({ ...staffFormData, commission_type: "fixed" })}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${
+                        staffFormData.commission_type === "fixed"
+                          ? "bg-purple-600 text-white"
+                          : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      ₹ Flat Amount
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    placeholder={staffFormData.commission_type === "fixed" ? "e.g. 150 (₹ flat per service)" : "e.g. 15 (% rate)"}
+                    value={staffFormData.commission_rate ?? 15}
+                    onChange={(e) => setStaffFormData({ ...staffFormData, commission_rate: Number(e.target.value) })}
+                    className="w-full h-9 px-3 pr-16 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-emerald-400 font-mono font-bold focus:ring-1 focus:ring-purple-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-zinc-400">
+                    {staffFormData.commission_type === "fixed" ? "₹ / service" : "% of sale"}
+                  </span>
+                </div>
+              </div>
+
+              {/* 2. PRODUCT SALE INCENTIVE */}
+              <div className="space-y-1.5 pt-2.5 border-t border-zinc-900">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-zinc-300">Product Retail Incentive</label>
+                  <div className="flex items-center bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => setStaffFormData({ ...staffFormData, product_commission_type: "percent" })}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${
+                        staffFormData.product_commission_type !== "fixed"
+                          ? "bg-purple-600 text-white"
+                          : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      % Percentage
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStaffFormData({ ...staffFormData, product_commission_type: "fixed" })}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${
+                        staffFormData.product_commission_type === "fixed"
+                          ? "bg-purple-600 text-white"
+                          : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      ₹ Flat Amount
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    placeholder={staffFormData.product_commission_type === "fixed" ? "e.g. 100 (₹ flat per product)" : "e.g. 10 (% rate)"}
+                    value={staffFormData.product_commission_rate ?? 10}
+                    onChange={(e) => setStaffFormData({ ...staffFormData, product_commission_rate: Number(e.target.value) })}
+                    className="w-full h-9 px-3 pr-16 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-purple-400 font-mono font-bold focus:ring-1 focus:ring-purple-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-zinc-400">
+                    {staffFormData.product_commission_type === "fixed" ? "₹ / item" : "% of sale"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-zinc-400 mb-1 block">Avatar Color</label>
+              <input
+                type="color"
+                value={staffFormData.color || "#8b5cf6"}
+                onChange={(e) => setStaffFormData({ ...staffFormData, color: e.target.value })}
+                className="w-full h-9 px-1 bg-zinc-950 border border-zinc-800 rounded-xl cursor-pointer"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setIsStaffModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="glow" type="submit">
+              {editingStaff ? "Update Stylist" : "Save Stylist"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      {/* =========================================================================
+          MODALS: CATALOG ADD/EDIT MODAL
+          ========================================================================= */}
+      <Dialog open={isCatalogModalOpen} onOpenChange={setIsCatalogModalOpen} maxWidth="md">
+        <form onSubmit={handleSaveCatalog}>
+          <DialogHeader>
+            <DialogTitle>
+              {editingCatalogItem ? "Edit Catalog Item" : `Add New ${catalogFormData.type === "service" ? "Service" : "Product"}`}
+            </DialogTitle>
+            <DialogDescription>Set prices, category, duration, and stock.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-3">
+            <div>
+              <label className="text-xs font-medium text-zinc-400 mb-1 block">Item Name *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Keratin Hair Treatment"
+                value={catalogFormData.name || ""}
+                onChange={(e) => setCatalogFormData({ ...catalogFormData, name: e.target.value })}
+                className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium text-zinc-400 mb-1 block">Type</label>
+                <select
+                  value={catalogFormData.type}
+                  onChange={(e) => setCatalogFormData({ ...catalogFormData, type: e.target.value as any })}
+                  className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white"
+                >
+                  <option value="service">Salon Service</option>
+                  <option value="product">Retail Product</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-zinc-400 mb-1 block">Category</label>
+                <select
+                  value={catalogFormData.category_id || ""}
+                  onChange={(e) => setCatalogFormData({ ...catalogFormData, category_id: e.target.value })}
+                  className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white"
+                >
+                  {categories
+                    .filter((c) => (catalogFormData.type ? c.type === catalogFormData.type : true))
+                    .map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
+            {catalogFormData.type === "product" ? (
+              <div className="space-y-3 p-3 bg-zinc-950/80 rounded-2xl border border-zinc-800">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-zinc-400 mb-1 block">Purchase Cost / MRP (₹)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={catalogFormData.cost_price ?? 0}
+                      onChange={(e) => {
+                        const cost = Number(e.target.value);
+                        setCatalogFormData({
+                          ...catalogFormData,
+                          cost_price: cost,
+                          price: cost * 4, // 4x default sale price
+                        });
+                      }}
+                      placeholder="e.g. 790"
+                      className="w-full h-9 px-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-emerald-400 block">Sale Price (4x) (₹) *</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cost = Number(catalogFormData.cost_price) || 0;
+                          setCatalogFormData({ ...catalogFormData, price: cost * 4 });
+                        }}
+                        className="text-[10px] text-purple-400 hover:text-purple-300 font-bold"
+                      >
+                        ⚡ Reset 4x
+                      </button>
+                    </div>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      value={catalogFormData.price ?? 0}
+                      onChange={(e) => setCatalogFormData({ ...catalogFormData, price: Number(e.target.value) })}
+                      className="w-full h-9 px-3 text-xs bg-zinc-900 border border-emerald-900/60 rounded-xl text-emerald-400 font-mono font-extrabold focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* LIVE PROFIT & MARGIN PREVIEW */}
+                <div className="flex items-center justify-between text-xs bg-emerald-950/30 border border-emerald-800/40 p-2.5 rounded-xl text-emerald-300">
+                  <div>
+                    <span className="text-[10px] text-emerald-500 block">Unit Profit</span>
+                    <span className="font-mono font-bold">
+                      +{formatCurrency(Math.max(0, (catalogFormData.price || 0) - (catalogFormData.cost_price || 0)), settings.currency_symbol)}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-emerald-500 block">Profit Margin</span>
+                    <span className="font-mono font-bold">
+                      {(catalogFormData.price || 0) > 0
+                        ? `${((((catalogFormData.price || 0) - (catalogFormData.cost_price || 0)) / (catalogFormData.price || 1)) * 100).toFixed(0)}%`
+                        : "0%"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-zinc-400 mb-1 block">Stock Quantity</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={catalogFormData.stock_qty ?? 25}
+                      onChange={(e) => setCatalogFormData({ ...catalogFormData, stock_qty: Number(e.target.value) })}
+                      className="w-full h-9 px-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-zinc-400 mb-1 block">SKU / Barcode</label>
+                    <input
+                      type="text"
+                      value={catalogFormData.sku || ""}
+                      onChange={(e) => setCatalogFormData({ ...catalogFormData, sku: e.target.value })}
+                      placeholder="e.g. PRD-LRL-01"
+                      className="w-full h-9 px-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-zinc-400 mb-1 block">Selling Price (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={catalogFormData.price ?? 0}
+                    onChange={(e) => setCatalogFormData({ ...catalogFormData, price: Number(e.target.value) })}
+                    className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-emerald-400 font-mono font-bold focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-zinc-400 mb-1 block">Duration (Minutes)</label>
+                  <input
+                    type="number"
+                    min="5"
+                    step="5"
+                    value={catalogFormData.duration_mins ?? 30}
+                    onChange={(e) => setCatalogFormData({ ...catalogFormData, duration_mins: Number(e.target.value) })}
+                    className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setIsCatalogModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="glow" type="submit">
+              {editingCatalogItem ? "Update Item" : "Save Item"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      {/* =========================================================================
+          MODALS: CATEGORY ADD & EDIT MODAL
+          ========================================================================= */}
+      <Dialog
+        open={isCategoryModalOpen}
+        onOpenChange={(open) => {
+          setIsCategoryModalOpen(open);
+          if (!open) setEditingCategory(null);
+        }}
+        maxWidth="sm"
+      >
+        <form onSubmit={handleSaveCategory}>
+          <DialogHeader>
+            <DialogTitle>{editingCategory ? "Edit Category" : "Create Category"}</DialogTitle>
+            <DialogDescription>
+              {editingCategory
+                ? `Update details for category "${editingCategory.name}".`
+                : "Add a new category for services or retail products."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-3">
+            <div>
+              <label className="text-xs font-medium text-zinc-400 mb-1 block">Category Name *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Bridal Packages"
+                value={categoryFormData.name || ""}
+                onChange={(e) => setCategoryFormData({ ...categoryFormData, name: e.target.value })}
+                className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-zinc-400 mb-1 block">Type</label>
+              <select
+                value={categoryFormData.type}
+                onChange={(e) => setCategoryFormData({ ...categoryFormData, type: e.target.value as any })}
+                className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white"
+              >
+                <option value="service">Service Category</option>
+                <option value="product">Product Category</option>
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setIsCategoryModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="glow" type="submit">
+              {editingCategory ? "Update Category" : "Create Category"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      {/* =========================================================================
+          MODALS: USER / PIN EDIT MODAL
+          ========================================================================= */}
+      <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen} maxWidth="md">
+        <form onSubmit={handleSaveUser}>
+          <DialogHeader>
+            <DialogTitle>{editingUser ? "Edit User & PIN" : "Add Receptionist Account"}</DialogTitle>
+            <DialogDescription>Configure staff login credentials and 4-digit PIN.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-3">
+            <div>
+              <label className="text-xs font-medium text-zinc-400 mb-1 block">User Name *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Amit Sharma"
+                value={userFormData.name || ""}
+                onChange={(e) => setUserFormData({ ...userFormData, name: e.target.value })}
+                className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium text-zinc-400 mb-1 block">Email *</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="user@belezia.com"
+                  value={userFormData.email || ""}
+                  onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
+                  className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-zinc-400 mb-1 block">4-Digit PIN *</label>
+                <input
+                  type="text"
+                  required
+                  maxLength={4}
+                  pattern="[0-9]{4}"
+                  placeholder="e.g. 1001"
+                  value={userFormData.pin || ""}
+                  onChange={(e) => setUserFormData({ ...userFormData, pin: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                  className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-amber-400 font-mono font-bold focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium text-zinc-400 mb-1 block">Role</label>
+                <select
+                  value={userFormData.role}
+                  onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value as any })}
+                  className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white"
+                >
+                  <option value="receptionist">Receptionist (Billing POS Only)</option>
+                  <option value="admin">Admin (Full Control)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-zinc-400 mb-1 block">Avatar Color</label>
+                <input
+                  type="color"
+                  value={userFormData.avatar_color || "#ec4899"}
+                  onChange={(e) => setUserFormData({ ...userFormData, avatar_color: e.target.value })}
+                  className="w-full h-9 px-1 bg-zinc-950 border border-zinc-800 rounded-xl cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setIsUserModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="glow" type="submit">
+              {editingUser ? "Update User" : "Save User"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      {/* CUSTOMER CREATE / EDIT MODAL */}
+      <CustomerModal
+        open={isCustomerModalOpen}
+        onOpenChange={setIsCustomerModalOpen}
+        customerToEdit={editingCustomer}
+        onSaved={() => {
+          setEditingCustomer(null);
+        }}
+      />
+    </div>
+  );
+}
