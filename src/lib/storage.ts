@@ -414,22 +414,6 @@ export function initStorage() {
         } catch {}
       }
 
-      // Migrate catalog if packages are missing
-      const rawCatalog = localStorage.getItem(KEYS.CATALOG);
-      if (rawCatalog) {
-        try {
-          const storedCatalog: CatalogItem[] = JSON.parse(rawCatalog);
-          if (Array.isArray(storedCatalog) && !storedCatalog.some((c) => c.type === "package")) {
-            const deletedIds = Storage.getDeletedCatalogIds();
-            const defaultPackages = DEFAULT_CATALOG.filter(
-              (item) => item.type === "package" && !deletedIds.includes(item.id)
-            );
-            const combined = [...storedCatalog, ...defaultPackages];
-            localStorage.setItem(KEYS.CATALOG, JSON.stringify(combined));
-          }
-        } catch {}
-      }
-
       // Migrate salon settings to ensure updated name
       const rawSettings = localStorage.getItem(KEYS.SETTINGS);
       if (rawSettings) {
