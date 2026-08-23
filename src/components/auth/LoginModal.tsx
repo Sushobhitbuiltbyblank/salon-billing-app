@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
 import { AppUser } from "@/types";
+import { DEFAULT_USERS } from "@/lib/storage";
 import {
   Scissors,
   Shield,
@@ -43,16 +44,20 @@ export function LoginModal() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Filter staff profiles (Sushobhit Jain & Amit Sharma first)
-  const staffUsers = users.filter((u) => !u.id.startsWith("usr-visitor-"));
-  const displayStaff = staffUsers.length > 0 ? staffUsers : users;
+  // Filter staff profiles (Sushobhit Jain, Prabhat Jain, Amit Sharma)
+  const staffUsers = (users || []).filter(
+    (u) => u && typeof u === "object" && typeof u.id === "string" && !u.id.startsWith("usr-visitor-")
+  );
+  const displayStaff = staffUsers.length > 0 ? staffUsers : DEFAULT_USERS;
 
   useEffect(() => {
     if (!selectedUser && displayStaff.length > 0) {
-      // Default to Sushobhit or first staff
-      const defaultStaff = currentUser && !currentUser.id.startsWith("usr-visitor-")
-        ? currentUser
-        : displayStaff.find((u) => u.name.toLowerCase().includes("sushobhit")) || displayStaff[0];
+      const defaultStaff =
+        currentUser && typeof currentUser.id === "string" && !currentUser.id.startsWith("usr-visitor-")
+          ? currentUser
+          : displayStaff.find((u) => u && typeof u.name === "string" && u.name.toLowerCase().includes("sushobhit")) ||
+            displayStaff[0] ||
+            null;
       setSelectedUser(defaultStaff);
     }
   }, [displayStaff, currentUser, selectedUser]);

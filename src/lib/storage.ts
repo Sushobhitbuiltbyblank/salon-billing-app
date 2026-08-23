@@ -276,53 +276,66 @@ export const DEFAULT_EXPENSES: Expense[] = [];
 export function initStorage() {
   if (typeof window === "undefined") return;
 
-  const initialized = localStorage.getItem(KEYS.INITIALIZED);
-  if (!initialized) {
-    localStorage.setItem(KEYS.USERS, JSON.stringify(DEFAULT_USERS));
-    // Do NOT auto-login user on first visit — prompt for PIN/Email login
-    localStorage.removeItem(KEYS.CURRENT_USER);
-    localStorage.setItem(KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
-    localStorage.setItem(KEYS.STAFF, JSON.stringify(DEFAULT_STAFF));
-    localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(DEFAULT_CATEGORIES));
-    localStorage.setItem(KEYS.CATALOG, JSON.stringify(DEFAULT_CATALOG));
-    localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(DEFAULT_CUSTOMERS));
-    localStorage.setItem(KEYS.INVOICES, JSON.stringify(DEFAULT_INVOICES));
-    localStorage.setItem(KEYS.EXPENSES, JSON.stringify(DEFAULT_EXPENSES));
-    localStorage.setItem(KEYS.INITIALIZED, "true");
-  } else {
-    // Migrate existing users and preserve registered credentials
-    const rawUsers = localStorage.getItem(KEYS.USERS);
-    if (rawUsers) {
-      try {
-        const storedUsers: AppUser[] = JSON.parse(rawUsers);
-        const filteredUsers = storedUsers
-          .filter((u) => u.id === "usr-admin-01" || u.id === "usr-admin-02" || u.id === "usr-rec-01" || u.id.startsWith("usr-visitor-"))
-          .map((u) => {
-            if (u.id === "usr-admin-01") {
-              return { ...u, name: "Sushobhit Jain", email: "sushobhit@belezia.com", role: "admin" as const, pin: u.pin || "9999" };
-            }
-            if (u.id === "usr-admin-02") {
-              return { ...u, name: "Prabhat Jain", email: "prabhat@belezia.com", role: "admin" as const, pin: u.pin || "3112" };
-            }
-            if (u.id === "usr-rec-01") {
-              return { ...u, name: "Amit Sharma", email: "amit@belezia.com", role: "receptionist" as const, pin: u.pin || "1001" };
-            }
-            return u;
-          });
-
-        // Ensure Prabhat Jain exists in user list
-        if (!filteredUsers.some((u) => u.id === "usr-admin-02")) {
-          filteredUsers.push(DEFAULT_USERS[1]); // Prabhat Jain
-        }
-
-        const finalUsers = filteredUsers.length > 0 ? filteredUsers : DEFAULT_USERS;
-        localStorage.setItem(KEYS.USERS, JSON.stringify(finalUsers));
-      } catch (e) {
-        console.error("User migration error:", e);
-      }
-    } else {
+  try {
+    const initialized = localStorage.getItem(KEYS.INITIALIZED);
+    if (!initialized) {
       localStorage.setItem(KEYS.USERS, JSON.stringify(DEFAULT_USERS));
+      // Do NOT auto-login user on first visit — prompt for PIN/Email login
+      localStorage.removeItem(KEYS.CURRENT_USER);
+      localStorage.setItem(KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
+      localStorage.setItem(KEYS.STAFF, JSON.stringify(DEFAULT_STAFF));
+      localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(DEFAULT_CATEGORIES));
+      localStorage.setItem(KEYS.CATALOG, JSON.stringify(DEFAULT_CATALOG));
+      localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(DEFAULT_CUSTOMERS));
+      localStorage.setItem(KEYS.INVOICES, JSON.stringify(DEFAULT_INVOICES));
+      localStorage.setItem(KEYS.EXPENSES, JSON.stringify(DEFAULT_EXPENSES));
+      localStorage.setItem(KEYS.INITIALIZED, "true");
+    } else {
+      // Migrate existing users and preserve registered credentials
+      const rawUsers = localStorage.getItem(KEYS.USERS);
+      if (rawUsers) {
+        try {
+          const storedUsers = JSON.parse(rawUsers);
+          if (Array.isArray(storedUsers)) {
+            const filteredUsers = storedUsers
+              .filter((u) => u && typeof u === "object" && (u.id === "usr-admin-01" || u.id === "usr-admin-02" || u.id === "usr-rec-01" || (typeof u.id === "string" && u.id.startsWith("usr-visitor-"))))
+              .map((u) => {
+                if (u.id === "usr-admin-01") {
+                  return { ...u, name: "Sushobhit Jain", email: "sushobhit@belezia.com", role: "admin" as const, pin: u.pin || "9999" };
+                }
+                if (u.id === "usr-admin-02") {
+                  return { ...u, name: "Prabhat Jain", email: "prabhat@belezia.com", role: "admin" as const, pin: u.pin || "3112" };
+                }
+                if (u.id === "usr-rec-01") {
+                  return { ...u, name: "Amit Sharma", email: "amit@belezia.com", role: "receptionist" as const, pin: u.pin || "1001" };
+                }
+                return u;
+              });
+
+            // Ensure Sushobhit, Prabhat, and Amit exist in user list
+            if (!filteredUsers.some((u) => u.id === "usr-admin-01")) {
+              filteredUsers.unshift(DEFAULT_USERS[0]);
+            }
+            if (!filteredUsers.some((u) => u.id === "usr-admin-02")) {
+              filteredUsers.splice(1, 0, DEFAULT_USERS[1]);
+            }
+            if (!filteredUsers.some((u) => u.id === "usr-rec-01")) {
+              filteredUsers.push(DEFAULT_USERS[2]);
+            }
+
+            localStorage.setItem(KEYS.USERS, JSON.stringify(filteredUsers.length > 0 ? filteredUsers : DEFAULT_USERS));
+          } else {
+            localStorage.setItem(KEYS.USERS, JSON.stringify(DEFAULT_USERS));
+          }
+        } catch {
+          localStorage.setItem(KEYS.USERS, JSON.stringify(DEFAULT_USERS));
+        }
+      } else {
+        localStorage.setItem(KEYS.USERS, JSON.stringify(DEFAULT_USERS));
+      }
     }
+  } catch (err) {
+    console.error("initStorage error:", err);
   }
 }
 
@@ -331,12 +344,22 @@ export const Storage = {
   // USERS & AUTH
   getUsers(): AppUser[] {
     if (typeof window === "undefined") return DEFAULT_USERS;
-    const raw = localStorage.getItem(KEYS.USERS);
-    return raw ? JSON.parse(raw) : DEFAULT_USERS;
+    try {
+      const raw = localStorage.getItem(KEYS.USERS);
+      if (!raw) return DEFAULT_USERS;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_USERS;
+    } catch {
+      return DEFAULT_USERS;
+    }
   },
   saveUsers(users: AppUser[]): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+    try {
+      localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+    } catch (e) {
+      console.error(e);
+    }
   },
   saveUser(user: AppUser): AppUser {
     const list = this.getUsers();
@@ -355,9 +378,9 @@ export const Storage = {
   },
   getCurrentUser(): AppUser | null {
     if (typeof window === "undefined") return null;
-    const raw = localStorage.getItem(KEYS.CURRENT_USER);
-    if (!raw) return null;
     try {
+      const raw = localStorage.getItem(KEYS.CURRENT_USER);
+      if (!raw) return null;
       return JSON.parse(raw);
     } catch {
       return null;
@@ -365,33 +388,55 @@ export const Storage = {
   },
   setCurrentUser(user: AppUser | null): void {
     if (typeof window === "undefined") return;
-    if (user) {
-      localStorage.setItem(KEYS.CURRENT_USER, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(KEYS.CURRENT_USER);
+    try {
+      if (user) {
+        localStorage.setItem(KEYS.CURRENT_USER, JSON.stringify(user));
+      } else {
+        localStorage.removeItem(KEYS.CURRENT_USER);
+      }
+    } catch (e) {
+      console.error(e);
     }
   },
 
   // SETTINGS
   getSettings(): SalonSettings {
     if (typeof window === "undefined") return DEFAULT_SETTINGS;
-    const raw = localStorage.getItem(KEYS.SETTINGS);
-    return raw ? JSON.parse(raw) : DEFAULT_SETTINGS;
+    try {
+      const raw = localStorage.getItem(KEYS.SETTINGS);
+      return raw ? JSON.parse(raw) : DEFAULT_SETTINGS;
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
   },
   saveSettings(settings: SalonSettings): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
+    try {
+      localStorage.setItem(KEYS.SETTINGS, JSON.stringify(settings));
+    } catch (e) {
+      console.error(e);
+    }
   },
 
   // STAFF
   getStaff(): Staff[] {
     if (typeof window === "undefined") return DEFAULT_STAFF;
-    const raw = localStorage.getItem(KEYS.STAFF);
-    return raw ? JSON.parse(raw) : DEFAULT_STAFF;
+    try {
+      const raw = localStorage.getItem(KEYS.STAFF);
+      if (!raw) return DEFAULT_STAFF;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_STAFF;
+    } catch {
+      return DEFAULT_STAFF;
+    }
   },
   saveStaff(staffList: Staff[]): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(KEYS.STAFF, JSON.stringify(staffList));
+    try {
+      localStorage.setItem(KEYS.STAFF, JSON.stringify(staffList));
+    } catch (e) {
+      console.error(e);
+    }
   },
   addStaffMember(staffMember: Staff): Staff {
     const list = this.getStaff();
@@ -417,12 +462,22 @@ export const Storage = {
   // CATEGORIES
   getCategories(): Category[] {
     if (typeof window === "undefined") return DEFAULT_CATEGORIES;
-    const raw = localStorage.getItem(KEYS.CATEGORIES);
-    return raw ? JSON.parse(raw) : DEFAULT_CATEGORIES;
+    try {
+      const raw = localStorage.getItem(KEYS.CATEGORIES);
+      if (!raw) return DEFAULT_CATEGORIES;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_CATEGORIES;
+    } catch {
+      return DEFAULT_CATEGORIES;
+    }
   },
   saveCategories(categories: Category[]): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(categories));
+    try {
+      localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(categories));
+    } catch (e) {
+      console.error(e);
+    }
   },
   saveCategory(category: Category): Category {
     const list = this.getCategories();
@@ -443,12 +498,22 @@ export const Storage = {
   // CATALOG
   getCatalog(): CatalogItem[] {
     if (typeof window === "undefined") return DEFAULT_CATALOG;
-    const raw = localStorage.getItem(KEYS.CATALOG);
-    return raw ? JSON.parse(raw) : DEFAULT_CATALOG;
+    try {
+      const raw = localStorage.getItem(KEYS.CATALOG);
+      if (!raw) return DEFAULT_CATALOG;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_CATALOG;
+    } catch {
+      return DEFAULT_CATALOG;
+    }
   },
   saveCatalog(items: CatalogItem[]): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(KEYS.CATALOG, JSON.stringify(items));
+    try {
+      localStorage.setItem(KEYS.CATALOG, JSON.stringify(items));
+    } catch (e) {
+      console.error(e);
+    }
   },
   saveCatalogItem(item: CatalogItem): void {
     const list = this.getCatalog();
@@ -468,12 +533,22 @@ export const Storage = {
   // CUSTOMERS
   getCustomers(): Customer[] {
     if (typeof window === "undefined") return DEFAULT_CUSTOMERS;
-    const raw = localStorage.getItem(KEYS.CUSTOMERS);
-    return raw ? JSON.parse(raw) : DEFAULT_CUSTOMERS;
+    try {
+      const raw = localStorage.getItem(KEYS.CUSTOMERS);
+      if (!raw) return DEFAULT_CUSTOMERS;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : DEFAULT_CUSTOMERS;
+    } catch {
+      return DEFAULT_CUSTOMERS;
+    }
   },
   saveCustomers(customers: Customer[]): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(customers));
+    try {
+      localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(customers));
+    } catch (e) {
+      console.error(e);
+    }
   },
   saveCustomer(customer: Customer): Customer {
     const list = this.getCustomers();
@@ -505,12 +580,22 @@ export const Storage = {
   // INVOICES
   getInvoices(): Invoice[] {
     if (typeof window === "undefined") return DEFAULT_INVOICES;
-    const raw = localStorage.getItem(KEYS.INVOICES);
-    return raw ? JSON.parse(raw) : DEFAULT_INVOICES;
+    try {
+      const raw = localStorage.getItem(KEYS.INVOICES);
+      if (!raw) return DEFAULT_INVOICES;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : DEFAULT_INVOICES;
+    } catch {
+      return DEFAULT_INVOICES;
+    }
   },
   saveInvoices(invoices: Invoice[]): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(KEYS.INVOICES, JSON.stringify(invoices));
+    try {
+      localStorage.setItem(KEYS.INVOICES, JSON.stringify(invoices));
+    } catch (e) {
+      console.error(e);
+    }
   },
   createInvoice(invoice: Invoice): Invoice {
     const invoices = this.getInvoices();
@@ -567,12 +652,22 @@ export const Storage = {
   // EXPENSES
   getExpenses(): Expense[] {
     if (typeof window === "undefined") return DEFAULT_EXPENSES;
-    const raw = localStorage.getItem(KEYS.EXPENSES);
-    return raw ? JSON.parse(raw) : DEFAULT_EXPENSES;
+    try {
+      const raw = localStorage.getItem(KEYS.EXPENSES);
+      if (!raw) return DEFAULT_EXPENSES;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : DEFAULT_EXPENSES;
+    } catch {
+      return DEFAULT_EXPENSES;
+    }
   },
   saveExpenses(expenses: Expense[]): void {
     if (typeof window === "undefined") return;
-    localStorage.setItem(KEYS.EXPENSES, JSON.stringify(expenses));
+    try {
+      localStorage.setItem(KEYS.EXPENSES, JSON.stringify(expenses));
+    } catch (e) {
+      console.error(e);
+    }
   },
   addExpense(expense: Expense): void {
     const list = this.getExpenses();
