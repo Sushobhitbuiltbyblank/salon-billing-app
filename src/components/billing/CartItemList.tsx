@@ -275,9 +275,10 @@ export function CartItemList() {
                     type="number"
                     min="0"
                     step="10"
-                    value={item.unit_price}
+                    value={item.unit_price === 0 ? "" : item.unit_price}
+                    placeholder="0"
                     onChange={(e) => {
-                      const newRate = Number(e.target.value) || 0;
+                      const newRate = e.target.value === "" ? 0 : Number(e.target.value) || 0;
                       // If package, proportionally distribute across services
                       if (isPackage && item.package_services && item.package_services.length > 0) {
                         const curTotal = item.unit_price || 1;
@@ -406,12 +407,13 @@ export function CartItemList() {
                                 type="number"
                                 min="0"
                                 step="10"
-                                value={svc.price}
+                                value={svc.price === 0 ? "" : svc.price}
+                                placeholder="0"
                                 onChange={(e) =>
                                   handlePackageServicePriceChange(
                                     item.id,
                                     svc.service_id,
-                                    Number(e.target.value) || 0
+                                    e.target.value === "" ? 0 : Number(e.target.value) || 0
                                   )
                                 }
                                 className="w-full h-6 pl-4 pr-1 text-[11px] font-mono font-bold text-emerald-400 bg-zinc-950 border border-zinc-800 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"

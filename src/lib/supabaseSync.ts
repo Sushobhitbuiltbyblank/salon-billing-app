@@ -443,26 +443,41 @@ export const SupabaseSync = {
   async saveCatalogItem(item: CatalogItem) {
     if (!isSupabaseConfigured() || !supabase) return null;
     try {
+      const isValidUUID = (str?: string | null) =>
+        Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
+
+      const validId = isValidUUID(item.id) ? item.id : undefined;
+      const validCatId = isValidUUID(item.category_id) ? item.category_id : null;
+
       // 1. First attempt direct upsert
-      const { data, error } = await supabase.from("catalog_items").upsert(item).select().single();
+      const directPayload = {
+        ...item,
+        ...(validId ? { id: validId } : {}),
+        category_id: validCatId,
+        price: Number(item.price) || 0,
+        package_regular_price:
+          item.package_regular_price !== undefined ? Number(item.package_regular_price) : undefined,
+      };
+
+      const { data, error } = await supabase.from("catalog_items").upsert(directPayload).select().single();
       if (!error) return data;
 
       console.warn("Supabase direct saveCatalogItem failed, attempting backward-compatible payload:", error.message);
 
       // 2. Compatibility fallback: encode package metadata in SKU so Postgres accepts it
       const compatPayload = {
-        id: item.id,
-        category_id: item.category_id || null,
+        ...(validId ? { id: validId } : {}),
+        category_id: validCatId,
         name: item.name,
         type: item.type === "package" ? "service" : item.type,
         price: Number(item.price) || 0,
-        duration_mins: item.duration_mins || 30,
+        duration_mins: Number(item.duration_mins) || 30,
         cost_price: Number(item.cost_price) || 0,
         sku:
           item.type === "package"
             ? `PKG_META:${JSON.stringify({
                 package_service_ids: item.package_service_ids || [],
-                package_regular_price: item.package_regular_price || item.price,
+                package_regular_price: Number(item.package_regular_price) || Number(item.price) || 0,
               })}`
             : item.sku || null,
         is_active: item.is_active !== false,

@@ -2165,7 +2165,10 @@ export function AdminPortal() {
                     min="1"
                     value={packageFormData.price || ""}
                     onChange={(e) =>
-                      setPackageFormData({ ...packageFormData, price: Number(e.target.value) || 0 })
+                      setPackageFormData({
+                        ...packageFormData,
+                        price: e.target.value === "" ? 0 : Number(e.target.value) || 0,
+                      })
                     }
                     placeholder="e.g. 800"
                     className="w-full h-10 px-3 text-sm bg-zinc-950 border border-emerald-900/60 rounded-xl text-emerald-400 font-mono font-black focus:ring-1 focus:ring-emerald-500"

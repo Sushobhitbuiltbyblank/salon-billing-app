@@ -30,6 +30,7 @@ import {
   Clock,
   CheckCircle2,
   Printer,
+  Layers,
 } from "lucide-react";
 
 export function EditInvoiceModal() {
@@ -73,11 +74,38 @@ export function EditInvoiceModal() {
       setCustomerName(editingInvoice.customer_name || "");
       setCustomerPhone(editingInvoice.customer_phone || "");
       setCustomerEmail(editingInvoice.customer_email || "");
-      setItems(
-        editingInvoice.items && editingInvoice.items.length > 0
-          ? JSON.parse(JSON.stringify(editingInvoice.items))
-          : []
-      );
+
+      const loadedItems = (editingInvoice.items || []).map((it) => {
+        let pkgServices = it.package_services;
+        if (
+          it.item_type === "package" &&
+          (!pkgServices || pkgServices.length === 0)
+        ) {
+          const catItem = catalog.find(
+            (c) => c.id === it.item_id || c.name.toLowerCase().trim() === it.item_name.toLowerCase().trim()
+          );
+          if (catItem && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
+            const included = catItem.package_service_ids
+              .map((sId) => catalog.find((c) => c.id === sId))
+              .filter(Boolean);
+            const count = included.length || 1;
+            pkgServices = included.map((svc) => ({
+              service_id: svc!.id,
+              service_name: svc!.name,
+              price: Math.round(it.unit_price / count),
+              regular_price: svc!.price,
+              duration_mins: svc!.duration_mins || 30,
+              primary_staff_id: it.primary_staff_id,
+            }));
+          }
+        }
+        return {
+          ...it,
+          package_services: pkgServices,
+        };
+      });
+
+      setItems(JSON.parse(JSON.stringify(loadedItems)));
       setDiscountType(editingInvoice.discount_type || "flat");
       setDiscountValue(editingInvoice.discount_value || 0);
       setPaymentMode(editingInvoice.payment_mode || "cash");
@@ -87,7 +115,7 @@ export function EditInvoiceModal() {
       setStatus(editingInvoice.status || "paid");
       setNotes(editingInvoice.notes || "");
     }
-  }, [editingInvoice]);
+  }, [editingInvoice, catalog]);
 
   // Recalculate totals
   const totals = useMemo(() => {
@@ -123,8 +151,94 @@ export function EditInvoiceModal() {
     setItems((prev) =>
       prev.map((item) => {
         if (item.id === itemId) {
+          let reallocatedServices = item.package_services;
+          if (item.item_type === "package" && item.package_services && item.package_services.length > 0) {
+            const curTotal = item.unit_price || 1;
+            let acc = 0;
+            reallocatedServices = item.package_services.map((svc, idx) => {
+              let p = Math.round((svc.price / curTotal) * newPrice);
+              if (idx === item.package_services!.length - 1) {
+                p = Math.max(0, newPrice - acc);
+              } else {
+                acc += p;
+              }
+              return { ...svc, price: p };
+            });
+          }
           const total = calculateItemTotal(newPrice, item.quantity, item.discount);
-          return { ...item, unit_price: newPrice, total_price: total };
+          return {
+            ...item,
+            unit_price: newPrice,
+            total_price: total,
+            package_services: reallocatedServices,
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handlePackageServicePriceChange = (
+    itemId: string,
+    serviceId: string,
+    newPrice: number
+  ) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) {
+          const services = (item.package_services || []).map((s) =>
+            s.service_id === serviceId ? { ...s, price: Math.max(0, newPrice) } : s
+          );
+          const newUnit = services.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
+          const newTotal = calculateItemTotal(newUnit, item.quantity, item.discount);
+          return {
+            ...item,
+            package_services: services,
+            unit_price: newUnit,
+            total_price: newTotal,
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handlePackageServiceStaffChange = (
+    itemId: string,
+    serviceId: string,
+    staffId: string
+  ) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) {
+          const services = (item.package_services || []).map((s) =>
+            s.service_id === serviceId ? { ...s, primary_staff_id: staffId || undefined } : s
+          );
+          const firstStaff = services.find((s) => s.primary_staff_id)?.primary_staff_id;
+          return {
+            ...item,
+            package_services: services,
+            primary_staff_id: firstStaff || item.primary_staff_id,
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleAssignAllPackageServices = (itemId: string, staffId: string) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) {
+          const services = (item.package_services || []).map((s) => ({
+            ...s,
+            primary_staff_id: staffId || undefined,
+          }));
+          return {
+            ...item,
+            package_services: services,
+            primary_staff_id: staffId || undefined,
+          };
         }
         return item;
       })
@@ -452,19 +566,31 @@ export function EditInvoiceModal() {
           <div className="space-y-2.5">
             {items.map((item, idx) => {
               const isService = item.item_type === "service";
+              const isPackage = item.item_type === "package";
+              const isProduct = item.item_type === "product";
 
               return (
                 <div
                   key={item.id}
-                  className="p-3 rounded-xl bg-zinc-900/90 border border-zinc-800/90 space-y-2"
+                  className={`p-3 rounded-xl border space-y-2.5 ${
+                    isPackage
+                      ? "bg-purple-950/20 border-purple-900/60"
+                      : "bg-zinc-900/90 border-zinc-800/90"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs font-mono font-bold text-zinc-500">#{idx + 1}</span>
                       <strong className="text-xs sm:text-sm text-white">{item.item_name}</strong>
-                      <Badge variant={isService ? "purple" : "warning"} className="text-[9px] py-0 px-1.5">
-                        {isService ? "Service" : "Product"}
-                      </Badge>
+                      {isPackage ? (
+                        <span className="text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm">
+                          Package Combo
+                        </span>
+                      ) : (
+                        <Badge variant={isService ? "purple" : "warning"} className="text-[9px] py-0 px-1.5">
+                          {isService ? "Service" : "Product"}
+                        </Badge>
+                      )}
                     </div>
 
                     <div className="text-right">
@@ -502,7 +628,9 @@ export function EditInvoiceModal() {
 
                     {/* UNIT PRICE */}
                     <div>
-                      <span className="text-[10px] text-zinc-400 block mb-0.5">Unit Price ({settings.currency_symbol})</span>
+                      <span className="text-[10px] text-zinc-400 block mb-0.5">
+                        {isPackage ? "Pkg Total Rate" : "Unit Price"} ({settings.currency_symbol})
+                      </span>
                       <input
                         type="number"
                         min="0"
@@ -524,51 +652,55 @@ export function EditInvoiceModal() {
                       />
                     </div>
 
-                    {/* STYLIST SELECTOR & SPLIT */}
+                    {/* STYLIST SELECTOR & SPLIT (FOR NON-PACKAGES) */}
                     <div>
                       <span className="text-[10px] text-zinc-400 block mb-0.5">
-                        Stylist & Split {isService && !item.primary_staff_id && <span className="text-amber-400 font-bold">*</span>}
+                        {isPackage ? "Actions" : `Stylist & Split ${isService && !item.primary_staff_id ? "*" : ""}`}
                       </span>
                       <div className="flex items-center gap-1">
-                        <select
-                          value={item.primary_staff_id || ""}
-                          onChange={(e) => handleItemStaffChange(item.id, e.target.value)}
-                          className={`h-7 px-1.5 text-xs rounded-lg focus:outline-none focus:ring-1 flex-1 min-w-0 font-medium ${
-                            isService && !item.primary_staff_id
-                              ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
-                              : "bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
-                          }`}
-                        >
-                          <option value="">
-                            {isService ? "-- Select Stylist * --" : "-- Staff (Optional) --"}
-                          </option>
-                          {staff.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
+                        {!isPackage && (
+                          <select
+                            value={item.primary_staff_id || ""}
+                            onChange={(e) => handleItemStaffChange(item.id, e.target.value)}
+                            className={`h-7 px-1.5 text-xs rounded-lg focus:outline-none focus:ring-1 flex-1 min-w-0 font-medium ${
+                              isService && !item.primary_staff_id
+                                ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
+                                : "bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
+                            }`}
+                          >
+                            <option value="">
+                              {isService ? "-- Select Stylist * --" : "-- Staff (Optional) --"}
                             </option>
-                          ))}
-                        </select>
+                            {staff.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveSplitItem(item);
-                            setIsSplitModalOpen(true);
-                          }}
-                          className={`p-1.5 rounded-lg border text-[10px] shrink-0 transition-all ${
-                            item.secondary_staff_id
-                              ? "bg-pink-950/60 border-pink-700 text-pink-300"
-                              : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
-                          }`}
-                          title="Split staff commission"
-                        >
-                          <Users className="h-3 w-3" />
-                        </button>
+                        {!isPackage && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveSplitItem(item);
+                              setIsSplitModalOpen(true);
+                            }}
+                            className={`p-1.5 rounded-lg border text-[10px] shrink-0 transition-all ${
+                              item.secondary_staff_id
+                                ? "bg-pink-950/60 border-pink-700 text-pink-300"
+                                : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
+                            }`}
+                            title="Split staff commission"
+                          >
+                            <Users className="h-3 w-3" />
+                          </button>
+                        )}
 
                         <button
                           type="button"
                           onClick={() => handleRemoveItem(item.id)}
-                          className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors"
+                          className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors ml-auto"
                           title="Remove item"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -576,6 +708,126 @@ export function EditInvoiceModal() {
                       </div>
                     </div>
                   </div>
+
+                  {/* PACKAGE SERVICES BREAKDOWN */}
+                  {isPackage && (
+                    <div className="mt-2.5 pt-2.5 border-t border-purple-900/40 space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-1.5">
+                        <span className="text-[11px] font-bold text-pink-300 flex items-center gap-1.5">
+                          <Layers className="h-3 w-3 text-pink-400" />
+                          Included Services ({item.package_services?.length || 0}) & Stylist Selection:
+                        </span>
+
+                        {/* QUICK ASSIGN ALL */}
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-zinc-400">Quick Assign All:</span>
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleAssignAllPackageServices(item.id, e.target.value);
+                                e.target.value = "";
+                              }
+                            }}
+                            defaultValue=""
+                            className="h-6 px-1.5 text-[10px] bg-zinc-950 border border-purple-800/60 rounded-lg text-purple-300 font-medium"
+                          >
+                            <option value="" disabled>
+                              ⚡ Choose Stylist
+                            </option>
+                            {staff
+                              .filter((s) => s.status === "active")
+                              .map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name} ({s.role})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* SUB-SERVICES LIST */}
+                      <div className="space-y-1 bg-zinc-950/80 p-2 rounded-xl border border-purple-900/30">
+                        {(item.package_services || []).map((svc, sIdx) => {
+                          const isUnassigned = !svc.primary_staff_id;
+
+                          return (
+                            <div
+                              key={svc.service_id || sIdx}
+                              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 rounded-lg border text-xs ${
+                                isUnassigned
+                                  ? "bg-amber-950/30 border-amber-500/60"
+                                  : "bg-zinc-900/80 border-zinc-800/80"
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-bold text-zinc-200 truncate text-[11px]">
+                                  • {svc.service_name}
+                                </span>
+                                {svc.regular_price && (
+                                  <span className="text-[10px] text-zinc-500 font-mono">
+                                    (MRP: ₹{svc.regular_price})
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {/* CUSTOM AMOUNT */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] text-zinc-400 font-semibold">Amt:</span>
+                                  <div className="relative w-16">
+                                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 font-mono">
+                                      ₹
+                                    </span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="10"
+                                      value={svc.price === 0 ? "" : svc.price}
+                                      placeholder="0"
+                                      onChange={(e) =>
+                                        handlePackageServicePriceChange(
+                                          item.id,
+                                          svc.service_id,
+                                          Number(e.target.value) || 0
+                                        )
+                                      }
+                                      className="w-full h-6 pl-4 pr-1 text-[11px] font-mono font-bold text-emerald-400 bg-zinc-950 border border-zinc-800 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* STYLIST SELECTOR */}
+                                <select
+                                  value={svc.primary_staff_id || ""}
+                                  onChange={(e) =>
+                                    handlePackageServiceStaffChange(
+                                      item.id,
+                                      svc.service_id,
+                                      e.target.value
+                                    )
+                                  }
+                                  className={`h-6 px-1.5 text-[10px] rounded-lg font-bold min-w-[130px] focus:outline-none focus:ring-1 ${
+                                    isUnassigned
+                                      ? "bg-amber-950/60 border border-amber-500 text-amber-200 focus:ring-amber-500"
+                                      : "bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
+                                  }`}
+                                >
+                                  <option value="">-- Select Stylist * --</option>
+                                  {staff
+                                    .filter((s) => s.status === "active")
+                                    .map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.name} ({s.role})
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
