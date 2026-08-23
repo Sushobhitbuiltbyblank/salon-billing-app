@@ -249,7 +249,7 @@ export function LoginModal() {
                 Select Profile:
               </label>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
                 {displayStaff.map((user) => {
                   const isSelected = selectedUser?.id === user.id;
                   const isAdmin = user.role === "admin";

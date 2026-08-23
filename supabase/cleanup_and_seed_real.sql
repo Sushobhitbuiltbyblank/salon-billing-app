@@ -20,9 +20,10 @@ INSERT INTO staff (id, name, role, commission_rate, status, color, notes) VALUES
 ('11111111-1111-1111-1111-111111111104', 'Mahi', 'Beautician Stylist', 15.00, 'active', '#10b981', 'Beautician Stylist'),
 ('11111111-1111-1111-1111-111111111105', 'Sitara', 'Beautician Stylist', 15.00, 'active', '#f59e0b', 'Beautician Stylist');
 
--- 3. INSERT 1 ADMIN + 1 RECEPTIONIST (@belezia.com)
+-- 3. INSERT 2 ADMINS + 1 RECEPTIONIST (@belezia.com)
 INSERT INTO app_users (id, name, email, role, pin, avatar_color, phone, is_active) VALUES
 ('usr-admin-01', 'Sushobhit Jain', 'sushobhit@belezia.com', 'admin', '9999', '#8b5cf6', '+91 98765 00099', true),
+('usr-admin-02', 'Prabhat Jain', 'prabhat@belezia.com', 'admin', '3112', '#3b82f6', '+91 98765 00098', true),
 ('usr-rec-01', 'Amit Sharma', 'amit@belezia.com', 'receptionist', '1001', '#ec4899', '+91 98765 00101', true);
 
 -- 4. INSERT 6 SERVICE CATEGORIES

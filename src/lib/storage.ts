@@ -25,7 +25,7 @@ const KEYS = {
   INITIALIZED: `${STORAGE_PREFIX}full_catalog_v5`,
 };
 
-// CLEAN PRODUCTION USERS: 1 ADMIN + 1 RECEPTIONIST (@belezia.com)
+// PRODUCTION USERS: 2 ADMINS (SUSHOBHIT & PRABHAT) + 1 RECEPTIONIST (AMIT) (@belezia.com)
 export const DEFAULT_USERS: AppUser[] = [
   {
     id: "usr-admin-01",
@@ -35,6 +35,17 @@ export const DEFAULT_USERS: AppUser[] = [
     pin: "9999",
     avatar_color: "#8b5cf6", // Purple
     phone: "+91 98765 00099",
+    is_active: true,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "usr-admin-02",
+    name: "Prabhat Jain",
+    email: "prabhat@belezia.com",
+    role: "admin",
+    pin: "3112",
+    avatar_color: "#3b82f6", // Blue
+    phone: "+91 98765 00098",
     is_active: true,
     created_at: new Date().toISOString(),
   },
@@ -285,10 +296,13 @@ export function initStorage() {
       try {
         const storedUsers: AppUser[] = JSON.parse(rawUsers);
         const filteredUsers = storedUsers
-          .filter((u) => u.id === "usr-admin-01" || u.id === "usr-rec-01" || u.id.startsWith("usr-visitor-"))
+          .filter((u) => u.id === "usr-admin-01" || u.id === "usr-admin-02" || u.id === "usr-rec-01" || u.id.startsWith("usr-visitor-"))
           .map((u) => {
             if (u.id === "usr-admin-01") {
               return { ...u, name: "Sushobhit Jain", email: "sushobhit@belezia.com", role: "admin" as const, pin: u.pin || "9999" };
+            }
+            if (u.id === "usr-admin-02") {
+              return { ...u, name: "Prabhat Jain", email: "prabhat@belezia.com", role: "admin" as const, pin: u.pin || "3112" };
             }
             if (u.id === "usr-rec-01") {
               return { ...u, name: "Amit Sharma", email: "amit@belezia.com", role: "receptionist" as const, pin: u.pin || "1001" };
@@ -296,11 +310,18 @@ export function initStorage() {
             return u;
           });
 
+        // Ensure Prabhat Jain exists in user list
+        if (!filteredUsers.some((u) => u.id === "usr-admin-02")) {
+          filteredUsers.push(DEFAULT_USERS[1]); // Prabhat Jain
+        }
+
         const finalUsers = filteredUsers.length > 0 ? filteredUsers : DEFAULT_USERS;
         localStorage.setItem(KEYS.USERS, JSON.stringify(finalUsers));
       } catch (e) {
         console.error("User migration error:", e);
       }
+    } else {
+      localStorage.setItem(KEYS.USERS, JSON.stringify(DEFAULT_USERS));
     }
   }
 }

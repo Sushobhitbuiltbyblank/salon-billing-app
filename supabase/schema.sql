@@ -213,9 +213,10 @@ VALUES (
     true
 ) ON CONFLICT (id) DO NOTHING;
 
--- 2. Default App Users (1 Admin + 1 Receptionist)
+-- 2. Default App Users (2 Admins + 1 Receptionist)
 INSERT INTO app_users (id, name, email, role, pin, avatar_color, phone, is_active) VALUES
 ('usr-admin-01', 'Sushobhit Jain', 'sushobhit@belezia.com', 'admin', '9999', '#8b5cf6', '+91 98765 00099', true),
+('usr-admin-02', 'Prabhat Jain', 'prabhat@belezia.com', 'admin', '3112', '#3b82f6', '+91 98765 00098', true),
 ('usr-rec-01', 'Amit Sharma', 'amit@belezia.com', 'receptionist', '1001', '#ec4899', '+91 98765 00101', true)
 ON CONFLICT (id) DO NOTHING;
 
