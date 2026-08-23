@@ -285,14 +285,38 @@ export default function PublicReceiptPage() {
                   const secondaryStaff = item.secondary_staff_id ? staff.find((s) => s.id === item.secondary_staff_id)?.name : null;
                   const staffDisplay = primaryStaff ? (secondaryStaff ? `${primaryStaff} & ${secondaryStaff}` : primaryStaff) : null;
 
+                  let services = item.package_services;
+                  if (
+                    (!services || services.length === 0) &&
+                    (item.item_type === "package" || (item.package_service_ids && item.package_service_ids.length > 0))
+                  ) {
+                    const catalog = typeof window !== "undefined" ? Storage.getCatalog() : [];
+                    const catItem = catalog.find(
+                      (c) => c.id === item.item_id || c.name.toLowerCase().trim() === item.item_name.toLowerCase().trim()
+                    );
+                    if (catItem && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
+                      services = catItem.package_service_ids
+                        .map((sId) => catalog.find((c) => c.id === sId))
+                        .filter(Boolean)
+                        .map((s) => ({
+                          service_id: s!.id,
+                          service_name: s!.name,
+                          price: Math.round(item.unit_price / catItem.package_service_ids!.length),
+                          primary_staff_id: item.primary_staff_id,
+                        }));
+                    }
+                  }
+
+                  const isPkg = item.item_type === "package" || (services && services.length > 0);
+
                   return (
                     <tr key={idx}>
                       <td className="py-1.5 pr-1">
                         <div className="font-semibold text-zinc-900">{item.item_name}</div>
-                        {item.item_type === "package" && item.package_services && item.package_services.length > 0 ? (
+                        {isPkg && services && services.length > 0 ? (
                           <div className="text-[8.5px] text-zinc-600 space-y-0.5 mt-0.5">
-                            {item.package_services.map((ps, pIdx) => {
-                              const sName = staff.find((s) => s.id === ps.primary_staff_id)?.name;
+                            {services.map((ps, pIdx) => {
+                              const sName = staff.find((s) => s.id === ps.primary_staff_id)?.name || primaryStaff;
                               return (
                                 <div key={pIdx}>
                                   • {ps.service_name} {sName ? `(Stylist: ${sName})` : ""}: ₹{ps.price}
@@ -301,9 +325,9 @@ export default function PublicReceiptPage() {
                             })}
                           </div>
                         ) : (
-                          staffDisplay && (
-                            <div className="text-[9px] text-purple-700 font-medium">Stylist: {staffDisplay}</div>
-                          )
+                          <div className="text-[9px] text-purple-700 font-medium">
+                            Stylist: {staffDisplay || "Salon Team"}
+                          </div>
                         )}
                       </td>
                       <td className="py-1.5 text-center font-mono text-zinc-600">{item.quantity}</td>

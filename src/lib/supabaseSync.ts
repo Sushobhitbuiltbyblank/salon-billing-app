@@ -7,6 +7,7 @@ import {
   Customer,
   Expense,
   Invoice,
+  InvoiceItem,
   ItemType,
   SalonSettings,
   Staff,
@@ -114,19 +115,39 @@ export const SupabaseSync = {
           ...cust,
           total_spent: Number(cust.total_spent) || 0,
         })),
-        invoices: (invoicesRes.data || []).map((inv: any) => ({
-          ...inv,
-          subtotal: Number(inv.subtotal) || 0,
-          tax_amount: Number(inv.tax_amount) || 0,
-          discount_amount: Number(inv.discount_amount) || 0,
-          grand_total: Number(inv.grand_total) || 0,
-          items: (inv.invoice_items || []).map((it: any) => ({
-            ...it,
-            unit_price: Number(it.unit_price) || 0,
-            discount: Number(it.discount) || 0,
-            total_price: Number(it.total_price) || 0,
-          })),
-        })),
+        invoices: (invoicesRes.data || []).map((inv: any) => {
+          let userNotes = inv.notes || "";
+          let itemsFromMeta: InvoiceItem[] | null = null;
+
+          if (inv.notes && typeof inv.notes === "string" && inv.notes.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(inv.notes);
+              if (parsed.items_meta && Array.isArray(parsed.items_meta)) {
+                itemsFromMeta = parsed.items_meta;
+                userNotes = parsed.user_notes || "";
+              }
+            } catch {}
+          }
+
+          const lineItems =
+            itemsFromMeta ||
+            (inv.invoice_items || []).map((it: any) => ({
+              ...it,
+              unit_price: Number(it.unit_price) || 0,
+              discount: Number(it.discount) || 0,
+              total_price: Number(it.total_price) || 0,
+            }));
+
+          return {
+            ...inv,
+            notes: userNotes,
+            subtotal: Number(inv.subtotal) || 0,
+            tax_amount: Number(inv.tax_amount) || 0,
+            discount_amount: Number(inv.discount_amount) || 0,
+            grand_total: Number(inv.grand_total) || 0,
+            items: lineItems,
+          };
+        }),
         expenses: (expensesRes.data || []).map((e: any) => ({
           ...e,
           amount: Number(e.amount) || 0,
@@ -161,6 +182,12 @@ export const SupabaseSync = {
       const isValidUUID = (str?: string | null) =>
         Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
 
+      // Store rich items metadata (with package_services, item_type 'package', and per-service custom prices & stylists)
+      const notesPayload = JSON.stringify({
+        user_notes: invoice.notes || "",
+        items_meta: invoice.items,
+      });
+
       // Sanitize header to match exact columns of 'invoices' table
       const invoiceHeader = {
         id: isValidUUID(invoice.id) ? invoice.id : undefined,
@@ -178,7 +205,7 @@ export const SupabaseSync = {
         payment_mode: invoice.payment_mode || "cash",
         payment_breakdown: invoice.payment_breakdown || null,
         status: invoice.status || "paid",
-        notes: invoice.notes || null,
+        notes: notesPayload,
         created_at: invoice.created_at || new Date().toISOString(),
       };
 
@@ -197,21 +224,28 @@ export const SupabaseSync = {
 
       // Insert line items with sanitized columns matching 'invoice_items' table
       if (invoice.items && invoice.items.length > 0) {
-        const lineItemsPayload = invoice.items.map((item) => ({
-          id: isValidUUID(item.id) ? item.id : undefined,
-          invoice_id: invId,
-          item_id: isValidUUID(item.item_id) ? item.item_id : null,
-          item_name: item.item_name,
-          item_type: item.item_type === "product" ? "product" : "service",
-          quantity: Number(item.quantity) || 1,
-          unit_price: Number(item.unit_price) || 0,
-          discount: Number(item.discount) || 0,
-          total_price: Number(item.total_price) || 0,
-          primary_staff_id: isValidUUID(item.primary_staff_id) ? item.primary_staff_id : null,
-          secondary_staff_id: isValidUUID(item.secondary_staff_id) ? item.secondary_staff_id : null,
-          primary_split_ratio: Number(item.primary_split_ratio) || 100,
-          secondary_split_ratio: Number(item.secondary_split_ratio) || 0,
-        }));
+        const lineItemsPayload = invoice.items.map((item) => {
+          const fallbackStaffId =
+            item.primary_staff_id ||
+            item.package_services?.find((s) => s.primary_staff_id)?.primary_staff_id ||
+            null;
+
+          return {
+            id: isValidUUID(item.id) ? item.id : undefined,
+            invoice_id: invId,
+            item_id: isValidUUID(item.item_id) ? item.item_id : null,
+            item_name: item.item_name,
+            item_type: item.item_type === "product" ? "product" : "service",
+            quantity: Number(item.quantity) || 1,
+            unit_price: Number(item.unit_price) || 0,
+            discount: Number(item.discount) || 0,
+            total_price: Number(item.total_price) || 0,
+            primary_staff_id: isValidUUID(fallbackStaffId) ? fallbackStaffId : null,
+            secondary_staff_id: isValidUUID(item.secondary_staff_id) ? item.secondary_staff_id : null,
+            primary_split_ratio: Number(item.primary_split_ratio) || 100,
+            secondary_split_ratio: Number(item.secondary_split_ratio) || 0,
+          };
+        });
 
         const { error: itemsError } = await supabase.from("invoice_items").upsert(lineItemsPayload);
         if (itemsError) {
@@ -233,6 +267,12 @@ export const SupabaseSync = {
       const isValidUUID = (str?: string | null) =>
         Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
 
+      // Store rich items metadata
+      const notesPayload = JSON.stringify({
+        user_notes: invoice.notes || "",
+        items_meta: invoice.items,
+      });
+
       // 1. Update invoice header
       const invoiceHeader = {
         invoice_number: invoice.invoice_number,
@@ -249,7 +289,7 @@ export const SupabaseSync = {
         payment_mode: invoice.payment_mode || "cash",
         payment_breakdown: invoice.payment_breakdown || null,
         status: invoice.status || "paid",
-        notes: invoice.notes || null,
+        notes: notesPayload,
       };
 
       const { data: updatedInv, error: invError } = await supabase
@@ -269,21 +309,28 @@ export const SupabaseSync = {
         await supabase.from("invoice_items").delete().eq("invoice_id", invoice.id);
 
         if (invoice.items.length > 0) {
-          const lineItemsPayload = invoice.items.map((item) => ({
-            id: isValidUUID(item.id) ? item.id : undefined,
-            invoice_id: invoice.id,
-            item_id: isValidUUID(item.item_id) ? item.item_id : null,
-            item_name: item.item_name,
-            item_type: item.item_type === "product" ? "product" : "service",
-            quantity: Number(item.quantity) || 1,
-            unit_price: Number(item.unit_price) || 0,
-            discount: Number(item.discount) || 0,
-            total_price: Number(item.total_price) || 0,
-            primary_staff_id: isValidUUID(item.primary_staff_id) ? item.primary_staff_id : null,
-            secondary_staff_id: isValidUUID(item.secondary_staff_id) ? item.secondary_staff_id : null,
-            primary_split_ratio: Number(item.primary_split_ratio) || 100,
-            secondary_split_ratio: Number(item.secondary_split_ratio) || 0,
-          }));
+          const lineItemsPayload = invoice.items.map((item) => {
+            const fallbackStaffId =
+              item.primary_staff_id ||
+              item.package_services?.find((s) => s.primary_staff_id)?.primary_staff_id ||
+              null;
+
+            return {
+              id: isValidUUID(item.id) ? item.id : undefined,
+              invoice_id: invoice.id,
+              item_id: isValidUUID(item.item_id) ? item.item_id : null,
+              item_name: item.item_name,
+              item_type: item.item_type === "product" ? "product" : "service",
+              quantity: Number(item.quantity) || 1,
+              unit_price: Number(item.unit_price) || 0,
+              discount: Number(item.discount) || 0,
+              total_price: Number(item.total_price) || 0,
+              primary_staff_id: isValidUUID(fallbackStaffId) ? fallbackStaffId : null,
+              secondary_staff_id: isValidUUID(item.secondary_staff_id) ? item.secondary_staff_id : null,
+              primary_split_ratio: Number(item.primary_split_ratio) || 100,
+              secondary_split_ratio: Number(item.secondary_split_ratio) || 0,
+            };
+          });
 
           const { error: itemsError } = await supabase.from("invoice_items").insert(lineItemsPayload);
           if (itemsError) {

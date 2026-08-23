@@ -4,6 +4,7 @@ import React from "react";
 import { Invoice, SalonSettings, Staff } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { QrCodeImage } from "@/components/ui/QrCodeImage";
+import { Storage } from "@/lib/storage";
 
 interface ThermalReceiptProps {
   invoice: Invoice;
@@ -106,14 +107,38 @@ export function ThermalReceipt({
               const primary = getStaffName(item.primary_staff_id);
               const secondary = getStaffName(item.secondary_staff_id);
 
+              let services = item.package_services;
+              if (
+                (!services || services.length === 0) &&
+                (item.item_type === "package" || (item.package_service_ids && item.package_service_ids.length > 0))
+              ) {
+                const catalog = typeof window !== "undefined" ? Storage.getCatalog() : [];
+                const catItem = catalog.find(
+                  (c) => c.id === item.item_id || c.name.toLowerCase().trim() === item.item_name.toLowerCase().trim()
+                );
+                if (catItem && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
+                  services = catItem.package_service_ids
+                    .map((sId) => catalog.find((c) => c.id === sId))
+                    .filter(Boolean)
+                    .map((s) => ({
+                      service_id: s!.id,
+                      service_name: s!.name,
+                      price: Math.round(item.unit_price / catItem.package_service_ids!.length),
+                      primary_staff_id: item.primary_staff_id,
+                    }));
+                }
+              }
+
+              const isPkg = item.item_type === "package" || (services && services.length > 0);
+
               return (
                 <tr key={idx} style={{ verticalAlign: "top", borderBottom: "1px dotted #f0f0f0" }}>
                   <td style={{ padding: "2px 1px" }}>
                     <div style={{ fontWeight: "bold" }}>{item.item_name}</div>
-                    {item.item_type === "package" && item.package_services && item.package_services.length > 0 ? (
+                    {isPkg && services && services.length > 0 ? (
                       <div style={{ fontSize: "8px", color: "#333333", marginTop: "1px", paddingLeft: "2px" }}>
-                        {item.package_services.map((ps, pIdx) => {
-                          const sName = getStaffName(ps.primary_staff_id);
+                        {services.map((ps, pIdx) => {
+                          const sName = getStaffName(ps.primary_staff_id) || primary;
                           return (
                             <div key={pIdx}>
                               • {ps.service_name} {sName ? `(${sName})` : ""}: ₹{ps.price}
@@ -124,7 +149,7 @@ export function ThermalReceipt({
                     ) : (
                       <div style={{ fontSize: "8.5px", color: "#555555", fontStyle: "italic" }}>
                         {secondary ? (
-                          <>{primary} ({item.primary_split_ratio}%) + {secondary} ({item.secondary_split_ratio}%)</>
+                          <>{primary || "Salon Staff"} ({item.primary_split_ratio}%) + {secondary} ({item.secondary_split_ratio}%)</>
                         ) : (
                           <>{primary || "Salon Staff"}</>
                         )}
