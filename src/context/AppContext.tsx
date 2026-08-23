@@ -96,6 +96,10 @@ interface AppContextType {
   printInvoice: Invoice | null;
   setPrintInvoice: (invoice: Invoice | null) => void;
 
+  // WHATSAPP DIGITAL BILL MODAL STATE
+  whatsAppInvoice: Invoice | null;
+  setWhatsAppInvoice: (invoice: Invoice | null) => void;
+
   // GLOBAL ACTIONS
   resetDemoData: () => void;
   refreshData: () => void;
@@ -125,9 +129,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [draftDiscountValue, setDraftDiscountValue] = useState<number>(0);
   const [draftNotes, setDraftNotes] = useState<string>("");
 
-  // PRINT & EDIT MODAL
+  // PRINT & EDIT & WHATSAPP MODAL
   const [printInvoice, setPrintInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [whatsAppInvoice, setWhatsAppInvoice] = useState<Invoice | null>(null);
 
   const loadAllData = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -637,6 +642,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setDraftNotes,
         printInvoice,
         setPrintInvoice,
+        whatsAppInvoice,
+        setWhatsAppInvoice,
         resetDemoData,
         refreshData: loadAllData,
       }}

@@ -20,6 +20,7 @@ export function InvoicePrintModal() {
     printInvoice,
     setPrintInvoice,
     setEditingInvoice,
+    setWhatsAppInvoice,
     settings,
     staff,
     deleteInvoice,
@@ -281,16 +282,15 @@ export function InvoicePrintModal() {
             </button>
           </div>
 
-          {/* WHATSAPP ACTION */}
-          <a
-            href={whatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-colors"
+          {/* WHATSAPP ACTION & DIGITAL RECEIPT SHARING */}
+          <button
+            type="button"
+            onClick={() => setWhatsAppInvoice(printInvoice)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-colors cursor-pointer"
           >
             <MessageCircle className="h-4 w-4 text-emerald-400" />
-            <span>Send on WhatsApp</span>
-          </a>
+            <span>Send on WhatsApp (PDF / Image)</span>
+          </button>
         </div>
 
         {/* PRINTABLE RECEIPT PREVIEW CONTAINER */}

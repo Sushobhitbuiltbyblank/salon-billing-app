@@ -13,6 +13,7 @@ import { CustomerDirectory } from "@/components/customer/CustomerDirectory";
 import { AdminPortal } from "@/components/admin/AdminPortal";
 import { InvoicePrintModal } from "@/components/invoice/InvoicePrintModal";
 import { EditInvoiceModal } from "@/components/invoice/EditInvoiceModal";
+import { WhatsAppShareModal } from "@/components/invoice/WhatsAppShareModal";
 import { LoginModal } from "@/components/auth/LoginModal";
 import { Scissors } from "lucide-react";
 
@@ -69,6 +70,7 @@ export default function SalonPOSApp() {
         </div>
         <InvoicePrintModal />
         <EditInvoiceModal />
+        <WhatsAppShareModal />
         <LoginModal />
       </div>
     </AppProvider>

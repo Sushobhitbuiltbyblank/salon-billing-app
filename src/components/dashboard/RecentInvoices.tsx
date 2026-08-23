@@ -30,6 +30,7 @@ export function RecentInvoices() {
     voidInvoice,
     setPrintInvoice,
     setEditingInvoice,
+    setWhatsAppInvoice,
     settings,
     currentUser,
     setActiveTab,
@@ -329,16 +330,15 @@ export function RecentInvoices() {
                             <FileEdit className="h-3.5 w-3.5 text-blue-400 hover:text-white" />
                           </button>
 
-                          {/* WHATSAPP SHARE */}
-                          <a
-                            href={whatsappUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          {/* WHATSAPP SHARE & DIGITAL BILL MODAL */}
+                          <button
+                            type="button"
+                            onClick={() => setWhatsAppInvoice(inv)}
                             className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
-                            title="Share on WhatsApp"
+                            title="Send WhatsApp Bill / Share PDF & Image"
                           >
                             <MessageCircle className="h-3.5 w-3.5" />
-                          </a>
+                          </button>
 
                           {/* VOID BUTTON */}
                           {!isVoid && (

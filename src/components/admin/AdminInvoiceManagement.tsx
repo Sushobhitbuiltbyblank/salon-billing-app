@@ -35,6 +35,7 @@ export function AdminInvoiceManagement() {
     deleteInvoice,
     setPrintInvoice,
     setEditingInvoice,
+    setWhatsAppInvoice,
     settings,
     currentUser,
   } = useApp();
@@ -541,16 +542,15 @@ export function AdminInvoiceManagement() {
                             <FileEdit className="h-3.5 w-3.5 text-blue-400 hover:text-white" />
                           </button>
 
-                          {/* WHATSAPP */}
-                          <a
-                            href={whatsappUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-600 text-zinc-300 hover:text-white transition-all"
-                            title="Share on WhatsApp"
+                          {/* WHATSAPP SHARE & DIGITAL BILL MODAL */}
+                          <button
+                            type="button"
+                            onClick={() => setWhatsAppInvoice(inv)}
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
+                            title="Send WhatsApp Bill / Share PDF & Image"
                           >
                             <MessageCircle className="h-3.5 w-3.5" />
-                          </a>
+                          </button>
 
                           {/* VOID BUTTON */}
                           {!isVoid && (
