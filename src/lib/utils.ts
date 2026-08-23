@@ -70,6 +70,12 @@ export function generateInvoiceNumber(prefix: string = "BZ-"): string {
 export function generateWhatsAppReceiptUrl(invoice: Invoice, settings: SalonSettings): string {
   const cleanPhone = (invoice.customer_phone || "").replace(/[^\d]/g, "");
   
+  const baseUrl = typeof window !== "undefined" && window.location.origin
+    ? window.location.origin
+    : "https://belezia-salon-billing-app.vercel.app";
+
+  const receiptUrl = `${baseUrl}/receipt/${invoice.id || invoice.invoice_number}`;
+  
   const itemsText = (invoice.items || [])
     .map(
       (item, idx) =>
@@ -92,6 +98,9 @@ ${invoice.discount_amount > 0 ? `Discount: -${settings.currency_symbol}${invoice
     invoice.tax_amount > 0 ? `GST (${invoice.tax_rate}%): +${settings.currency_symbol}${invoice.tax_amount.toFixed(2)}\n` : ""
 }*Grand Total:* *${settings.currency_symbol}${invoice.grand_total.toFixed(2)}*
 Payment: *${invoice.payment_mode.toUpperCase()}* (${invoice.status.toUpperCase()})
+--------------------------------
+📄 *VIEW & DOWNLOAD ORIGINAL BILL (PDF/IMAGE):*
+🔗 ${receiptUrl}
 --------------------------------
 🌟 *We love your feedback!*
 Leave us a 5-star review on Google:
