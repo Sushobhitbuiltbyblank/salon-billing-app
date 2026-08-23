@@ -173,14 +173,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setStaff((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.staff) ? cloudData.staff : prev));
           Storage.saveStaff(cloudData.staff);
         }
-        if (cloudData.categories && cloudData.categories.length > 0) {
+        if (cloudData.categories) {
           setCategories((prev) =>
             JSON.stringify(prev) !== JSON.stringify(cloudData.categories) ? cloudData.categories! : prev
           );
           Storage.saveCategories(cloudData.categories);
         }
 
-        if (cloudData.catalog && cloudData.catalog.length > 0) {
+        if (cloudData.catalog) {
           setCatalog((prev) =>
             JSON.stringify(prev) !== JSON.stringify(cloudData.catalog) ? cloudData.catalog! : prev
           );
