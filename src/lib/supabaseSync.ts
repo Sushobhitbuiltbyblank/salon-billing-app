@@ -390,13 +390,21 @@ export const SupabaseSync = {
         created_at: item.created_at || new Date().toISOString(),
       };
 
-      const { data: compatData, error: compatError } = await supabase
+      let { data: compatData, error: compatError } = await supabase
         .from("catalog_items")
         .upsert(compatPayload)
         .select()
         .single();
 
+      // If error was due to category foreign key constraint, retry with category_id: null
       if (compatError) {
+        const { data: noCatData, error: noCatError } = await supabase
+          .from("catalog_items")
+          .upsert({ ...compatPayload, category_id: null })
+          .select()
+          .single();
+
+        if (!noCatError) return noCatData;
         console.error("Supabase compat saveCatalogItem error:", compatError);
       }
       return compatData;

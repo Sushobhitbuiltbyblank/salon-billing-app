@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import {
   AppTab,
   AppUser,
@@ -134,25 +134,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [whatsAppInvoice, setWhatsAppInvoice] = useState<Invoice | null>(null);
 
+  const initialLoadedRef = useRef(false);
+
   const loadAllData = useCallback(async () => {
     if (typeof window === "undefined") return;
-    initStorage();
-    
-    // 1. Instant load from local cache
-    const cachedUsers = Storage.getUsers();
-    const cachedCurrent = Storage.getCurrentUser();
-    setUsers(cachedUsers);
-    setCurrentUser(cachedCurrent);
-    if (!cachedCurrent) {
-      setIsAuthModalOpen(true);
+
+    // 1. Initial instant load from local cache (runs once on startup)
+    if (!initialLoadedRef.current) {
+      initialLoadedRef.current = true;
+      initStorage();
+
+      const cachedUsers = Storage.getUsers();
+      const cachedCurrent = Storage.getCurrentUser();
+      setUsers(cachedUsers);
+      setCurrentUser(cachedCurrent);
+      if (!cachedCurrent) {
+        setIsAuthModalOpen(true);
+      }
+      setSettings(Storage.getSettings());
+      setStaff(Storage.getStaff());
+      setCategories(Storage.getCategories());
+      setCatalog(Storage.getCatalog());
+      setCustomers(Storage.getCustomers());
+      setInvoices(Storage.getInvoices());
+      setExpenses(Storage.getExpenses());
     }
-    setSettings(Storage.getSettings());
-    setStaff(Storage.getStaff());
-    setCategories(Storage.getCategories());
-    setCatalog(Storage.getCatalog());
-    setCustomers(Storage.getCustomers());
-    setInvoices(Storage.getInvoices());
-    setExpenses(Storage.getExpenses());
 
     // 2. If Supabase configured, sync from remote PostgreSQL in background
     if (isSupabaseConfigured()) {
@@ -173,6 +179,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           localCats.forEach((loc) => {
             if (!mergedCats.some((rem) => rem.id === loc.id || rem.name.toLowerCase().trim() === loc.name.toLowerCase().trim())) {
               mergedCats.push(loc);
+              SupabaseSync.saveCategory(loc);
             }
           });
           setCategories((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedCats) ? mergedCats : prev));
@@ -183,8 +190,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const remoteCatalog = cloudData.catalog;
           const mergedCatalog = [...remoteCatalog];
           localCatalog.forEach((loc) => {
-            if (loc.type === "package" && !mergedCatalog.some((rem) => rem.id === loc.id)) {
+            if (!mergedCatalog.some((rem) => rem.id === loc.id || (loc.type === "package" && rem.name.toLowerCase().trim() === loc.name.toLowerCase().trim()))) {
               mergedCatalog.push(loc);
+              // If package or service is missing in Supabase, push it to Supabase in background
+              SupabaseSync.saveCatalogItem(loc);
             }
           });
           setCatalog((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedCatalog) ? mergedCatalog : prev));
