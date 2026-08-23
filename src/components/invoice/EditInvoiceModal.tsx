@@ -190,14 +190,14 @@ export function EditInvoiceModal() {
       return;
     }
 
-    // VALIDATE STYLIST FOR EVERY SERVICE
+    // VALIDATE STYLIST FOR EVERY SERVICE & PACKAGE
     const unassignedServices = items.filter(
-      (item) => item.item_type === "service" && !item.primary_staff_id
+      (item) => (item.item_type === "service" || item.item_type === "package") && !item.primary_staff_id
     );
     if (unassignedServices.length > 0) {
       const listText = unassignedServices.map((s, idx) => `• ${s.item_name}`).join("\n");
       alert(
-        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each of the following service(s) before saving:\n\n${listText}`
+        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each of the following service(s) / package(s) before saving:\n\n${listText}`
       );
       return;
     }

@@ -1,5 +1,5 @@
 export type StaffStatus = 'active' | 'on_leave' | 'inactive';
-export type ItemType = 'service' | 'product';
+export type ItemType = 'service' | 'product' | 'package';
 export type PaymentMode = 'cash' | 'card' | 'upi' | 'split';
 export type InvoiceStatus = 'paid' | 'pending' | 'void';
 export type DiscountType = 'flat' | 'percentage';
@@ -53,6 +53,8 @@ export interface CatalogItem {
   cost_price?: number;
   sku?: string;
   stock_qty?: number;
+  package_service_ids?: string[]; // Included service item IDs for combos/packages
+  package_regular_price?: number; // Original unbundled total price
   is_active?: boolean;
   created_at?: string;
 }
@@ -82,6 +84,10 @@ export interface InvoiceItem {
   discount: number; // Discount per item
   total_price: number;
   
+  // Package / Combo details
+  package_service_ids?: string[];
+  package_regular_price?: number;
+
   // Split Staff Assignment
   primary_staff_id?: string;
   secondary_staff_id?: string;

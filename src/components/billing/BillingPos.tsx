@@ -42,9 +42,9 @@ export function BillingPos() {
     taxRate: settings.tax_rate,
   });
 
-  // Check unassigned services (services without primary stylist)
+  // Check unassigned services and packages (services/packages without primary stylist)
   const unassignedServices = draftItems.filter(
-    (item) => item.item_type === "service" && !item.primary_staff_id
+    (item) => (item.item_type === "service" || item.item_type === "package") && !item.primary_staff_id
   );
 
   const handleOpenPayment = () => {
@@ -53,7 +53,7 @@ export function BillingPos() {
     if (unassignedServices.length > 0) {
       const listText = unassignedServices.map((s, idx) => `• ${s.item_name}`).join("\n");
       alert(
-        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each of the following service(s) before checkout:\n\n${listText}`
+        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each of the following service(s) / package(s) before checkout:\n\n${listText}`
       );
       setMobileTab("ticket");
       return;
@@ -235,7 +235,7 @@ export function BillingPos() {
               <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200">
                 <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 animate-pulse" />
                 <span className="font-medium">
-                  {unassignedServices.length} service{unassignedServices.length > 1 ? "s" : ""} require{unassignedServices.length === 1 ? "s" : ""} a stylist selection
+                  {unassignedServices.length} item{unassignedServices.length > 1 ? "s" : ""} require{unassignedServices.length === 1 ? "s" : ""} a stylist selection
                 </span>
               </div>
             )}

@@ -82,8 +82,9 @@ export const DEFAULT_SETTINGS: SalonSettings = {
   invoice_prefix: "BZ-",
 };
 
-// 8 SERVICE & PRODUCT CATEGORIES
+// 9 SERVICE, PRODUCT & PACKAGE CATEGORIES
 export const DEFAULT_CATEGORIES: Category[] = [
+  { id: "22222222-2222-2222-2222-222222222209", name: "Packages & Combos", type: "package", icon: "Sparkles" },
   { id: "22222222-2222-2222-2222-222222222201", name: "Basic Services (Men)", type: "service", icon: "Scissors" },
   { id: "22222222-2222-2222-2222-222222222202", name: "Detan (Men)", type: "service", icon: "Sparkles" },
   { id: "22222222-2222-2222-2222-222222222203", name: "Bleach", type: "service", icon: "Sun" },
@@ -266,6 +267,72 @@ export const DEFAULT_CATALOG: CatalogItem[] = [
   { id: "33333333-3333-3333-3333-333333330134", category_id: "22222222-2222-2222-2222-222222222208", name: "Ozone Acne Check - Cream", type: "product", cost_price: 350, price: 350 * 4, sku: "PRD-OZN-09", is_active: true },
   { id: "33333333-3333-3333-3333-333333330135", category_id: "22222222-2222-2222-2222-222222222208", name: "Kanpeki - Balancing Cleanser", type: "product", cost_price: 960, price: 960 * 4, sku: "PRD-KNP-01", is_active: true },
   { id: "33333333-3333-3333-3333-333333330136", category_id: "22222222-2222-2222-2222-222222222208", name: "Kanpeki - Facial Wash", type: "product", cost_price: 960, price: 960 * 4, sku: "PRD-KNP-02", is_active: true },
+
+  // 9. Packages & Value Combos (Multi-Service Bundles with Special Package Pricing)
+  {
+    id: "33333333-3333-3333-3333-333333330201",
+    category_id: "22222222-2222-2222-2222-222222222209",
+    name: "Hair Cut + Shaving",
+    type: "package",
+    price: 220,
+    package_regular_price: 250,
+    duration_mins: 40,
+    package_service_ids: ["33333333-3333-3333-3333-333333330002", "33333333-3333-3333-3333-333333330001"],
+    is_active: true,
+  },
+  {
+    id: "33333333-3333-3333-3333-333333330202",
+    category_id: "22222222-2222-2222-2222-222222222209",
+    name: "Hair Cut + Head Wash",
+    type: "package",
+    price: 220,
+    package_regular_price: 250,
+    duration_mins: 35,
+    package_service_ids: ["33333333-3333-3333-3333-333333330002", "33333333-3333-3333-3333-333333330003"],
+    is_active: true,
+  },
+  {
+    id: "33333333-3333-3333-3333-333333330203",
+    category_id: "22222222-2222-2222-2222-222222222209",
+    name: "Hair Cut + Head Wash + Shaving",
+    type: "package",
+    price: 300,
+    package_regular_price: 350,
+    duration_mins: 50,
+    package_service_ids: [
+      "33333333-3333-3333-3333-333333330002",
+      "33333333-3333-3333-3333-333333330003",
+      "33333333-3333-3333-3333-333333330001",
+    ],
+    is_active: true,
+  },
+  {
+    id: "33333333-3333-3333-3333-333333330204",
+    category_id: "22222222-2222-2222-2222-222222222209",
+    name: "Detan + Facial Glow Combo",
+    type: "package",
+    price: 1600,
+    package_regular_price: 1800,
+    duration_mins: 60,
+    package_service_ids: ["33333333-3333-3333-3333-333333330005", "33333333-3333-3333-3333-333333330014"],
+    is_active: true,
+  },
+  {
+    id: "33333333-3333-3333-3333-333333330205",
+    category_id: "22222222-2222-2222-2222-222222222209",
+    name: "Men's Deluxe Grooming (Cut + Shave + Wash + Detan)",
+    type: "package",
+    price: 550,
+    package_regular_price: 650,
+    duration_mins: 70,
+    package_service_ids: [
+      "33333333-3333-3333-3333-333333330002",
+      "33333333-3333-3333-3333-333333330001",
+      "33333333-3333-3333-3333-333333330003",
+      "33333333-3333-3333-3333-333333330005",
+    ],
+    is_active: true,
+  },
 ];
 
 export const DEFAULT_CUSTOMERS: Customer[] = [];
@@ -332,6 +399,34 @@ export function initStorage() {
         }
       } else {
         localStorage.setItem(KEYS.USERS, JSON.stringify(DEFAULT_USERS));
+      }
+
+      // Migrate categories if package category missing
+      const rawCategories = localStorage.getItem(KEYS.CATEGORIES);
+      if (rawCategories) {
+        try {
+          const storedCats: Category[] = JSON.parse(rawCategories);
+          if (Array.isArray(storedCats) && !storedCats.some((c) => c.type === "package" || c.id === "22222222-2222-2222-2222-222222222209")) {
+            storedCats.unshift(DEFAULT_CATEGORIES[0]);
+            localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(storedCats));
+          }
+        } catch {}
+      }
+
+      // Migrate catalog to ensure default packages exist if missing
+      const rawCatalog = localStorage.getItem(KEYS.CATALOG);
+      if (rawCatalog) {
+        try {
+          const storedCatalog: CatalogItem[] = JSON.parse(rawCatalog);
+          if (Array.isArray(storedCatalog)) {
+            const hasPackages = storedCatalog.some((i) => i.type === "package");
+            if (!hasPackages) {
+              const defaultPackages = DEFAULT_CATALOG.filter((i) => i.type === "package");
+              const mergedCatalog = [...storedCatalog, ...defaultPackages];
+              localStorage.setItem(KEYS.CATALOG, JSON.stringify(mergedCatalog));
+            }
+          }
+        } catch {}
       }
 
       // Migrate salon settings to ensure updated name

@@ -126,6 +126,26 @@ export function AdminPortal() {
     is_active: true,
   });
 
+  // PACKAGE / COMBO BUILDER STATES
+  const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
+  const [editingPackage, setEditingPackage] = useState<CatalogItem | null>(null);
+  const [packageFormData, setPackageFormData] = useState<{
+    name: string;
+    category_id: string;
+    package_service_ids: string[];
+    price: number;
+    package_regular_price: number;
+    duration_mins: number;
+  }>({
+    name: "",
+    category_id: "",
+    package_service_ids: [],
+    price: 0,
+    package_regular_price: 0,
+    duration_mins: 30,
+  });
+  const [packageServicePickerSearch, setPackageServicePickerSearch] = useState("");
+
   // CATEGORY MODAL STATES
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -154,7 +174,7 @@ export function AdminPortal() {
 
   // SEARCH FILTERS
   const [catalogSearch, setCatalogSearch] = useState("");
-  const [catalogTypeFilter, setCatalogTypeFilter] = useState<"all" | "service" | "product">("all");
+  const [catalogTypeFilter, setCatalogTypeFilter] = useState<"all" | "service" | "package" | "product">("all");
 
   // STAFF HANDLERS
   const handleOpenAddStaff = () => {
@@ -226,6 +246,10 @@ export function AdminPortal() {
 
   // CATALOG HANDLERS
   const handleOpenAddCatalog = (type: ItemType = "service") => {
+    if (type === "package") {
+      handleOpenAddPackage();
+      return;
+    }
     setEditingCatalogItem(null);
     setCatalogFormData({
       name: "",
@@ -240,7 +264,99 @@ export function AdminPortal() {
     setIsCatalogModalOpen(true);
   };
 
+  const handleOpenAddPackage = () => {
+    setEditingPackage(null);
+    const pkgCategory = categories.find((c) => c.type === "package") || categories[0];
+    setPackageFormData({
+      name: "",
+      category_id: pkgCategory?.id || "",
+      package_service_ids: [],
+      price: 0,
+      package_regular_price: 0,
+      duration_mins: 30,
+    });
+    setPackageServicePickerSearch("");
+    setIsPackageModalOpen(true);
+  };
+
+  const handleOpenEditPackage = (item: CatalogItem) => {
+    setEditingPackage(item);
+    setPackageFormData({
+      name: item.name,
+      category_id: item.category_id || categories.find((c) => c.type === "package")?.id || categories[0]?.id || "",
+      package_service_ids: item.package_service_ids || [],
+      price: item.price,
+      package_regular_price: item.package_regular_price || item.price,
+      duration_mins: item.duration_mins || 30,
+    });
+    setPackageServicePickerSearch("");
+    setIsPackageModalOpen(true);
+  };
+
+  const handleTogglePackageService = (serviceId: string) => {
+    setPackageFormData((prev) => {
+      const exists = prev.package_service_ids.includes(serviceId);
+      const nextIds = exists
+        ? prev.package_service_ids.filter((id) => id !== serviceId)
+        : [...prev.package_service_ids, serviceId];
+
+      const selectedServices = catalog.filter((i) => nextIds.includes(i.id));
+      const regularSum = selectedServices.reduce((sum, s) => sum + (s.price || 0), 0);
+      const durationSum = selectedServices.reduce((sum, s) => sum + (s.duration_mins || 30), 0);
+
+      // Auto-suggest discounted price if not previously set
+      const autoPrice =
+        prev.price === 0 || prev.price === prev.package_regular_price
+          ? Math.round((regularSum * 0.85) / 10) * 10
+          : prev.price;
+
+      return {
+        ...prev,
+        package_service_ids: nextIds,
+        package_regular_price: regularSum,
+        duration_mins: durationSum || 30,
+        price: autoPrice > 0 ? autoPrice : regularSum,
+      };
+    });
+  };
+
+  const handleSavePackage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!packageFormData.name.trim()) {
+      alert("Please enter a package name.");
+      return;
+    }
+    if (packageFormData.package_service_ids.length === 0) {
+      alert("Please select at least one service to include in this package.");
+      return;
+    }
+
+    const itemPayload: CatalogItem = {
+      id: editingPackage ? editingPackage.id : generateUUID(),
+      name: packageFormData.name.trim(),
+      type: "package",
+      category_id:
+        packageFormData.category_id ||
+        categories.find((c) => c.type === "package")?.id ||
+        categories[0]?.id,
+      price: Number(packageFormData.price) || 0,
+      package_regular_price:
+        Number(packageFormData.package_regular_price) || Number(packageFormData.price) || 0,
+      package_service_ids: packageFormData.package_service_ids,
+      duration_mins: Number(packageFormData.duration_mins) || 30,
+      is_active: true,
+      created_at: editingPackage?.created_at || new Date().toISOString(),
+    };
+
+    saveCatalogItem(itemPayload);
+    setIsPackageModalOpen(false);
+  };
+
   const handleOpenEditCatalog = (item: CatalogItem) => {
+    if (item.type === "package") {
+      handleOpenEditPackage(item);
+      return;
+    }
     setEditingCatalogItem(item);
     setCatalogFormData({ ...item });
     setIsCatalogModalOpen(true);
@@ -905,19 +1021,19 @@ export function AdminPortal() {
       )}
 
       {/* =========================================================================
-          TAB 2: CATALOG (SERVICES & PRODUCTS) CRUD
+          TAB 2: CATALOG (SERVICES, PACKAGES & PRODUCTS) CRUD
           ========================================================================= */}
       {activeAdminTab === "catalog" && (
         <div className="space-y-4 animate-in fade-in duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-bold text-white">Services & Products Catalog</h3>
+              <h3 className="text-base font-bold text-white">Services, Combos & Products Catalog</h3>
               <p className="text-xs text-zinc-400">
-                Add, update pricing, duration, categories, and active status.
+                Add, update pricing, create multi-service package combos, and manage active status.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
                 variant="glow"
                 size="sm"
@@ -926,6 +1042,15 @@ export function AdminPortal() {
               >
                 <Plus className="h-4 w-4" />
                 <span>+ Add Service</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenAddPackage}
+                className="gap-1.5 text-xs font-bold bg-gradient-to-r from-purple-950/60 to-pink-950/60 border-purple-700/60 hover:border-pink-500 text-pink-300 hover:text-white"
+              >
+                <Sparkles className="h-4 w-4 text-amber-300" />
+                <span>+ Create Package</span>
               </Button>
               <Button
                 variant="outline"
@@ -952,11 +1077,11 @@ export function AdminPortal() {
               />
             </div>
 
-            <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800 shrink-0">
+            <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800 shrink-0 overflow-x-auto">
               <button
                 onClick={() => setCatalogTypeFilter("all")}
                 className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                  catalogTypeFilter === "all" ? "bg-purple-600 text-white" : "text-zinc-400"
+                  catalogTypeFilter === "all" ? "bg-purple-600 text-white font-bold" : "text-zinc-400"
                 }`}
               >
                 All ({catalog.length})
@@ -964,15 +1089,24 @@ export function AdminPortal() {
               <button
                 onClick={() => setCatalogTypeFilter("service")}
                 className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                  catalogTypeFilter === "service" ? "bg-purple-600 text-white" : "text-zinc-400"
+                  catalogTypeFilter === "service" ? "bg-purple-600 text-white font-bold" : "text-zinc-400"
                 }`}
               >
                 Services ({catalog.filter((i) => i.type === "service").length})
               </button>
               <button
+                onClick={() => setCatalogTypeFilter("package")}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all flex items-center gap-1 ${
+                  catalogTypeFilter === "package" ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold shadow-sm" : "text-zinc-400"
+                }`}
+              >
+                <Sparkles className="h-3 w-3 text-amber-300" />
+                <span>Packages ({catalog.filter((i) => i.type === "package").length})</span>
+              </button>
+              <button
                 onClick={() => setCatalogTypeFilter("product")}
                 className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                  catalogTypeFilter === "product" ? "bg-purple-600 text-white" : "text-zinc-400"
+                  catalogTypeFilter === "product" ? "bg-purple-600 text-white font-bold" : "text-zinc-400"
                 }`}
               >
                 Retail ({catalog.filter((i) => i.type === "product").length})
@@ -984,21 +1118,36 @@ export function AdminPortal() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {filteredCatalog.map((item) => {
               const isService = item.type === "service";
+              const isPackage = item.type === "package";
+              const isProduct = item.type === "product";
               const category = categories.find((c) => c.id === item.category_id);
+
+              const savings =
+                isPackage && item.package_regular_price && item.package_regular_price > item.price
+                  ? item.package_regular_price - item.price
+                  : 0;
 
               return (
                 <div
                   key={item.id}
-                  className="rounded-2xl border border-zinc-800/90 bg-zinc-900/70 p-3.5 backdrop-blur-xl shadow-lg flex flex-col justify-between hover:border-purple-500/40 transition-all"
+                  className={`rounded-2xl border p-3.5 backdrop-blur-xl shadow-lg flex flex-col justify-between transition-all ${
+                    isPackage
+                      ? "border-purple-900/50 bg-gradient-to-b from-purple-950/20 to-zinc-900/80 hover:border-pink-500/50"
+                      : "border-zinc-800/90 bg-zinc-900/70 hover:border-purple-500/40"
+                  }`}
                 >
                   <div>
                     <div className="flex items-start justify-between gap-1.5 mb-1.5">
                       <span
                         className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                          isService ? "bg-purple-500/15 text-purple-300" : "bg-amber-500/15 text-amber-300"
+                          isPackage
+                            ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm"
+                            : isService
+                            ? "bg-purple-500/15 text-purple-300"
+                            : "bg-amber-500/15 text-amber-300"
                         }`}
                       >
-                        {isService ? "Service" : "Retail Product"}
+                        {isPackage ? "Package Combo" : isService ? "Service" : "Retail Product"}
                       </span>
                       {category && (
                         <span className="text-[10px] text-zinc-400 font-medium">
@@ -1011,7 +1160,7 @@ export function AdminPortal() {
                       {item.name}
                     </h4>
 
-                    {!isService ? (
+                    {isProduct ? (
                       <div className="space-y-2 mb-3">
                         <div className="grid grid-cols-2 gap-2 text-xs bg-zinc-950/60 p-2 rounded-xl border border-zinc-800/60">
                           <div>
@@ -1042,6 +1191,63 @@ export function AdminPortal() {
                           <div className="flex items-center justify-between text-[10px] text-zinc-400 px-1">
                             <span>SKU / Code:</span>
                             <span className="font-mono font-bold text-zinc-300">{item.sku}</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : isPackage ? (
+                      <div className="space-y-2 mb-3">
+                        {/* INCLUDED SERVICES PILLS */}
+                        {item.package_service_ids && item.package_service_ids.length > 0 && (
+                          <div className="bg-zinc-950/60 p-2 rounded-xl border border-purple-900/30 space-y-1">
+                            <span className="text-[10px] text-zinc-400 font-semibold flex items-center gap-1">
+                              <Layers className="h-3 w-3 text-pink-400" />
+                              Included Services ({item.package_service_ids.length}):
+                            </span>
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {item.package_service_ids.map((id) => {
+                                const svc = catalog.find((c) => c.id === id);
+                                return (
+                                  <span
+                                    key={id}
+                                    className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium"
+                                  >
+                                    {svc ? `${svc.name} (₹${svc.price})` : id}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2 text-xs bg-zinc-950/60 p-2 rounded-xl border border-zinc-800/60">
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block">Package Price</span>
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="font-mono font-extrabold text-emerald-400">
+                                {formatCurrency(item.price, settings.currency_symbol)}
+                              </span>
+                              {item.package_regular_price && item.package_regular_price > item.price && (
+                                <span className="text-[10px] text-zinc-500 line-through font-mono">
+                                  {formatCurrency(item.package_regular_price, settings.currency_symbol)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block">Duration</span>
+                            <span className="font-mono text-zinc-300 flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-zinc-400" />
+                              {item.duration_mins || 30}m
+                            </span>
+                          </div>
+                        </div>
+
+                        {savings > 0 && (
+                          <div className="flex items-center justify-between text-[11px] bg-emerald-950/30 border border-emerald-800/40 px-2.5 py-1.5 rounded-lg text-emerald-300">
+                            <span className="font-medium">Client Discount:</span>
+                            <span className="font-mono font-extrabold">
+                              Save {formatCurrency(savings, settings.currency_symbol)} ({(((savings) / (item.package_regular_price || 1)) * 100).toFixed(0)}% OFF)
+                            </span>
                           </div>
                         )}
                       </div>
@@ -1079,7 +1285,7 @@ export function AdminPortal() {
                       className="flex-1 text-xs h-7 gap-1"
                     >
                       <Edit2 className="h-3 w-3 text-purple-400" />
-                      <span>Edit Price/Details</span>
+                      <span>{isPackage ? "Edit Package" : "Edit Price/Details"}</span>
                     </Button>
                     <button
                       type="button"
@@ -1756,6 +1962,244 @@ export function AdminPortal() {
             </Button>
             <Button variant="glow" type="submit">
               {editingCatalogItem ? "Update Item" : "Save Item"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </Dialog>
+
+      {/* =========================================================================
+          MODALS: PACKAGE & COMBO BUILDER MODAL
+          ========================================================================= */}
+      <Dialog
+        open={isPackageModalOpen}
+        onOpenChange={setIsPackageModalOpen}
+        maxWidth="lg"
+      >
+        <form onSubmit={handleSavePackage}>
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-600 text-white flex items-center justify-center shadow-lg shadow-purple-600/30">
+                <Sparkles className="h-5 w-5 text-amber-200" />
+              </div>
+              <div>
+                <DialogTitle>
+                  {editingPackage ? "Edit Package / Combo" : "Create Service Package / Combo"}
+                </DialogTitle>
+                <DialogDescription>
+                  Bundle multiple salon services into a discounted package deal (e.g. Haircut + Shaving).
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3 max-h-[70vh] overflow-y-auto pr-1">
+            {/* 1. PACKAGE NAME & QUICK PRESET SUGGESTIONS */}
+            <div>
+              <label className="text-xs font-medium text-zinc-400 mb-1 block">
+                Package / Combo Name *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Hair Cut + Shaving"
+                value={packageFormData.name}
+                onChange={(e) => setPackageFormData({ ...packageFormData, name: e.target.value })}
+                className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-bold focus:ring-1 focus:ring-purple-500"
+              />
+
+              {/* QUICK CHIP SUGGESTIONS */}
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className="text-[10px] text-zinc-500 font-semibold">Presets:</span>
+                {[
+                  "Hair Cut + Shaving",
+                  "Hair Cut + Head Wash",
+                  "Hair Cut + Head Wash + Shaving",
+                  "Detan + Facial Glow Combo",
+                  "Men's Deluxe Grooming Package",
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setPackageFormData({ ...packageFormData, name: preset })}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-900 hover:bg-purple-950/60 border border-zinc-800 hover:border-purple-700/60 text-zinc-300 hover:text-purple-200 transition-all font-medium"
+                  >
+                    ⚡ {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. CATEGORY SELECTOR */}
+            <div>
+              <label className="text-xs font-medium text-zinc-400 mb-1 block">Category</label>
+              <select
+                value={packageFormData.category_id}
+                onChange={(e) => setPackageFormData({ ...packageFormData, category_id: e.target.value })}
+                className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white"
+              >
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name} ({cat.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. MULTI-SERVICE PICKER */}
+            <div className="p-3 bg-zinc-950/80 rounded-2xl border border-zinc-800/90 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Layers className="h-3.5 w-3.5 text-pink-400" />
+                    Select Included Services ({packageFormData.package_service_ids.length} selected) *
+                  </label>
+                  <p className="text-[10px] text-zinc-500">
+                    Click any service to toggle it into this package combo.
+                  </p>
+                </div>
+
+                {packageFormData.package_service_ids.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPackageFormData({
+                        ...packageFormData,
+                        package_service_ids: [],
+                        package_regular_price: 0,
+                        price: 0,
+                      })
+                    }
+                    className="text-[10px] text-rose-400 hover:text-rose-300 font-bold"
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+
+              {/* SEARCH FILTER FOR SERVICES PICKER */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="Filter available services..."
+                  value={packageServicePickerSearch}
+                  onChange={(e) => setPackageServicePickerSearch(e.target.value)}
+                  className="w-full h-8 pl-8 pr-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* SERVICES LIST */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                {catalog
+                  .filter((item) => item.type === "service")
+                  .filter((item) => {
+                    if (!packageServicePickerSearch.trim()) return true;
+                    return item.name.toLowerCase().includes(packageServicePickerSearch.toLowerCase().trim());
+                  })
+                  .map((svc) => {
+                    const isSelected = packageFormData.package_service_ids.includes(svc.id);
+                    return (
+                      <div
+                        key={svc.id}
+                        onClick={() => handleTogglePackageService(svc.id)}
+                        className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer select-none transition-all ${
+                          isSelected
+                            ? "bg-purple-950/40 border-purple-500/80 text-white shadow-sm"
+                            : "bg-zinc-900/60 hover:bg-zinc-900 border-zinc-800/80 text-zinc-300 hover:border-zinc-700"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div
+                            className={`h-4 w-4 rounded-md flex items-center justify-center shrink-0 transition-all ${
+                              isSelected
+                                ? "bg-purple-600 text-white"
+                                : "border border-zinc-700 bg-zinc-950"
+                            }`}
+                          >
+                            {isSelected && <Check className="h-3 w-3" />}
+                          </div>
+                          <span className="truncate font-medium text-[11px]">{svc.name}</span>
+                        </div>
+                        <span className="font-mono font-bold text-emerald-400 text-[11px] ml-2 shrink-0">
+                          ₹{svc.price}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* 4. LIVE PRICING & COMBO SUMMARY */}
+            <div className="p-3.5 bg-gradient-to-r from-purple-950/30 to-pink-950/30 rounded-2xl border border-purple-900/40 space-y-3">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-zinc-950/70 p-2.5 rounded-xl border border-zinc-800/80">
+                  <span className="text-[10px] text-zinc-400 block font-semibold">
+                    Individual Regular Total
+                  </span>
+                  <span className="font-mono font-extrabold text-zinc-200 text-sm">
+                    {formatCurrency(packageFormData.package_regular_price || 0, settings.currency_symbol)}
+                  </span>
+                </div>
+
+                <div className="bg-zinc-950/70 p-2.5 rounded-xl border border-zinc-800/80">
+                  <span className="text-[10px] text-zinc-400 block font-semibold">
+                    Combined Duration
+                  </span>
+                  <span className="font-mono font-bold text-zinc-300 text-sm flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5 text-zinc-400" />
+                    {packageFormData.duration_mins || 30} mins
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                <div>
+                  <label className="text-xs font-bold text-emerald-400 mb-1 block">
+                    Special Package Price (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={packageFormData.price || ""}
+                    onChange={(e) =>
+                      setPackageFormData({ ...packageFormData, price: Number(e.target.value) || 0 })
+                    }
+                    placeholder="e.g. 800"
+                    className="w-full h-10 px-3 text-sm bg-zinc-950 border border-emerald-900/60 rounded-xl text-emerald-400 font-mono font-black focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {/* SAVINGS BADGE BANNER */}
+                <div>
+                  <span className="text-[10px] text-zinc-400 block mb-1 font-semibold">Client Savings:</span>
+                  {packageFormData.package_regular_price > (packageFormData.price || 0) && (packageFormData.price || 0) > 0 ? (
+                    <div className="p-2 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-xs font-bold flex items-center justify-between">
+                      <span>Save {formatCurrency(packageFormData.package_regular_price - (packageFormData.price || 0), settings.currency_symbol)}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-900/80 text-emerald-200">
+                        {(((packageFormData.package_regular_price - (packageFormData.price || 0)) / (packageFormData.package_regular_price || 1)) * 100).toFixed(0)}% OFF
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="p-2 rounded-xl bg-zinc-900/60 border border-zinc-800 text-zinc-500 text-xs font-medium">
+                      Set package price lower than ₹{packageFormData.package_regular_price || 0} for combo discount.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setIsPackageModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="glow"
+              type="submit"
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold"
+            >
+              {editingPackage ? "Update Package Combo" : "Save Package Combo"}
             </Button>
           </DialogFooter>
         </form>

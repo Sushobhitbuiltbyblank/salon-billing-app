@@ -53,7 +53,9 @@ export function CartItemList() {
     <div className="space-y-2.5">
       {draftItems.map((item, index) => {
         const isService = item.item_type === "service";
-        const isStylistMissing = isService && !item.primary_staff_id;
+        const isPackage = item.item_type === "package";
+        const isStylistRequired = isService || isPackage;
+        const isStylistMissing = isStylistRequired && !item.primary_staff_id;
         const primaryName = getStaffName(item.primary_staff_id);
         const secondaryName = getStaffName(item.secondary_staff_id);
 
@@ -76,12 +78,18 @@ export function CartItemList() {
                   <h4 className="text-xs sm:text-sm font-bold text-white leading-tight">
                     {item.item_name}
                   </h4>
-                  <Badge
-                    variant={isService ? "purple" : "warning"}
-                    className="text-[9px] py-0 px-1.5"
-                  >
-                    {isService ? "Service" : "Product"}
-                  </Badge>
+                  {isPackage ? (
+                    <span className="text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm">
+                      Package
+                    </span>
+                  ) : (
+                    <Badge
+                      variant={isService ? "purple" : "warning"}
+                      className="text-[9px] py-0 px-1.5"
+                    >
+                      {isService ? "Service" : "Product"}
+                    </Badge>
+                  )}
                   {isStylistMissing && (
                     <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
                       <AlertCircle className="h-2.5 w-2.5" />
@@ -196,7 +204,7 @@ export function CartItemList() {
                   }`}
                 >
                   <option value="">
-                    {isService ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
+                    {isStylistRequired ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
                   </option>
                   {staff.map((s) => (
                     <option key={s.id} value={s.id} disabled={s.status !== "active"}>

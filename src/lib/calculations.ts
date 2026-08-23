@@ -158,7 +158,7 @@ export function calculateStaffPerformance(
 
         if (comm.primaryStaffId && summaryMap.has(comm.primaryStaffId)) {
           const entry = summaryMap.get(comm.primaryStaffId)!;
-          if (item.item_type === "service") {
+          if (item.item_type === "service" || item.item_type === "package") {
             entry.services_count += item.quantity;
           } else {
             entry.products_count += item.quantity;
@@ -170,7 +170,7 @@ export function calculateStaffPerformance(
 
         if (comm.secondaryStaffId && summaryMap.has(comm.secondaryStaffId)) {
           const entry = summaryMap.get(comm.secondaryStaffId)!;
-          if (item.item_type === "service") {
+          if (item.item_type === "service" || item.item_type === "package") {
             entry.services_count += item.quantity;
           } else {
             entry.products_count += item.quantity;

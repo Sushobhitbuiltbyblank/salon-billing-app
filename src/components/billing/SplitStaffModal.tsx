@@ -101,8 +101,8 @@ export function SplitStaffModal({
   }
 
   const handleConfirm = () => {
-    if (item.item_type === "service" && !primaryStaffId) {
-      alert("⚠️ Stylist Selection Required\n\nPlease select a primary stylist for this service.");
+    if ((item.item_type === "service" || item.item_type === "package") && !primaryStaffId) {
+      alert("⚠️ Stylist Selection Required\n\nPlease select a primary stylist for this service / package.");
       return;
     }
 
