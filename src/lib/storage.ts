@@ -22,6 +22,7 @@ const KEYS = {
   CUSTOMERS: `${STORAGE_PREFIX}customers`,
   INVOICES: `${STORAGE_PREFIX}invoices`,
   EXPENSES: `${STORAGE_PREFIX}expenses`,
+  DELETED_CATALOG_IDS: `${STORAGE_PREFIX}deleted_catalog_ids`,
   INITIALIZED: `${STORAGE_PREFIX}full_catalog_v5`,
 };
 
@@ -413,27 +414,6 @@ export function initStorage() {
         } catch {}
       }
 
-      // Migrate catalog to ensure default packages exist if missing
-      const rawCatalog = localStorage.getItem(KEYS.CATALOG);
-      if (rawCatalog) {
-        try {
-          const storedCatalog: CatalogItem[] = JSON.parse(rawCatalog);
-          if (Array.isArray(storedCatalog)) {
-            const defaultPackages = DEFAULT_CATALOG.filter((i) => i.type === "package");
-            let modified = false;
-            defaultPackages.forEach((pkg) => {
-              if (!storedCatalog.some((i) => i.id === pkg.id || i.name.toLowerCase().trim() === pkg.name.toLowerCase().trim())) {
-                storedCatalog.push(pkg);
-                modified = true;
-              }
-            });
-            if (modified) {
-              localStorage.setItem(KEYS.CATALOG, JSON.stringify(storedCatalog));
-            }
-          }
-        } catch {}
-      }
-
       // Migrate salon settings to ensure updated name
       const rawSettings = localStorage.getItem(KEYS.SETTINGS);
       if (rawSettings) {
@@ -613,13 +593,46 @@ export const Storage = {
   },
 
   // CATALOG
+  getDeletedCatalogIds(): string[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(KEYS.DELETED_CATALOG_IDS);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  },
+  addDeletedCatalogId(id: string): void {
+    if (typeof window === "undefined") return;
+    try {
+      const list = this.getDeletedCatalogIds();
+      if (!list.includes(id)) {
+        list.push(id);
+        localStorage.setItem(KEYS.DELETED_CATALOG_IDS, JSON.stringify(list));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  },
+  removeDeletedCatalogId(id: string): void {
+    if (typeof window === "undefined") return;
+    try {
+      const list = this.getDeletedCatalogIds().filter((i) => i !== id);
+      localStorage.setItem(KEYS.DELETED_CATALOG_IDS, JSON.stringify(list));
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
   getCatalog(): CatalogItem[] {
     if (typeof window === "undefined") return DEFAULT_CATALOG;
     try {
       const raw = localStorage.getItem(KEYS.CATALOG);
-      if (!raw) return DEFAULT_CATALOG;
+      const deletedIds = this.getDeletedCatalogIds();
+      if (!raw) return DEFAULT_CATALOG.filter((i) => !deletedIds.includes(i.id));
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_CATALOG;
+      const list = Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_CATALOG;
+      return list.filter((i: CatalogItem) => !deletedIds.includes(i.id));
     } catch {
       return DEFAULT_CATALOG;
     }
@@ -633,6 +646,7 @@ export const Storage = {
     }
   },
   saveCatalogItem(item: CatalogItem): void {
+    this.removeDeletedCatalogId(item.id);
     const list = this.getCatalog();
     const index = list.findIndex((i) => i.id === item.id);
     if (index >= 0) {
@@ -643,6 +657,7 @@ export const Storage = {
     this.saveCatalog(list);
   },
   deleteCatalogItem(itemId: string): void {
+    this.addDeletedCatalogId(itemId);
     const list = this.getCatalog().filter((i) => i.id !== itemId);
     this.saveCatalog(list);
   },

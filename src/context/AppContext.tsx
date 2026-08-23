@@ -186,8 +186,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.saveCategories(mergedCats);
         }
         if (cloudData.catalog) {
-          const localCatalog = Storage.getCatalog();
-          const remoteCatalog = cloudData.catalog;
+          const deletedIds = Storage.getDeletedCatalogIds();
+          const remoteCatalog = (cloudData.catalog || []).filter(
+            (rem: CatalogItem) => !deletedIds.includes(rem.id)
+          );
+
+          // Clean up any remaining deleted items on Supabase
+          (cloudData.catalog || []).forEach((rem: CatalogItem) => {
+            if (deletedIds.includes(rem.id)) {
+              SupabaseSync.deleteCatalogItem(rem.id);
+            }
+          });
+
+          const localCatalog = Storage.getCatalog().filter(
+            (loc: CatalogItem) => !deletedIds.includes(loc.id)
+          );
+
           const mergedCatalog = [...remoteCatalog];
           localCatalog.forEach((loc) => {
             if (!mergedCatalog.some((rem) => rem.id === loc.id || (loc.type === "package" && rem.name.toLowerCase().trim() === loc.name.toLowerCase().trim()))) {
@@ -434,7 +448,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteCatalogItem = (itemId: string) => {
     Storage.deleteCatalogItem(itemId);
-    setCatalog(Storage.getCatalog());
+    setCatalog((prev) => prev.filter((i) => i.id !== itemId));
     if (isSupabaseConfigured()) {
       SupabaseSync.deleteCatalogItem(itemId);
     }
