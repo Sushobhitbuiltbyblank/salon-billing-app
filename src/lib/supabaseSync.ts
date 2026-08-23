@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
+import { DEFAULT_USERS } from "./storage";
 import {
   AppUser,
   CatalogItem,
@@ -92,7 +93,21 @@ export const SupabaseSync = {
           ...e,
           amount: Number(e.amount) || 0,
         })),
-        users: usersRes.data || [],
+        users: (() => {
+          const remoteUsers = (usersRes.data || []) as AppUser[];
+          const list = [...remoteUsers];
+          // Ensure Sushobhit, Prabhat, and Amit always exist
+          if (!list.some((u) => u.id === "usr-admin-01")) {
+            list.unshift(DEFAULT_USERS[0]);
+          }
+          if (!list.some((u) => u.id === "usr-admin-02")) {
+            list.splice(1, 0, DEFAULT_USERS[1]);
+          }
+          if (!list.some((u) => u.id === "usr-rec-01")) {
+            list.push(DEFAULT_USERS[2]);
+          }
+          return list;
+        })(),
       };
     } catch (err) {
       console.warn("Supabase fetch error, falling back to local storage:", err);
