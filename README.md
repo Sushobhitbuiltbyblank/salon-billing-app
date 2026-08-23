@@ -1,4 +1,4 @@
-# 💇‍♀️ Luxe Aura - Mobile-First Salon POS & Billing Application
+# 💇‍♀️ Belezia Salon Laxmi Nagar - Mobile-First Salon POS & Billing Application
 
 A modern, high-performance, mobile-first Salon Point of Sale (POS) Progressive Web Application built with **Next.js (App Router)**, **Tailwind CSS**, **Lucide Icons**, and **Supabase (PostgreSQL)**.
 

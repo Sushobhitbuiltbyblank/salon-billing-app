@@ -119,6 +119,14 @@ export default function PublicReceiptPage() {
     fetchReceiptData();
   }, [invoiceId]);
 
+  useEffect(() => {
+    if (invoice) {
+      document.title = `Tax Invoice #${invoice.invoice_number} | Belezia Salon Laxmi Nagar`;
+    } else {
+      document.title = "Tax Invoice | Belezia Salon Laxmi Nagar";
+    }
+  }, [invoice]);
+
   // DOWNLOAD PDF
   const handleDownloadPdf = async () => {
     if (!receiptRef.current || !invoice) return;

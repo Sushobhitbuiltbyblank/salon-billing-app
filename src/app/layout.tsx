@@ -2,8 +2,31 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Luxe Aura - Salon POS & Billing Suite",
-  description: "Mobile-first, receptionist-friendly salon billing, split-staff commission, and performance analytics suite.",
+  title: "Belezia Salon Laxmi Nagar",
+  description: "Belezia Salon Laxmi Nagar - Ultra-Premium Unisex Salon & Spa Experience. Digital Invoicing, POS & Billing Suite.",
+  metadataBase: new URL("https://belezia-salon-billing-app.vercel.app"),
+  openGraph: {
+    title: "Belezia Salon Laxmi Nagar",
+    description: "Digital Tax Invoice & Salon Billing - Belezia Salon Laxmi Nagar",
+    url: "https://belezia-salon-billing-app.vercel.app",
+    siteName: "Belezia Salon Laxmi Nagar",
+    images: [
+      {
+        url: "/icon.svg",
+        width: 512,
+        height: 512,
+        alt: "Belezia Salon Laxmi Nagar",
+      },
+    ],
+    locale: "en_IN",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Belezia Salon Laxmi Nagar",
+    description: "Digital Tax Invoice & Salon Billing - Belezia Salon Laxmi Nagar",
+    images: ["/icon.svg"],
+  },
   manifest: "/manifest.json",
   icons: {
     icon: "/icon.svg",
@@ -12,7 +35,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "SalonPOS",
+    title: "Belezia Salon",
   },
 };
 

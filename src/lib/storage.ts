@@ -65,9 +65,9 @@ export const DEFAULT_USERS: AppUser[] = [
 // CLEAN SALON BUSINESS SETTINGS
 export const DEFAULT_SETTINGS: SalonSettings = {
   id: "00000000-0000-0000-0000-000000000001",
-  salon_name: "Belezia Luxury Hair & Beauty Lounge",
+  salon_name: "Belezia Salon Laxmi Nagar",
   tagline: "Ultra-Premium Unisex Salon & Spa Experience",
-  address: "Shop 14-16, Galleria Boulevard, Indiranagar, Bengaluru, 560038",
+  address: "Shop 14-16, Main Market, Laxmi Nagar, New Delhi, 110092",
   phone: "+91 98765 43210",
   email: "hello@belezia.com",
   gst_number: "29ABCDE1234F1Z5",
@@ -332,6 +332,23 @@ export function initStorage() {
         }
       } else {
         localStorage.setItem(KEYS.USERS, JSON.stringify(DEFAULT_USERS));
+      }
+
+      // Migrate salon settings to ensure updated name
+      const rawSettings = localStorage.getItem(KEYS.SETTINGS);
+      if (rawSettings) {
+        try {
+          const storedSettings = JSON.parse(rawSettings);
+          if (
+            storedSettings &&
+            (storedSettings.salon_name?.includes("Luxe") ||
+              storedSettings.salon_name?.includes("Belezia Luxury"))
+          ) {
+            storedSettings.salon_name = "Belezia Salon Laxmi Nagar";
+            storedSettings.address = "Shop 14-16, Main Market, Laxmi Nagar, New Delhi, 110092";
+            localStorage.setItem(KEYS.SETTINGS, JSON.stringify(storedSettings));
+          }
+        } catch {}
       }
     }
   } catch (err) {
