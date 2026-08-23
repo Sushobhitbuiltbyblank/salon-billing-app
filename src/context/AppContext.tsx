@@ -20,10 +20,10 @@ import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { calculateItemTotal } from "@/lib/calculations";
 
 interface AppContextType {
-  // AUTH & USERS
   users: AppUser[];
   currentUser: AppUser | null;
   loginWithPin: (userId: string, pin: string) => boolean;
+  loginWithEmailAndPin: (email: string, pin: string) => { success: boolean; error?: string };
   loginAs: (user: AppUser) => void;
   logout: () => void;
   saveUser: (user: AppUser) => void;
@@ -105,8 +105,8 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<AppUser[]>(DEFAULT_USERS);
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(DEFAULT_USERS[0]);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(true);
 
   const [settings, setSettings] = useState<SalonSettings>(DEFAULT_SETTINGS);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -134,8 +134,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     initStorage();
     
     // 1. Instant load from local cache
-    setUsers(Storage.getUsers());
-    setCurrentUser(Storage.getCurrentUser());
+    const cachedUsers = Storage.getUsers();
+    const cachedCurrent = Storage.getCurrentUser();
+    setUsers(cachedUsers);
+    setCurrentUser(cachedCurrent);
+    if (!cachedCurrent) {
+      setIsAuthModalOpen(true);
+    }
     setSettings(Storage.getSettings());
     setStaff(Storage.getStaff());
     setCategories(Storage.getCategories());
@@ -224,6 +229,56 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return true;
     }
     return false;
+  };
+
+  const loginWithEmailAndPin = (email: string, pin: string): { success: boolean; error?: string } => {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPin = pin.trim();
+
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      return { success: false, error: "Please enter a valid email address." };
+    }
+    if (!cleanPin || cleanPin.length < 4) {
+      return { success: false, error: "Please enter a 4-digit PIN." };
+    }
+
+    // 1. Check existing registered staff / users
+    const existingUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (existingUser) {
+      if (existingUser.pin === cleanPin) {
+        setCurrentUser(existingUser);
+        Storage.setCurrentUser(existingUser);
+        setIsAuthModalOpen(false);
+        return { success: true };
+      } else {
+        return { success: false, error: "Incorrect PIN for this registered account." };
+      }
+    }
+
+    // 2. Otherwise log in as Visitor / Guest
+    const namePart = cleanEmail.split("@")[0];
+    const visitorName = namePart
+      .replace(/[._-]/g, " ")
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ") || "Visitor";
+
+    const visitorUser: AppUser = {
+      id: `usr-visitor-${Date.now()}`,
+      name: visitorName,
+      email: cleanEmail,
+      role: "receptionist",
+      pin: cleanPin,
+      avatar_color: "#10b981", // Emerald green for visitors
+      is_active: true,
+      created_at: new Date().toISOString(),
+    };
+
+    saveUser(visitorUser);
+    setCurrentUser(visitorUser);
+    Storage.setCurrentUser(visitorUser);
+    setIsAuthModalOpen(false);
+    return { success: true };
   };
 
   const loginAs = (user: AppUser) => {
@@ -530,6 +585,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         users,
         currentUser,
         loginWithPin,
+        loginWithEmailAndPin,
         loginAs,
         logout,
         saveUser,

@@ -17,6 +17,7 @@ import {
   Shield,
   UserCheck,
   User,
+  Lock,
   LogOut,
   ChevronDown,
   Package,
@@ -134,7 +135,7 @@ export function Navbar() {
         {/* RIGHT ACTIONS: LOGGED-IN USER PROFILE, CLOCK */}
         <div className="flex items-center gap-2 shrink-0">
           {/* USER PROFILE CHIP (CLICK TO SWITCH PROFILE / LOGOUT) */}
-          {currentUser && (
+          {currentUser ? (
             <button
               onClick={() => setIsAuthModalOpen(true)}
               className="flex items-center gap-2 p-1.5 pr-2.5 rounded-2xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 transition-all cursor-pointer shadow-sm group shrink-0"
@@ -156,6 +157,14 @@ export function Navbar() {
                 </div>
               </div>
               <ChevronDown className="h-3 w-3 text-zinc-400 group-hover:text-white" />
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all cursor-pointer shrink-0"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              <span>Sign In</span>
             </button>
           )}
 

@@ -268,7 +268,8 @@ export function initStorage() {
   const initialized = localStorage.getItem(KEYS.INITIALIZED);
   if (!initialized) {
     localStorage.setItem(KEYS.USERS, JSON.stringify(DEFAULT_USERS));
-    localStorage.setItem(KEYS.CURRENT_USER, JSON.stringify(DEFAULT_USERS[0]));
+    // Do NOT auto-login user on first visit — prompt for PIN/Email login
+    localStorage.removeItem(KEYS.CURRENT_USER);
     localStorage.setItem(KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
     localStorage.setItem(KEYS.STAFF, JSON.stringify(DEFAULT_STAFF));
     localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(DEFAULT_CATEGORIES));
@@ -278,41 +279,25 @@ export function initStorage() {
     localStorage.setItem(KEYS.EXPENSES, JSON.stringify(DEFAULT_EXPENSES));
     localStorage.setItem(KEYS.INITIALIZED, "true");
   } else {
-    // Migrate existing users and keep only Sushobhit Jain (Admin) and Amit Sharma (Receptionist)
+    // Migrate existing users and preserve registered credentials
     const rawUsers = localStorage.getItem(KEYS.USERS);
     if (rawUsers) {
       try {
         const storedUsers: AppUser[] = JSON.parse(rawUsers);
         const filteredUsers = storedUsers
-          .filter((u) => u.id === "usr-admin-01" || u.id === "usr-rec-01")
+          .filter((u) => u.id === "usr-admin-01" || u.id === "usr-rec-01" || u.id.startsWith("usr-visitor-"))
           .map((u) => {
             if (u.id === "usr-admin-01") {
-              return { ...u, name: "Sushobhit Jain", email: "sushobhit@belezia.com", role: "admin" as const };
+              return { ...u, name: "Sushobhit Jain", email: "sushobhit@belezia.com", role: "admin" as const, pin: u.pin || "9999" };
             }
             if (u.id === "usr-rec-01") {
-              return { ...u, name: "Amit Sharma", email: "amit@belezia.com", role: "receptionist" as const };
+              return { ...u, name: "Amit Sharma", email: "amit@belezia.com", role: "receptionist" as const, pin: u.pin || "1001" };
             }
             return u;
           });
 
         const finalUsers = filteredUsers.length > 0 ? filteredUsers : DEFAULT_USERS;
         localStorage.setItem(KEYS.USERS, JSON.stringify(finalUsers));
-
-        const rawCurrent = localStorage.getItem(KEYS.CURRENT_USER);
-        if (rawCurrent) {
-          const current: AppUser = JSON.parse(rawCurrent);
-          if (current.id === "usr-rec-01") {
-            localStorage.setItem(
-              KEYS.CURRENT_USER,
-              JSON.stringify({ ...current, name: "Amit Sharma", email: "amit@belezia.com" })
-            );
-          } else {
-            localStorage.setItem(
-              KEYS.CURRENT_USER,
-              JSON.stringify(finalUsers[0])
-            );
-          }
-        }
       } catch (e) {
         console.error("User migration error:", e);
       }
@@ -348,9 +333,14 @@ export const Storage = {
     this.saveUsers(list);
   },
   getCurrentUser(): AppUser | null {
-    if (typeof window === "undefined") return DEFAULT_USERS[0];
+    if (typeof window === "undefined") return null;
     const raw = localStorage.getItem(KEYS.CURRENT_USER);
-    return raw ? JSON.parse(raw) : DEFAULT_USERS[0];
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
   },
   setCurrentUser(user: AppUser | null): void {
     if (typeof window === "undefined") return;
