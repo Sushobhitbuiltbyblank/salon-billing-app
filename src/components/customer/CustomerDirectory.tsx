@@ -54,6 +54,8 @@ export function CustomerDirectory() {
     setDraftCustomer,
     setActiveTab,
     settings,
+    catalog,
+    staff,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -709,17 +711,86 @@ export function CustomerDirectory() {
                   </div>
 
                   {/* LINE ITEMS */}
-                  <div className="text-[11px] text-zinc-400 bg-zinc-900/60 p-2 rounded-xl border border-zinc-800/60">
-                    <div className="font-semibold text-zinc-300 mb-1">Items / Services ({inv.items?.length || 0}):</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {inv.items?.map((it, idx) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-0.5 rounded-md bg-zinc-950 border border-zinc-800 text-zinc-300 text-[10px]"
-                        >
-                          {it.item_name} (x{it.quantity}) • {formatCurrency(it.total_price, settings.currency_symbol)}
-                        </span>
-                      ))}
+                  <div className="text-[11px] text-zinc-400 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60 space-y-1.5">
+                    <div className="font-semibold text-zinc-300">Items / Services ({inv.items?.length || 0}):</div>
+                    <div className="space-y-1.5">
+                      {inv.items?.map((it, idx) => {
+                        let services = it.package_services;
+                        if (
+                          (!services || services.length === 0) &&
+                          (it.item_type === "package" ||
+                            (it.package_service_ids && it.package_service_ids.length > 0))
+                        ) {
+                          const catItem = catalog.find(
+                            (c) =>
+                              c.id === it.item_id ||
+                              c.name.toLowerCase().trim() === it.item_name.toLowerCase().trim()
+                          );
+                          if (catItem && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
+                            services = catItem.package_service_ids
+                              .map((sId) => catalog.find((c) => c.id === sId))
+                              .filter(Boolean)
+                              .map((s) => ({
+                                service_id: s!.id,
+                                service_name: s!.name,
+                                price: Math.round(it.unit_price / catItem.package_service_ids!.length),
+                                primary_staff_id: it.primary_staff_id,
+                              }));
+                          }
+                        }
+
+                        const isPkg = it.item_type === "package" || (services && services.length > 0);
+                        const primaryStaffName = staff.find((s) => s.id === it.primary_staff_id)?.name;
+
+                        return (
+                          <div
+                            key={idx}
+                            className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80 text-zinc-300 text-xs"
+                          >
+                            <div className="flex items-center justify-between gap-1 flex-wrap">
+                              <div className="flex items-center gap-1.5">
+                                {isPkg && (
+                                  <span className="text-[9px] font-extrabold uppercase px-1 rounded bg-gradient-to-r from-purple-500 to-pink-500 text-white">
+                                    Package Combo
+                                  </span>
+                                )}
+                                <span className="font-bold text-zinc-200">
+                                  {it.item_name} (x{it.quantity})
+                                </span>
+                                {primaryStaffName && !isPkg && (
+                                  <span className="text-[10px] text-purple-400">
+                                    (Stylist: {primaryStaffName})
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-mono font-bold text-emerald-400">
+                                {formatCurrency(it.total_price, settings.currency_symbol)}
+                              </span>
+                            </div>
+
+                            {isPkg && services && services.length > 0 && (
+                              <div className="mt-1 pl-2 border-l border-purple-700/60 text-[10.5px] text-zinc-400 space-y-0.5">
+                                {services.map((ps, pIdx) => {
+                                  const sName =
+                                    staff.find((s) => s.id === ps.primary_staff_id)?.name ||
+                                    primaryStaffName;
+                                  return (
+                                    <div key={pIdx} className="flex items-center justify-between">
+                                      <span>
+                                        • {ps.service_name}{" "}
+                                        {sName && (
+                                          <span className="text-purple-300 font-medium">({sName})</span>
+                                        )}
+                                      </span>
+                                      <span className="text-emerald-400 font-mono">₹{ps.price}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

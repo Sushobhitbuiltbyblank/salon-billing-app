@@ -38,6 +38,8 @@ export function AdminInvoiceManagement() {
     setWhatsAppInvoice,
     settings,
     currentUser,
+    catalog,
+    staff,
   } = useApp();
 
   const isAdmin = currentUser?.role === "admin";
@@ -549,12 +551,89 @@ export function AdminInvoiceManagement() {
                         )}
                       </td>
 
-                      {/* ITEMS SUMMARY */}
-                      <td className="py-3 px-4 text-zinc-300">
-                        <div className="max-w-[220px] truncate text-xs">
-                          {(inv.items || []).map((i) => `${i.item_name} (x${i.quantity})`).join(", ")}
+                      {/* ITEMS SUMMARY WITH DETAILED PACKAGES AND SERVICES */}
+                      <td className="py-3 px-4 max-w-sm">
+                        <div className="space-y-1">
+                          {(inv.items || []).map((item, iIdx) => {
+                            let services = item.package_services;
+                            if (
+                              (!services || services.length === 0) &&
+                              (item.item_type === "package" ||
+                                (item.package_service_ids && item.package_service_ids.length > 0))
+                            ) {
+                              const catItem = catalog.find(
+                                (c) =>
+                                  c.id === item.item_id ||
+                                  c.name.toLowerCase().trim() === item.item_name.toLowerCase().trim()
+                              );
+                              if (catItem && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
+                                services = catItem.package_service_ids
+                                  .map((sId) => catalog.find((c) => c.id === sId))
+                                  .filter(Boolean)
+                                  .map((s) => ({
+                                    service_id: s!.id,
+                                    service_name: s!.name,
+                                    price: Math.round(item.unit_price / catItem.package_service_ids!.length),
+                                    primary_staff_id: item.primary_staff_id,
+                                  }));
+                              }
+                            }
+
+                            const isPkg = item.item_type === "package" || (services && services.length > 0);
+                            const primaryStaffName = staff.find((s) => s.id === item.primary_staff_id)?.name;
+
+                            return (
+                              <div key={item.id || iIdx} className="text-xs">
+                                {isPkg ? (
+                                  <div className="bg-purple-950/40 border border-purple-800/50 rounded-lg p-1.5 space-y-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[9px] font-extrabold uppercase px-1 py-0.2 rounded bg-gradient-to-r from-purple-500 to-pink-500 text-white">
+                                        Package Combo
+                                      </span>
+                                      <span className="font-bold text-pink-200">
+                                        {item.item_name} {item.quantity > 1 ? `(x${item.quantity})` : ""}
+                                      </span>
+                                    </div>
+                                    {services && services.length > 0 && (
+                                      <div className="text-[10.5px] text-zinc-300 pl-2 border-l border-purple-700/60 space-y-0.5 mt-1">
+                                        {services.map((ps, pIdx) => {
+                                          const sName =
+                                            staff.find((s) => s.id === ps.primary_staff_id)?.name ||
+                                            primaryStaffName;
+                                          return (
+                                            <div key={pIdx} className="flex items-center justify-between gap-1.5">
+                                              <span className="text-zinc-200">
+                                                • {ps.service_name}{" "}
+                                                {sName && (
+                                                  <span className="text-purple-300 font-medium">({sName})</span>
+                                                )}
+                                              </span>
+                                              <span className="text-emerald-400 font-mono font-semibold">
+                                                ₹{ps.price}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between text-zinc-200">
+                                    <span>
+                                      • <span className="font-semibold text-white">{item.item_name}</span>{" "}
+                                      {item.quantity > 1 ? `(x${item.quantity})` : ""}
+                                      {primaryStaffName && (
+                                        <span className="text-purple-400 text-[10.5px] ml-1">
+                                          ({primaryStaffName})
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div className="text-[10px] text-zinc-500">{inv.items?.length || 0} item(s)</div>
                       </td>
 
                       {/* PAYMENT MODE & STATUS */}
