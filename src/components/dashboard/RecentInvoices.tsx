@@ -208,12 +208,12 @@ export function RecentInvoices() {
           <table className="w-full text-left text-xs">
             <thead className="border-b border-zinc-800 bg-zinc-950/60 text-[11px] uppercase tracking-wider text-zinc-400">
               <tr>
+                <th className="py-3 px-4 text-center w-36">Actions</th>
                 <th className="py-3 px-4">Invoice # & Time</th>
                 <th className="py-3 px-4">Customer Details</th>
                 <th className="py-3 px-4">Items Summary</th>
                 <th className="py-3 px-4">Mode & Status</th>
                 <th className="py-3 px-4 text-right">Grand Total</th>
-                <th className="py-3 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60 text-zinc-200">
@@ -230,7 +230,6 @@ export function RecentInvoices() {
               ) : (
                 todaysInvoices.map((inv) => {
                   const isVoid = inv.status === "void";
-                  const whatsappUrl = generateWhatsAppReceiptUrl(inv, settings);
 
                   return (
                     <tr
@@ -239,6 +238,56 @@ export function RecentInvoices() {
                         isVoid ? "opacity-40 line-through bg-red-950/10" : ""
                       }`}
                     >
+                      {/* ACTIONS ON THE LEFT: PRINT, EDIT, WHATSAPP, VOID */}
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {/* PRINT TRIGGER */}
+                          <button
+                            type="button"
+                            onClick={() => setPrintInvoice(inv)}
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-purple-600 text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm"
+                            title="Print / View Thermal Receipt"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                          </button>
+
+                          {/* EDIT INVOICE TRIGGER */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingInvoice(inv)}
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-blue-600 text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm"
+                            title="Edit Invoice (Items, Client, Staff, Discount)"
+                          >
+                            <FileEdit className="h-3.5 w-3.5 text-blue-400 hover:text-white" />
+                          </button>
+
+                          {/* WHATSAPP SHARE & DIGITAL BILL MODAL */}
+                          <button
+                            type="button"
+                            onClick={() => setWhatsAppInvoice(inv)}
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-600 text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm"
+                            title="Send WhatsApp Bill / Share PDF & Image"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5 text-emerald-400 hover:text-white" />
+                          </button>
+
+                          {/* VOID BUTTON */}
+                          {!isVoid && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Void invoice #${inv.invoice_number}? This cannot be undone.`)) {
+                                  voidInvoice(inv.id);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-amber-600 text-zinc-400 hover:text-white transition-all cursor-pointer shadow-sm"
+                              title="Void Invoice"
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+
                       {/* INVOICE NUMBER & TIMESTAMP */}
                       <td className="py-3 px-4">
                         <div className="font-mono font-bold text-white text-xs">
@@ -305,56 +354,6 @@ export function RecentInvoices() {
                       {/* GRAND TOTAL */}
                       <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-400 text-sm">
                         {formatCurrency(inv.grand_total, settings.currency_symbol)}
-                      </td>
-
-                      {/* ACTIONS: PRINT, EDIT, WHATSAPP, VOID */}
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* PRINT TRIGGER */}
-                          <button
-                            type="button"
-                            onClick={() => setPrintInvoice(inv)}
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-purple-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
-                            title="Print / View Thermal Receipt"
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                          </button>
-
-                          {/* EDIT INVOICE TRIGGER */}
-                          <button
-                            type="button"
-                            onClick={() => setEditingInvoice(inv)}
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-blue-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
-                            title="Edit Invoice (Items, Client, Staff, Discount)"
-                          >
-                            <FileEdit className="h-3.5 w-3.5 text-blue-400 hover:text-white" />
-                          </button>
-
-                          {/* WHATSAPP SHARE & DIGITAL BILL MODAL */}
-                          <button
-                            type="button"
-                            onClick={() => setWhatsAppInvoice(inv)}
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
-                            title="Send WhatsApp Bill / Share PDF & Image"
-                          >
-                            <MessageCircle className="h-3.5 w-3.5" />
-                          </button>
-
-                          {/* VOID BUTTON */}
-                          {!isVoid && (
-                            <button
-                              onClick={() => {
-                                if (confirm(`Void invoice #${inv.invoice_number}? This cannot be undone.`)) {
-                                  voidInvoice(inv.id);
-                                }
-                              }}
-                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-amber-600 text-zinc-400 hover:text-white transition-all cursor-pointer"
-                              title="Void Invoice"
-                            >
-                              <Ban className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
                       </td>
                     </tr>
                   );

@@ -426,13 +426,13 @@ export function AdminInvoiceManagement() {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-zinc-900/90 text-zinc-400 uppercase tracking-wider font-semibold text-[10px] border-b border-zinc-800">
+                <th className="py-3 px-4 text-center w-40">Actions</th>
                 <th className="py-3 px-4">Invoice #</th>
                 <th className="py-3 px-4">Date & Time</th>
                 <th className="py-3 px-4">Client</th>
                 <th className="py-3 px-4">Services / Products</th>
                 <th className="py-3 px-4">Payment</th>
                 <th className="py-3 px-4 text-right">Grand Total</th>
-                <th className="py-3 px-4 text-center">Admin Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-900">
@@ -449,7 +449,6 @@ export function AdminInvoiceManagement() {
               ) : (
                 filteredInvoices.map((inv) => {
                   const isVoid = inv.status === "void";
-                  const whatsappUrl = generateWhatsAppReceiptUrl(inv, settings);
 
                   return (
                     <tr
@@ -458,6 +457,68 @@ export function AdminInvoiceManagement() {
                         isVoid ? "opacity-45 line-through bg-zinc-950/40" : ""
                       }`}
                     >
+                      {/* ADMIN ACTIONS ON THE LEFT: PRINT, EDIT, WHATSAPP, VOID, DELETE */}
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {/* PRINT */}
+                          <button
+                            type="button"
+                            onClick={() => setPrintInvoice(inv)}
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-purple-600 text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm"
+                            title="Print / View Receipt"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                          </button>
+
+                          {/* EDIT INVOICE */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingInvoice(inv)}
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-blue-600 text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm"
+                            title="Edit Invoice"
+                          >
+                            <FileEdit className="h-3.5 w-3.5 text-blue-400 hover:text-white" />
+                          </button>
+
+                          {/* WHATSAPP SHARE & DIGITAL BILL MODAL */}
+                          <button
+                            type="button"
+                            onClick={() => setWhatsAppInvoice(inv)}
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-600 text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm"
+                            title="Send WhatsApp Bill / Share PDF & Image"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5 text-emerald-400 hover:text-white" />
+                          </button>
+
+                          {/* VOID BUTTON */}
+                          {!isVoid && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Void invoice #${inv.invoice_number}? This cannot be undone.`)) {
+                                  voidInvoice(inv.id);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-amber-600 text-zinc-400 hover:text-white transition-all cursor-pointer shadow-sm"
+                              title="Void Invoice"
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+
+                          {/* PERMANENT DELETE (ADMIN ONLY) */}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => setInvoiceToDelete(inv)}
+                              className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-600 border border-rose-800/40 hover:border-rose-600 text-rose-400 hover:text-white transition-all group cursor-pointer shadow-sm"
+                              title="Permanently Delete Invoice (Admin Only)"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+
                       {/* INVOICE NUMBER */}
                       <td className="py-3 px-4 font-mono font-bold text-white">
                         <div className="flex items-center gap-2">
@@ -517,68 +578,6 @@ export function AdminInvoiceManagement() {
                       {/* GRAND TOTAL */}
                       <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-400 text-sm">
                         {formatCurrency(inv.grand_total, settings.currency_symbol)}
-                      </td>
-
-                      {/* ADMIN ACTIONS: PRINT, EDIT, VOID, DELETE */}
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* PRINT */}
-                          <button
-                            type="button"
-                            onClick={() => setPrintInvoice(inv)}
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-purple-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
-                            title="Print / View Receipt"
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                          </button>
-
-                          {/* EDIT INVOICE */}
-                          <button
-                            type="button"
-                            onClick={() => setEditingInvoice(inv)}
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-blue-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
-                            title="Edit Invoice"
-                          >
-                            <FileEdit className="h-3.5 w-3.5 text-blue-400 hover:text-white" />
-                          </button>
-
-                          {/* WHATSAPP SHARE & DIGITAL BILL MODAL */}
-                          <button
-                            type="button"
-                            onClick={() => setWhatsAppInvoice(inv)}
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
-                            title="Send WhatsApp Bill / Share PDF & Image"
-                          >
-                            <MessageCircle className="h-3.5 w-3.5" />
-                          </button>
-
-                          {/* VOID BUTTON */}
-                          {!isVoid && (
-                            <button
-                              onClick={() => {
-                                if (confirm(`Void invoice #${inv.invoice_number}? This cannot be undone.`)) {
-                                  voidInvoice(inv.id);
-                                }
-                              }}
-                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-amber-600 text-zinc-400 hover:text-white transition-all cursor-pointer"
-                              title="Void Invoice"
-                            >
-                              <Ban className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-
-                          {/* PERMANENT DELETE (ADMIN ONLY) */}
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={() => setInvoiceToDelete(inv)}
-                              className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-600 border border-rose-800/40 hover:border-rose-600 text-rose-400 hover:text-white transition-all group cursor-pointer"
-                              title="Permanently Delete Invoice (Admin Only)"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
                       </td>
                     </tr>
                   );
