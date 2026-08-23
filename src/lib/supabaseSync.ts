@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
-import { DEFAULT_USERS } from "./storage";
+import { DEFAULT_USERS, DEFAULT_CATEGORIES, DEFAULT_CATALOG, Storage } from "./storage";
 import {
   AppUser,
   CatalogItem,
@@ -68,49 +68,81 @@ export const SupabaseSync = {
             notes: parsedNotes,
           };
         }),
-        categories: (categoriesRes.data || []).map((cat: any) => {
-          let catType = cat.type;
-          let catIcon = cat.icon || "Sparkles";
-          if (cat.icon && typeof cat.icon === "string" && cat.icon.startsWith("PKG:")) {
-            catType = "package";
-            catIcon = cat.icon.replace("PKG:", "");
-          }
-          return {
-            ...cat,
-            type: catType,
-            icon: catIcon,
-          };
-        }),
-        catalog: (catalogRes.data || []).map((c: any) => {
-          let itemType: ItemType = c.type;
-          let package_service_ids: string[] | undefined = c.package_service_ids;
-          let package_regular_price: number | undefined = c.package_regular_price ? Number(c.package_regular_price) : undefined;
-          let sku = c.sku;
-
-          // Decode backward-compatible package metadata from SKU
-          if (c.sku && typeof c.sku === "string" && c.sku.startsWith("PKG_META:")) {
-            try {
-              const jsonStr = c.sku.replace("PKG_META:", "");
-              const meta = JSON.parse(jsonStr);
-              itemType = "package";
-              package_service_ids = meta.package_service_ids || [];
-              package_regular_price = Number(meta.package_regular_price) || Number(c.price);
-              sku = "";
-            } catch (e) {
-              console.warn("Failed to parse package metadata from SKU:", e);
+        categories: (() => {
+          const remoteCats = (categoriesRes.data || []).map((cat: any) => {
+            let catType = cat.type;
+            let catIcon = cat.icon || "Sparkles";
+            if (cat.icon && typeof cat.icon === "string" && cat.icon.startsWith("PKG:")) {
+              catType = "package";
+              catIcon = cat.icon.replace("PKG:", "");
             }
+            return {
+              ...cat,
+              type: catType,
+              icon: catIcon,
+            };
+          });
+
+          const list = [...remoteCats];
+          const pkgCat = DEFAULT_CATEGORIES.find((c) => c.type === "package") || DEFAULT_CATEGORIES[0];
+          if (!list.some((c) => c.type === "package" || c.id === pkgCat.id || c.name.toLowerCase().trim() === "packages & combos")) {
+            list.unshift(pkgCat);
+            SupabaseSync.saveCategory(pkgCat);
+          }
+          return list;
+        })(),
+        catalog: (() => {
+          const deletedIds = typeof window !== "undefined" ? Storage.getDeletedCatalogIds() : [];
+
+          const remoteCatalog = (catalogRes.data || []).map((c: any) => {
+            let itemType: ItemType = c.type;
+            let package_service_ids: string[] | undefined = c.package_service_ids;
+            let package_regular_price: number | undefined = c.package_regular_price ? Number(c.package_regular_price) : undefined;
+            let sku = c.sku;
+
+            // Decode backward-compatible package metadata from SKU
+            if (c.sku && typeof c.sku === "string" && c.sku.startsWith("PKG_META:")) {
+              try {
+                const jsonStr = c.sku.replace("PKG_META:", "");
+                const meta = JSON.parse(jsonStr);
+                itemType = "package";
+                package_service_ids = meta.package_service_ids || [];
+                package_regular_price = Number(meta.package_regular_price) || Number(c.price);
+                sku = "";
+              } catch (e) {
+                console.warn("Failed to parse package metadata from SKU:", e);
+              }
+            }
+
+            return {
+              ...c,
+              type: itemType,
+              package_service_ids,
+              package_regular_price,
+              sku,
+              price: Number(c.price) || 0,
+              cost_price: Number(c.cost_price) || 0,
+            };
+          }).filter((c: any) => !deletedIds.includes(c.id));
+
+          const list = [...remoteCatalog];
+          const hasPackages = list.some((c: any) => c.type === "package");
+
+          if (!hasPackages) {
+            // Seed default packages that haven't been deleted
+            const defaultPackages = DEFAULT_CATALOG.filter(
+              (item) => item.type === "package" && !deletedIds.includes(item.id)
+            );
+            defaultPackages.forEach((pkg) => {
+              if (!list.some((existing) => existing.id === pkg.id || existing.name.toLowerCase().trim() === pkg.name.toLowerCase().trim())) {
+                list.push(pkg);
+                SupabaseSync.saveCatalogItem(pkg);
+              }
+            });
           }
 
-          return {
-            ...c,
-            type: itemType,
-            package_service_ids,
-            package_regular_price,
-            sku,
-            price: Number(c.price) || 0,
-            cost_price: Number(c.cost_price) || 0,
-          };
-        }),
+          return list;
+        })(),
         customers: (customersRes.data || []).map((cust: any) => ({
           ...cust,
           total_spent: Number(cust.total_spent) || 0,
