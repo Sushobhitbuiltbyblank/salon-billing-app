@@ -173,46 +173,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setStaff((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.staff) ? cloudData.staff : prev));
           Storage.saveStaff(cloudData.staff);
         }
-        if (cloudData.categories) {
-          const localCats = Storage.getCategories();
-          const remoteCats = cloudData.categories;
-          const mergedCats = [...remoteCats];
-          localCats.forEach((loc) => {
-            if (!mergedCats.some((rem) => rem.id === loc.id || rem.name.toLowerCase().trim() === loc.name.toLowerCase().trim())) {
-              mergedCats.push(loc);
-              SupabaseSync.saveCategory(loc);
-            }
-          });
-          setCategories((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedCats) ? mergedCats : prev));
-          Storage.saveCategories(mergedCats);
+        if (cloudData.categories && cloudData.categories.length > 0) {
+          setCategories((prev) =>
+            JSON.stringify(prev) !== JSON.stringify(cloudData.categories) ? cloudData.categories! : prev
+          );
+          Storage.saveCategories(cloudData.categories);
         }
-        if (cloudData.catalog) {
-          const deletedIds = Storage.getDeletedCatalogIds();
-          const remoteCatalog = (cloudData.catalog || []).filter(
-            (rem: CatalogItem) => !deletedIds.includes(rem.id)
+
+        if (cloudData.catalog && cloudData.catalog.length > 0) {
+          setCatalog((prev) =>
+            JSON.stringify(prev) !== JSON.stringify(cloudData.catalog) ? cloudData.catalog! : prev
           );
-
-          // Clean up any remaining deleted items on Supabase
-          (cloudData.catalog || []).forEach((rem: CatalogItem) => {
-            if (deletedIds.includes(rem.id)) {
-              SupabaseSync.deleteCatalogItem(rem.id);
-            }
-          });
-
-          const localCatalog = Storage.getCatalog().filter(
-            (loc: CatalogItem) => !deletedIds.includes(loc.id)
-          );
-
-          const mergedCatalog = [...remoteCatalog];
-          localCatalog.forEach((loc) => {
-            if (!mergedCatalog.some((rem) => rem.id === loc.id || (loc.type === "package" && rem.name.toLowerCase().trim() === loc.name.toLowerCase().trim()))) {
-              mergedCatalog.push(loc);
-              // If package or service is missing in Supabase, push it to Supabase in background
-              SupabaseSync.saveCatalogItem(loc);
-            }
-          });
-          setCatalog((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedCatalog) ? mergedCatalog : prev));
-          Storage.saveCatalog(mergedCatalog);
+          Storage.saveCatalog(cloudData.catalog);
         }
         if (cloudData.customers) {
           setCustomers((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.customers) ? cloudData.customers : prev));
@@ -405,53 +377,90 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // CATEGORIES CRUD ACTIONS
-  const addCategory = (category: Category) => {
+  const addCategory = async (category: Category) => {
     Storage.saveCategory(category);
-    setCategories(Storage.getCategories());
+    setCategories((prev) => [...prev.filter((c) => c.id !== category.id), category]);
     if (isSupabaseConfigured()) {
-      SupabaseSync.saveCategory(category);
+      await SupabaseSync.saveCategory(category);
+      const cloudData = await SupabaseSync.loadAllData();
+      if (cloudData?.categories) {
+        setCategories(cloudData.categories);
+        Storage.saveCategories(cloudData.categories);
+      }
     }
   };
 
-  const saveCategory = (category: Category) => {
+  const saveCategory = async (category: Category) => {
     Storage.saveCategory(category);
     setCategories(Storage.getCategories());
     if (isSupabaseConfigured()) {
-      SupabaseSync.saveCategory(category);
+      await SupabaseSync.saveCategory(category);
+      const cloudData = await SupabaseSync.loadAllData();
+      if (cloudData?.categories) {
+        setCategories(cloudData.categories);
+        Storage.saveCategories(cloudData.categories);
+      }
     }
   };
 
-  const deleteCategory = (categoryId: string) => {
+  const deleteCategory = async (categoryId: string) => {
     Storage.deleteCategory(categoryId);
-    setCategories(Storage.getCategories());
+    setCategories((prev) => prev.filter((c) => c.id !== categoryId));
     if (isSupabaseConfigured()) {
-      SupabaseSync.deleteCategory(categoryId);
+      await SupabaseSync.deleteCategory(categoryId);
+      const cloudData = await SupabaseSync.loadAllData();
+      if (cloudData?.categories) {
+        setCategories(cloudData.categories);
+        Storage.saveCategories(cloudData.categories);
+      }
     }
   };
 
   // CATALOG CRUD ACTIONS
-  const addCatalogItem = (item: CatalogItem) => {
+  const addCatalogItem = async (item: CatalogItem) => {
     Storage.saveCatalogItem(item);
-    setCatalog(Storage.getCatalog());
+    setCatalog((prev) => [...prev.filter((i) => i.id !== item.id), item]);
     if (isSupabaseConfigured()) {
-      SupabaseSync.saveCatalogItem(item);
+      await SupabaseSync.saveCatalogItem(item);
+      const cloudData = await SupabaseSync.loadAllData();
+      if (cloudData?.catalog) {
+        setCatalog(cloudData.catalog);
+        Storage.saveCatalog(cloudData.catalog);
+      }
     }
   };
 
-  const saveCatalogItem = (item: CatalogItem) => {
+  const saveCatalogItem = async (item: CatalogItem) => {
     Storage.saveCatalogItem(item);
-    setCatalog(Storage.getCatalog());
+    setCatalog((prev) => {
+      const idx = prev.findIndex((i) => i.id === item.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = item;
+        return next;
+      }
+      return [...prev, item];
+    });
     if (isSupabaseConfigured()) {
-      SupabaseSync.saveCatalogItem(item);
+      await SupabaseSync.saveCatalogItem(item);
+      const cloudData = await SupabaseSync.loadAllData();
+      if (cloudData?.catalog) {
+        setCatalog(cloudData.catalog);
+        Storage.saveCatalog(cloudData.catalog);
+      }
     }
   };
 
-  const deleteCatalogItem = (itemId: string) => {
+  const deleteCatalogItem = async (itemId: string) => {
     Storage.deleteCatalogItem(itemId);
     setCatalog((prev) => prev.filter((i) => i.id !== itemId));
     if (isSupabaseConfigured()) {
-      SupabaseSync.deleteCatalogItem(itemId);
+      await SupabaseSync.deleteCatalogItem(itemId);
+      const cloudData = await SupabaseSync.loadAllData();
+      if (cloudData?.catalog) {
+        setCatalog(cloudData.catalog);
+        Storage.saveCatalog(cloudData.catalog);
+      }
     }
   };
 
