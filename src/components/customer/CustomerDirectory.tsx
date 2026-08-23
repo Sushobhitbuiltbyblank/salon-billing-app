@@ -319,7 +319,7 @@ export function CustomerDirectory() {
       )}
 
       {/* TOP KPI STATS SUMMARY CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* TOTAL CLIENTS */}
         <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
           <div className="flex items-center justify-between">
@@ -345,21 +345,6 @@ export function CustomerDirectory() {
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-black text-amber-300">{stats.vipClients}</span>
             <span className="text-[11px] text-zinc-500 font-medium">5+ visits</span>
-          </div>
-        </Card>
-
-        {/* TOTAL LIFETIME SPENT */}
-        <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Total Customer Revenue</span>
-            <div className="h-7 w-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <DollarSign className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
-              {formatCurrency(stats.totalRevenue, settings.currency_symbol)}
-            </span>
           </div>
         </Card>
 
