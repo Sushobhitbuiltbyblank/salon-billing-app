@@ -42,18 +42,35 @@ export function BillingPos() {
     taxRate: settings.tax_rate,
   });
 
-  // Check unassigned services and packages (services/packages without primary stylist)
-  const unassignedServices = draftItems.filter(
-    (item) => (item.item_type === "service" || item.item_type === "package") && !item.primary_staff_id
-  );
+  // Check unassigned services and packages (services/packages without primary stylist for all sub-services)
+  const unassignedServices: { name: string; details?: string }[] = [];
+  draftItems.forEach((item) => {
+    if (item.item_type === "service" && !item.primary_staff_id) {
+      unassignedServices.push({ name: item.item_name });
+    } else if (item.item_type === "package") {
+      if (item.package_services && item.package_services.length > 0) {
+        const missing = item.package_services.filter((s) => !s.primary_staff_id);
+        if (missing.length > 0) {
+          unassignedServices.push({
+            name: item.item_name,
+            details: `Missing stylist for: ${missing.map((s) => s.service_name).join(", ")}`,
+          });
+        }
+      } else if (!item.primary_staff_id) {
+        unassignedServices.push({ name: item.item_name });
+      }
+    }
+  });
 
   const handleOpenPayment = () => {
     if (draftItems.length === 0) return;
 
     if (unassignedServices.length > 0) {
-      const listText = unassignedServices.map((s, idx) => `• ${s.item_name}`).join("\n");
+      const listText = unassignedServices
+        .map((s) => (s.details ? `• ${s.name} (${s.details})` : `• ${s.name}`))
+        .join("\n");
       alert(
-        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each of the following service(s) / package(s) before checkout:\n\n${listText}`
+        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each service before checkout:\n\n${listText}`
       );
       setMobileTab("ticket");
       return;

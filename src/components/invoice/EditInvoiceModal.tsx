@@ -162,6 +162,34 @@ export function EditInvoiceModal() {
     const catItem = catalog.find((c) => c.id === selectedCatalogId);
     if (!catItem) return;
 
+    let packageServices = undefined;
+    if (catItem.type === "package" && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
+      const totalRegular = catItem.package_regular_price || catItem.price || 1;
+      const includedServices = catItem.package_service_ids
+        .map((sId) => catalog.find((c) => c.id === sId))
+        .filter(Boolean);
+
+      let allocatedSum = 0;
+      packageServices = includedServices.map((svc, idx) => {
+        let servicePrice = Math.round((svc!.price / totalRegular) * catItem.price);
+        if (idx === includedServices.length - 1) {
+          servicePrice = Math.max(0, catItem.price - allocatedSum);
+        } else {
+          allocatedSum += servicePrice;
+        }
+        return {
+          service_id: svc!.id,
+          service_name: svc!.name,
+          price: servicePrice,
+          regular_price: svc!.price,
+          duration_mins: svc!.duration_mins || 30,
+          primary_staff_id: undefined,
+          primary_split_ratio: 100,
+          secondary_split_ratio: 0,
+        };
+      });
+    }
+
     const newItem: InvoiceItem = {
       id: `edit-item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       item_id: catItem.id,
@@ -171,6 +199,9 @@ export function EditInvoiceModal() {
       unit_price: catItem.price,
       discount: 0,
       total_price: catItem.price,
+      package_service_ids: catItem.package_service_ids,
+      package_regular_price: catItem.package_regular_price,
+      package_services: packageServices,
       primary_staff_id: undefined,
       primary_split_ratio: 100,
       secondary_split_ratio: 0,
@@ -190,14 +221,30 @@ export function EditInvoiceModal() {
       return;
     }
 
-    // VALIDATE STYLIST FOR EVERY SERVICE & PACKAGE
-    const unassignedServices = items.filter(
-      (item) => (item.item_type === "service" || item.item_type === "package") && !item.primary_staff_id
-    );
-    if (unassignedServices.length > 0) {
-      const listText = unassignedServices.map((s, idx) => `• ${s.item_name}`).join("\n");
+    // VALIDATE STYLIST FOR EVERY SERVICE & ALL PACKAGE SERVICES
+    const unassignedItems: string[] = [];
+    items.forEach((item) => {
+      if (item.item_type === "service" && !item.primary_staff_id) {
+        unassignedItems.push(`• ${item.item_name}`);
+      } else if (item.item_type === "package") {
+        if (item.package_services && item.package_services.length > 0) {
+          const missing = item.package_services.filter((s) => !s.primary_staff_id);
+          if (missing.length > 0) {
+            unassignedItems.push(
+              `• ${item.item_name} (Missing stylist for: ${missing.map((s) => s.service_name).join(", ")})`
+            );
+          }
+        } else if (!item.primary_staff_id) {
+          unassignedItems.push(`• ${item.item_name}`);
+        }
+      }
+    });
+
+    if (unassignedItems.length > 0) {
       alert(
-        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each of the following service(s) / package(s) before saving:\n\n${listText}`
+        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each service before saving:\n\n${unassignedItems.join(
+          "\n"
+        )}`
       );
       return;
     }

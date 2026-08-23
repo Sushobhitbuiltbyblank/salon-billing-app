@@ -80,10 +80,14 @@ export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSet
   const receiptUrl = getReceiptPublicUrl(invoice);
 
   const itemsText = (invoice.items || [])
-    .map(
-      (item, idx) =>
-        `${idx + 1}. *${item.item_name}* (${item.quantity}x) - ${settings.currency_symbol}${item.total_price.toFixed(2)}`
-    )
+    .map((item, idx) => {
+      let line = `${idx + 1}. *${item.item_name}* (${item.quantity}x) - ${settings.currency_symbol}${item.total_price.toFixed(2)}`;
+      if (item.item_type === "package" && item.package_services && item.package_services.length > 0) {
+        const subLines = item.package_services.map((ps) => `   └ • ${ps.service_name}: ₹${ps.price}`).join("\n");
+        line += `\n${subLines}`;
+      }
+      return line;
+    })
     .join("\n");
 
   const message = `✨ *${settings.salon_name}* ✨

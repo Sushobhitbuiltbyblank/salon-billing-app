@@ -154,6 +154,36 @@ export function calculateStaffPerformance(
     .filter((inv) => inv.status !== "void")
     .forEach((invoice) => {
       invoice.items.forEach((item) => {
+        // PACKAGE COMBO: CREDIT INDIVIDUAL SERVICES TO RESPECTIVE ASSIGNED STYLISTS
+        if (
+          item.item_type === "package" &&
+          item.package_services &&
+          item.package_services.length > 0
+        ) {
+          item.package_services.forEach((pkgSvc) => {
+            if (pkgSvc.primary_staff_id && summaryMap.has(pkgSvc.primary_staff_id)) {
+              const staffMember = staffList.find((s) => s.id === pkgSvc.primary_staff_id);
+              const entry = summaryMap.get(pkgSvc.primary_staff_id)!;
+              const svcSales = (Number(pkgSvc.price) || 0) * (item.quantity || 1);
+
+              let svcCommission = 0;
+              if (staffMember) {
+                const rate = staffMember.commission_rate;
+                const type = staffMember.commission_type ?? "percent";
+                svcCommission =
+                  type === "fixed" ? rate * item.quantity : (svcSales * rate) / 100;
+              }
+
+              entry.services_count += item.quantity;
+              entry.total_sales_generated += svcSales;
+              entry.total_commission_earned += svcCommission;
+              staffInvoices.get(pkgSvc.primary_staff_id)?.add(invoice.id);
+            }
+          });
+          return;
+        }
+
+        // REGULAR SERVICE / PRODUCT COMMISSIONS
         const comm = calculateItemStaffCommissions(item, staffList);
 
         if (comm.primaryStaffId && summaryMap.has(comm.primaryStaffId)) {

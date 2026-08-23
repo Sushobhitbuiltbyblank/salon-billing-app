@@ -289,8 +289,21 @@ export default function PublicReceiptPage() {
                     <tr key={idx}>
                       <td className="py-1.5 pr-1">
                         <div className="font-semibold text-zinc-900">{item.item_name}</div>
-                        {staffDisplay && (
-                          <div className="text-[9px] text-purple-700 font-medium">Stylist: {staffDisplay}</div>
+                        {item.item_type === "package" && item.package_services && item.package_services.length > 0 ? (
+                          <div className="text-[8.5px] text-zinc-600 space-y-0.5 mt-0.5">
+                            {item.package_services.map((ps, pIdx) => {
+                              const sName = staff.find((s) => s.id === ps.primary_staff_id)?.name;
+                              return (
+                                <div key={pIdx}>
+                                  • {ps.service_name} {sName ? `(Stylist: ${sName})` : ""}: ₹{ps.price}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          staffDisplay && (
+                            <div className="text-[9px] text-purple-700 font-medium">Stylist: {staffDisplay}</div>
+                          )
                         )}
                       </td>
                       <td className="py-1.5 text-center font-mono text-zinc-600">{item.quantity}</td>

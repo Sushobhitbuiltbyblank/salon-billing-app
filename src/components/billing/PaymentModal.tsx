@@ -93,14 +93,30 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
   const handleCheckout = () => {
     if (draftItems.length === 0) return;
 
-    // VALIDATE STYLIST FOR EVERY SERVICE & PACKAGE
-    const unassignedServices = draftItems.filter(
-      (item) => (item.item_type === "service" || item.item_type === "package") && !item.primary_staff_id
-    );
-    if (unassignedServices.length > 0) {
-      const listText = unassignedServices.map((s, idx) => `• ${s.item_name}`).join("\n");
+    // VALIDATE STYLIST FOR EVERY SERVICE & ALL PACKAGE SERVICES
+    const unassignedItems: string[] = [];
+    draftItems.forEach((item) => {
+      if (item.item_type === "service" && !item.primary_staff_id) {
+        unassignedItems.push(`• ${item.item_name}`);
+      } else if (item.item_type === "package") {
+        if (item.package_services && item.package_services.length > 0) {
+          const missing = item.package_services.filter((s) => !s.primary_staff_id);
+          if (missing.length > 0) {
+            unassignedItems.push(
+              `• ${item.item_name} (Missing stylist for: ${missing.map((s) => s.service_name).join(", ")})`
+            );
+          }
+        } else if (!item.primary_staff_id) {
+          unassignedItems.push(`• ${item.item_name}`);
+        }
+      }
+    });
+
+    if (unassignedItems.length > 0) {
       alert(
-        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each of the following service(s) / package(s) before completing payment:\n\n${listText}`
+        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each service before completing payment:\n\n${unassignedItems.join(
+          "\n"
+        )}`
       );
       onOpenChange(false);
       return;

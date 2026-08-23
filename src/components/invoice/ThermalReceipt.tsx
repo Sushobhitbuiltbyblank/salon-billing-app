@@ -110,13 +110,26 @@ export function ThermalReceipt({
                 <tr key={idx} style={{ verticalAlign: "top", borderBottom: "1px dotted #f0f0f0" }}>
                   <td style={{ padding: "2px 1px" }}>
                     <div style={{ fontWeight: "bold" }}>{item.item_name}</div>
-                    <div style={{ fontSize: "8.5px", color: "#555555", fontStyle: "italic" }}>
-                      {secondary ? (
-                        <>{primary} ({item.primary_split_ratio}%) + {secondary} ({item.secondary_split_ratio}%)</>
-                      ) : (
-                        <>{primary || "Salon Staff"}</>
-                      )}
-                    </div>
+                    {item.item_type === "package" && item.package_services && item.package_services.length > 0 ? (
+                      <div style={{ fontSize: "8px", color: "#333333", marginTop: "1px", paddingLeft: "2px" }}>
+                        {item.package_services.map((ps, pIdx) => {
+                          const sName = getStaffName(ps.primary_staff_id);
+                          return (
+                            <div key={pIdx}>
+                              • {ps.service_name} {sName ? `(${sName})` : ""}: ₹{ps.price}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: "8.5px", color: "#555555", fontStyle: "italic" }}>
+                        {secondary ? (
+                          <>{primary} ({item.primary_split_ratio}%) + {secondary} ({item.secondary_split_ratio}%)</>
+                        ) : (
+                          <>{primary || "Salon Staff"}</>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td style={{ textAlign: "center", padding: "2px 1px", fontWeight: "bold" }}>{item.quantity}</td>
                   <td style={{ textAlign: "right", padding: "2px 1px" }}>{item.unit_price.toFixed(2)}</td>

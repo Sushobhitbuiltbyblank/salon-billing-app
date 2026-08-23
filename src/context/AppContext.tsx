@@ -11,6 +11,7 @@ import {
   Expense,
   Invoice,
   InvoiceItem,
+  PackageServiceItem,
   SalonSettings,
   Staff,
 } from "@/types";
@@ -569,6 +570,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
         return updated;
       } else {
+        // Build package_services breakdown if this is a package combo
+        let packageServices: PackageServiceItem[] | undefined = undefined;
+        if (item.type === "package" && item.package_service_ids && item.package_service_ids.length > 0) {
+          const totalRegular = item.package_regular_price || item.price || 1;
+          const includedServices = item.package_service_ids
+            .map((sId) => catalog.find((c) => c.id === sId))
+            .filter(Boolean) as CatalogItem[];
+
+          if (includedServices.length > 0) {
+            let allocatedSum = 0;
+            packageServices = includedServices.map((svc, idx) => {
+              // Proportional discount allocation for starting price
+              let servicePrice = Math.round((svc.price / totalRegular) * item.price);
+              if (idx === includedServices.length - 1) {
+                // Ensure sum matches exactly item.price
+                servicePrice = Math.max(0, item.price - allocatedSum);
+              } else {
+                allocatedSum += servicePrice;
+              }
+
+              return {
+                service_id: svc.id,
+                service_name: svc.name,
+                price: servicePrice,
+                regular_price: svc.price,
+                duration_mins: svc.duration_mins || 30,
+                primary_staff_id: primaryStaffId,
+                primary_split_ratio: 100,
+                secondary_split_ratio: 0,
+              };
+            });
+          }
+        }
+
         const newItem: InvoiceItem = {
           id: `draft-item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           item_id: item.id,
@@ -578,6 +613,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           unit_price: item.price,
           discount: 0,
           total_price: item.price,
+          package_service_ids: item.package_service_ids,
+          package_regular_price: item.package_regular_price,
+          package_services: packageServices,
           primary_staff_id: primaryStaffId,
           primary_split_ratio: 100,
           secondary_split_ratio: 0,
