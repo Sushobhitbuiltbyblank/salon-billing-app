@@ -7,6 +7,7 @@ import {
   Customer,
   Expense,
   Invoice,
+  ItemType,
   SalonSettings,
   Staff,
 } from "@/types";
@@ -66,12 +67,49 @@ export const SupabaseSync = {
             notes: parsedNotes,
           };
         }),
-        categories: categoriesRes.data || [],
-        catalog: (catalogRes.data || []).map((c: any) => ({
-          ...c,
-          price: Number(c.price) || 0,
-          cost_price: Number(c.cost_price) || 0,
-        })),
+        categories: (categoriesRes.data || []).map((cat: any) => {
+          let catType = cat.type;
+          let catIcon = cat.icon || "Sparkles";
+          if (cat.icon && typeof cat.icon === "string" && cat.icon.startsWith("PKG:")) {
+            catType = "package";
+            catIcon = cat.icon.replace("PKG:", "");
+          }
+          return {
+            ...cat,
+            type: catType,
+            icon: catIcon,
+          };
+        }),
+        catalog: (catalogRes.data || []).map((c: any) => {
+          let itemType: ItemType = c.type;
+          let package_service_ids: string[] | undefined = c.package_service_ids;
+          let package_regular_price: number | undefined = c.package_regular_price ? Number(c.package_regular_price) : undefined;
+          let sku = c.sku;
+
+          // Decode backward-compatible package metadata from SKU
+          if (c.sku && typeof c.sku === "string" && c.sku.startsWith("PKG_META:")) {
+            try {
+              const jsonStr = c.sku.replace("PKG_META:", "");
+              const meta = JSON.parse(jsonStr);
+              itemType = "package";
+              package_service_ids = meta.package_service_ids || [];
+              package_regular_price = Number(meta.package_regular_price) || Number(c.price);
+              sku = "";
+            } catch (e) {
+              console.warn("Failed to parse package metadata from SKU:", e);
+            }
+          }
+
+          return {
+            ...c,
+            type: itemType,
+            package_service_ids,
+            package_regular_price,
+            sku,
+            price: Number(c.price) || 0,
+            cost_price: Number(c.cost_price) || 0,
+          };
+        }),
         customers: (customersRes.data || []).map((cust: any) => ({
           ...cust,
           total_spent: Number(cust.total_spent) || 0,
@@ -326,9 +364,42 @@ export const SupabaseSync = {
   async saveCatalogItem(item: CatalogItem) {
     if (!isSupabaseConfigured() || !supabase) return null;
     try {
+      // 1. First attempt direct upsert
       const { data, error } = await supabase.from("catalog_items").upsert(item).select().single();
-      if (error) console.error("Supabase saveCatalogItem error:", error);
-      return data;
+      if (!error) return data;
+
+      console.warn("Supabase direct saveCatalogItem failed, attempting backward-compatible payload:", error.message);
+
+      // 2. Compatibility fallback: encode package metadata in SKU so Postgres accepts it
+      const compatPayload = {
+        id: item.id,
+        category_id: item.category_id || null,
+        name: item.name,
+        type: item.type === "package" ? "service" : item.type,
+        price: Number(item.price) || 0,
+        duration_mins: item.duration_mins || 30,
+        cost_price: Number(item.cost_price) || 0,
+        sku:
+          item.type === "package"
+            ? `PKG_META:${JSON.stringify({
+                package_service_ids: item.package_service_ids || [],
+                package_regular_price: item.package_regular_price || item.price,
+              })}`
+            : item.sku || null,
+        is_active: item.is_active !== false,
+        created_at: item.created_at || new Date().toISOString(),
+      };
+
+      const { data: compatData, error: compatError } = await supabase
+        .from("catalog_items")
+        .upsert(compatPayload)
+        .select()
+        .single();
+
+      if (compatError) {
+        console.error("Supabase compat saveCatalogItem error:", compatError);
+      }
+      return compatData;
     } catch (err) {
       console.error("Supabase saveCatalogItem error:", err);
       return null;
@@ -349,8 +420,27 @@ export const SupabaseSync = {
     if (!isSupabaseConfigured() || !supabase) return null;
     try {
       const { data, error } = await supabase.from("categories").upsert(category).select().single();
-      if (error) console.error("Supabase saveCategory error:", error);
-      return data;
+      if (!error) return data;
+
+      console.warn("Supabase direct saveCategory failed, attempting compatibility payload:", error.message);
+      const compatPayload = {
+        id: category.id,
+        name: category.name,
+        type: category.type === "package" ? "service" : category.type,
+        icon: category.type === "package" ? `PKG:${category.icon || "Sparkles"}` : category.icon || "Sparkles",
+        created_at: category.created_at || new Date().toISOString(),
+      };
+
+      const { data: compatData, error: compatError } = await supabase
+        .from("categories")
+        .upsert(compatPayload)
+        .select()
+        .single();
+
+      if (compatError) {
+        console.error("Supabase compat saveCategory error:", compatError);
+      }
+      return compatData;
     } catch (err) {
       console.error("Supabase saveCategory error:", err);
       return null;

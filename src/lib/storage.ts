@@ -419,11 +419,16 @@ export function initStorage() {
         try {
           const storedCatalog: CatalogItem[] = JSON.parse(rawCatalog);
           if (Array.isArray(storedCatalog)) {
-            const hasPackages = storedCatalog.some((i) => i.type === "package");
-            if (!hasPackages) {
-              const defaultPackages = DEFAULT_CATALOG.filter((i) => i.type === "package");
-              const mergedCatalog = [...storedCatalog, ...defaultPackages];
-              localStorage.setItem(KEYS.CATALOG, JSON.stringify(mergedCatalog));
+            const defaultPackages = DEFAULT_CATALOG.filter((i) => i.type === "package");
+            let modified = false;
+            defaultPackages.forEach((pkg) => {
+              if (!storedCatalog.some((i) => i.id === pkg.id || i.name.toLowerCase().trim() === pkg.name.toLowerCase().trim())) {
+                storedCatalog.push(pkg);
+                modified = true;
+              }
+            });
+            if (modified) {
+              localStorage.setItem(KEYS.CATALOG, JSON.stringify(storedCatalog));
             }
           }
         } catch {}

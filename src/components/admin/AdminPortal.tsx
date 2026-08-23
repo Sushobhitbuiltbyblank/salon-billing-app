@@ -349,6 +349,8 @@ export function AdminPortal() {
     };
 
     saveCatalogItem(itemPayload);
+    setCatalogTypeFilter("package");
+    setCatalogSearch("");
     setIsPackageModalOpen(false);
   };
 

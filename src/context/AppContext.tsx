@@ -167,12 +167,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.saveStaff(cloudData.staff);
         }
         if (cloudData.categories) {
-          setCategories((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.categories) ? cloudData.categories : prev));
-          Storage.saveCategories(cloudData.categories);
+          const localCats = Storage.getCategories();
+          const remoteCats = cloudData.categories;
+          const mergedCats = [...remoteCats];
+          localCats.forEach((loc) => {
+            if (!mergedCats.some((rem) => rem.id === loc.id || rem.name.toLowerCase().trim() === loc.name.toLowerCase().trim())) {
+              mergedCats.push(loc);
+            }
+          });
+          setCategories((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedCats) ? mergedCats : prev));
+          Storage.saveCategories(mergedCats);
         }
         if (cloudData.catalog) {
-          setCatalog((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.catalog) ? cloudData.catalog : prev));
-          Storage.saveCatalog(cloudData.catalog);
+          const localCatalog = Storage.getCatalog();
+          const remoteCatalog = cloudData.catalog;
+          const mergedCatalog = [...remoteCatalog];
+          localCatalog.forEach((loc) => {
+            if (loc.type === "package" && !mergedCatalog.some((rem) => rem.id === loc.id)) {
+              mergedCatalog.push(loc);
+            }
+          });
+          setCatalog((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedCatalog) ? mergedCatalog : prev));
+          Storage.saveCatalog(mergedCatalog);
         }
         if (cloudData.customers) {
           setCustomers((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.customers) ? cloudData.customers : prev));

@@ -57,22 +57,23 @@ CREATE TABLE IF NOT EXISTS staff (
 CREATE TABLE IF NOT EXISTS categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL,
-    type VARCHAR(20) NOT NULL CHECK (type IN ('service', 'product')),
+    type VARCHAR(20) NOT NULL CHECK (type IN ('service', 'product', 'package')),
     icon VARCHAR(50) DEFAULT 'Sparkles',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. CATALOG ITEMS (SERVICES & PRODUCTS) TABLE
+-- 4. CATALOG ITEMS (SERVICES, PACKAGES & PRODUCTS) TABLE
 CREATE TABLE IF NOT EXISTS catalog_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
     name VARCHAR(255) NOT NULL,
-    type VARCHAR(20) NOT NULL CHECK (type IN ('service', 'product')),
+    type VARCHAR(20) NOT NULL CHECK (type IN ('service', 'product', 'package')),
     price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-    duration_mins INTEGER DEFAULT 45, -- Applicable to services
+    duration_mins INTEGER DEFAULT 45, -- Applicable to services and package combos
     cost_price NUMERIC(10, 2) DEFAULT 0.00, -- Cost of goods for retail products
+    package_service_ids TEXT[], -- Array of bundled service IDs
+    package_regular_price NUMERIC(10, 2), -- Regular non-discounted combined price
     sku VARCHAR(50),
-    stock_qty INTEGER DEFAULT 50, -- Inventory for products
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
