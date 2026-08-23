@@ -24,6 +24,8 @@ import {
   Layers,
   Sparkles,
   Download,
+  RotateCcw,
+  X,
 } from "lucide-react";
 
 export function AdminInvoiceManagement() {
@@ -34,7 +36,6 @@ export function AdminInvoiceManagement() {
     setPrintInvoice,
     setEditingInvoice,
     settings,
-    staff,
     currentUser,
   } = useApp();
 
@@ -43,38 +44,99 @@ export function AdminInvoiceManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMode, setSelectedMode] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [datePreset, setDatePreset] = useState<"all" | "today" | "yesterday" | "week" | "month" | "custom">("all");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
+
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // FILTERED INVOICES
+  // FILTERED INVOICES BASED ON DATE, PAYMENT MODE, STATUS, & SEARCH
   const filteredInvoices = useMemo(() => {
-    return invoices.filter((inv) => {
-      // Mode filter
-      if (selectedMode !== "all" && inv.payment_mode !== selectedMode) {
-        return false;
-      }
-      // Status filter
-      if (selectedStatus !== "all" && inv.status !== selectedStatus) {
-        return false;
-      }
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesInv = inv.invoice_number?.toLowerCase().includes(q);
-        const matchesName = inv.customer_name?.toLowerCase().includes(q);
-        const matchesPhone = (inv.customer_phone || "").includes(q);
-        return matchesInv || matchesName || matchesPhone;
-      }
-      return true;
-    });
-  }, [invoices, selectedMode, selectedStatus, searchQuery]);
+    const now = new Date();
 
-  // KPIS
-  const totalSettledCount = invoices.filter((i) => i.status !== "void").length;
-  const totalVoidCount = invoices.filter((i) => i.status === "void").length;
-  const totalSettledAmount = invoices
+    return invoices.filter((inv) => {
+      try {
+        const invDate = new Date(inv.created_at);
+
+        // 1. DATE PRESET / RANGE FILTER
+        if (datePreset === "today") {
+          const isToday =
+            invDate.getFullYear() === now.getFullYear() &&
+            invDate.getMonth() === now.getMonth() &&
+            invDate.getDate() === now.getDate();
+          if (!isToday) return false;
+        } else if (datePreset === "yesterday") {
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          const isYesterday =
+            invDate.getFullYear() === yesterday.getFullYear() &&
+            invDate.getMonth() === yesterday.getMonth() &&
+            invDate.getDate() === yesterday.getDate();
+          if (!isYesterday) return false;
+        } else if (datePreset === "week") {
+          const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          if (invDate < sevenDaysAgo) return false;
+        } else if (datePreset === "month") {
+          const isThisMonth =
+            invDate.getFullYear() === now.getFullYear() &&
+            invDate.getMonth() === now.getMonth();
+          if (!isThisMonth) return false;
+        } else if (datePreset === "custom") {
+          if (customStartDate) {
+            const start = new Date(customStartDate);
+            start.setHours(0, 0, 0, 0);
+            if (invDate < start) return false;
+          }
+          if (customEndDate) {
+            const end = new Date(customEndDate);
+            end.setHours(23, 59, 59, 999);
+            if (invDate > end) return false;
+          }
+        }
+
+        // 2. PAYMENT MODE FILTER
+        if (selectedMode !== "all" && inv.payment_mode !== selectedMode) {
+          return false;
+        }
+
+        // 3. STATUS FILTER
+        if (selectedStatus !== "all" && inv.status !== selectedStatus) {
+          return false;
+        }
+
+        // 4. SEARCH QUERY
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          const matchesInv = inv.invoice_number?.toLowerCase().includes(q);
+          const matchesName = inv.customer_name?.toLowerCase().includes(q);
+          const matchesPhone = (inv.customer_phone || "").includes(q);
+          return matchesInv || matchesName || matchesPhone;
+        }
+
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  }, [invoices, datePreset, customStartDate, customEndDate, selectedMode, selectedStatus, searchQuery]);
+
+  // DYNAMIC KPIS ACCORDING TO CURRENT FILTER
+  const totalSettledCount = filteredInvoices.filter((i) => i.status !== "void").length;
+  const totalVoidCount = filteredInvoices.filter((i) => i.status === "void").length;
+  const totalSettledAmount = filteredInvoices
     .filter((i) => i.status !== "void")
     .reduce((sum, i) => sum + (i.grand_total || 0), 0);
+
+  // RESET ALL FILTERS
+  const handleResetFilters = () => {
+    setDatePreset("all");
+    setCustomStartDate("");
+    setCustomEndDate("");
+    setSelectedMode("all");
+    setSelectedStatus("all");
+    setSearchQuery("");
+  };
 
   // HANDLE PERMANENT DELETE
   const handleConfirmDelete = async () => {
@@ -116,7 +178,7 @@ export function AdminInvoiceManagement() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Belezia_Invoices_Audit_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `Belezia_Invoices_${datePreset}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -132,50 +194,180 @@ export function AdminInvoiceManagement() {
           </div>
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <span>Invoice Audit & Master Management</span>
+              <span>Invoice Master Audit & Historical Logs</span>
               <Badge variant={isAdmin ? "destructive" : "secondary"} className="text-[10px] py-0 px-2 font-mono font-bold">
-                {isAdmin ? "👑 Admin Access" : "💼 Receptionist (Read-Only Audit)"}
+                {isAdmin ? "👑 Admin Access" : "💼 Receptionist Audit"}
               </Badge>
             </h3>
             <p className="text-xs text-zinc-400">
-              {isAdmin
-                ? "Only Salon Admins can permanently delete or void invoices from cloud & local storage."
-                : "Audit past invoice transactions and reprint receipts. Invoice deletion requires Administrator credentials."}
+              Audit all-time transactions across any date range, reprint receipts, edit invoices, or export CSV accounting logs.
             </p>
           </div>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExportCSV}
-          className="gap-1.5 text-xs text-purple-300 hover:text-white border-purple-800/80 hover:bg-purple-950/60 h-9 px-3 cursor-pointer"
-        >
-          <Download className="h-3.5 w-3.5" />
-          <span>Export Invoices CSV</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCSV}
+            className="gap-1.5 text-xs text-purple-300 hover:text-white border-purple-800/80 hover:bg-purple-950/60 h-9 px-3 cursor-pointer"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>Export CSV</span>
+          </Button>
+        </div>
       </div>
 
-      {/* KPI METRIC CARDS */}
+      {/* DATE FILTER PRESETS BAR */}
+      <div className="p-3 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-3 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mr-1 flex items-center gap-1">
+              <Calendar className="h-3.5 w-3.5 text-purple-400" />
+              <span>Date Filter:</span>
+            </span>
+
+            <button
+              onClick={() => setDatePreset("all")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                datePreset === "all"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              }`}
+            >
+              All Time ({invoices.length})
+            </button>
+
+            <button
+              onClick={() => setDatePreset("today")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                datePreset === "today"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              }`}
+            >
+              Today
+            </button>
+
+            <button
+              onClick={() => setDatePreset("yesterday")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                datePreset === "yesterday"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              }`}
+            >
+              Yesterday
+            </button>
+
+            <button
+              onClick={() => setDatePreset("week")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                datePreset === "week"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              }`}
+            >
+              Last 7 Days
+            </button>
+
+            <button
+              onClick={() => setDatePreset("month")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                datePreset === "month"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              }`}
+            >
+              This Month
+            </button>
+
+            <button
+              onClick={() => setDatePreset("custom")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                datePreset === "custom"
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  : "bg-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              }`}
+            >
+              Custom Range
+            </button>
+          </div>
+
+          {(datePreset !== "all" || selectedMode !== "all" || selectedStatus !== "all" || searchQuery) && (
+            <button
+              onClick={handleResetFilters}
+              className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-rose-400 transition-all cursor-pointer self-start lg:self-center"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>Reset Filters</span>
+            </button>
+          )}
+        </div>
+
+        {/* CUSTOM DATE RANGE INPUTS */}
+        {datePreset === "custom" && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-800/80 animate-in fade-in duration-150">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-zinc-400">From:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="h-8 px-2.5 text-xs bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-zinc-400">To:</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="h-8 px-2.5 text-xs bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+
+            {(customStartDate || customEndDate) && (
+              <button
+                onClick={() => {
+                  setCustomStartDate("");
+                  setCustomEndDate("");
+                }}
+                className="text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-0.5 px-2 py-1 bg-zinc-800 rounded-lg"
+              >
+                <X className="h-3 w-3" />
+                <span>Clear Dates</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* DYNAMIC KPI METRIC CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Total Invoices</span>
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Filtered Invoices</span>
             <Receipt className="h-4 w-4 text-purple-400" />
           </div>
-          <div className="mt-2 text-xl font-black text-white font-mono">{invoices.length}</div>
-          <div className="text-[10px] text-zinc-500 mt-1">{totalSettledCount} active / {totalVoidCount} voided</div>
+          <div className="mt-2 text-xl font-black text-white font-mono">{filteredInvoices.length}</div>
+          <div className="text-[10px] text-zinc-500 mt-1">
+            {totalSettledCount} active paid / {totalVoidCount} voided ({invoices.length} total in DB)
+          </div>
         </Card>
 
         <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Settled Billing Volume</span>
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Filtered Settled Revenue</span>
             <CheckCircle2 className="h-4 w-4 text-emerald-400" />
           </div>
           <div className="mt-2 text-xl font-black text-emerald-400 font-mono">
             {formatCurrency(totalSettledAmount, settings.currency_symbol)}
           </div>
-          <div className="text-[10px] text-emerald-400/80 mt-1 font-semibold">Active gross collection</div>
+          <div className="text-[10px] text-emerald-400/80 mt-1 font-semibold">
+            Collection for {datePreset === "all" ? "All Time" : datePreset}
+          </div>
         </Card>
 
         <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
@@ -184,7 +376,7 @@ export function AdminInvoiceManagement() {
             <Ban className="h-4 w-4 text-amber-400" />
           </div>
           <div className="mt-2 text-xl font-black text-amber-400 font-mono">{totalVoidCount}</div>
-          <div className="text-[10px] text-zinc-500 mt-1">Invoices marked as void</div>
+          <div className="text-[10px] text-zinc-500 mt-1">Invoices marked as void in filter</div>
         </Card>
       </div>
 
@@ -220,7 +412,8 @@ export function AdminInvoiceManagement() {
             className="h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-300 focus:outline-none focus:ring-1 focus:ring-purple-500"
           >
             <option value="all">All Statuses</option>
-            <option value="settled">Settled</option>
+            <option value="paid">Paid</option>
+            <option value="pending">Pending</option>
             <option value="void">Void</option>
           </select>
         </div>
@@ -247,6 +440,9 @@ export function AdminInvoiceManagement() {
                   <td colSpan={7} className="py-12 text-center text-zinc-500">
                     <Receipt className="h-10 w-10 mx-auto mb-2 opacity-30 text-zinc-400" />
                     <p className="font-semibold text-sm">No invoices found matching criteria</p>
+                    <p className="text-xs text-zinc-600 mt-0.5">
+                      Try selecting a different date preset or clearing search filters.
+                    </p>
                   </td>
                 </tr>
               ) : (
@@ -294,9 +490,9 @@ export function AdminInvoiceManagement() {
                       {/* ITEMS SUMMARY */}
                       <td className="py-3 px-4 text-zinc-300">
                         <div className="max-w-[220px] truncate text-xs">
-                          {inv.items.map((i) => `${i.item_name} (x${i.quantity})`).join(", ")}
+                          {(inv.items || []).map((i) => `${i.item_name} (x${i.quantity})`).join(", ")}
                         </div>
-                        <div className="text-[10px] text-zinc-500">{inv.items.length} item(s)</div>
+                        <div className="text-[10px] text-zinc-500">{inv.items?.length || 0} item(s)</div>
                       </td>
 
                       {/* PAYMENT MODE & STATUS */}
@@ -457,7 +653,7 @@ export function AdminInvoiceManagement() {
             variant="destructive"
             onClick={handleConfirmDelete}
             disabled={isDeleting}
-            className="gap-1.5 text-xs bg-rose-600 hover:bg-rose-700 font-bold"
+            className="gap-1.5 text-xs bg-rose-600 hover:bg-rose-700 font-bold cursor-pointer"
           >
             <Trash2 className="h-4 w-4" />
             {isDeleting ? "Deleting from Cloud..." : "Confirm Permanent Delete"}

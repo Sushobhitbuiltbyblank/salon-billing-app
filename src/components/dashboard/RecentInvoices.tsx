@@ -6,7 +6,7 @@ import { Invoice } from "@/types";
 import { formatCurrency, formatDate, generateWhatsAppReceiptUrl } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Card } from "@/components/ui/card";
 import {
   History,
   Search,
@@ -16,13 +16,12 @@ import {
   User,
   Phone,
   Receipt,
-  FileText,
-  Filter,
-  Trash2,
-  ShieldAlert,
-  AlertTriangle,
-  Edit2,
+  CheckCircle2,
+  Calendar,
+  Sparkles,
+  ArrowRight,
   FileEdit,
+  ShieldCheck,
 } from "lucide-react";
 
 export function RecentInvoices() {
@@ -32,49 +31,133 @@ export function RecentInvoices() {
     setPrintInvoice,
     setEditingInvoice,
     settings,
-    staff,
     currentUser,
+    setActiveTab,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMode, setSelectedMode] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
 
-  const filteredInvoices = useMemo(() => {
+  const todayDateFormatted = useMemo(() => {
+    return new Date().toLocaleDateString("en-IN", {
+      weekday: "long",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }, []);
+
+  // FILTER TODAY'S INVOICES ONLY
+  const todaysInvoices = useMemo(() => {
+    const now = new Date();
     return invoices.filter((inv) => {
-      // Mode filter
-      if (selectedMode !== "all" && inv.payment_mode !== selectedMode) {
+      try {
+        const invDate = new Date(inv.created_at);
+        const isToday =
+          invDate.getFullYear() === now.getFullYear() &&
+          invDate.getMonth() === now.getMonth() &&
+          invDate.getDate() === now.getDate();
+
+        if (!isToday) return false;
+
+        // Mode filter
+        if (selectedMode !== "all" && inv.payment_mode !== selectedMode) {
+          return false;
+        }
+        // Status filter
+        if (selectedStatus !== "all" && inv.status !== selectedStatus) {
+          return false;
+        }
+        // Search query
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          const matchesInv = inv.invoice_number?.toLowerCase().includes(q);
+          const matchesName = inv.customer_name?.toLowerCase().includes(q);
+          const matchesPhone = (inv.customer_phone || "").includes(q);
+          return matchesInv || matchesName || matchesPhone;
+        }
+        return true;
+      } catch {
         return false;
       }
-      // Status filter
-      if (selectedStatus !== "all" && inv.status !== selectedStatus) {
-        return false;
-      }
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesInv = inv.invoice_number.toLowerCase().includes(q);
-        const matchesName = inv.customer_name.toLowerCase().includes(q);
-        const matchesPhone = (inv.customer_phone || "").includes(q);
-        return matchesInv || matchesName || matchesPhone;
-      }
-      return true;
     });
   }, [invoices, selectedMode, selectedStatus, searchQuery]);
 
+  // TODAY STATS
+  const todaySettled = todaysInvoices.filter((i) => i.status !== "void");
+  const todayTotalCollection = todaySettled.reduce((sum, i) => sum + (i.grand_total || 0), 0);
+  const todayVoidCount = todaysInvoices.filter((i) => i.status === "void").length;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-200">
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-2 border-b border-zinc-800">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <History className="h-5 w-5 text-purple-400" />
-            Invoices & Transaction History
-          </h2>
-          <p className="text-xs text-zinc-400">
-            View all past transactions, reprint thermal receipts, or re-send WhatsApp invoices.
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+              <History className="h-5 w-5 text-purple-400" />
+              <span>Today&apos;s Live Invoices & Billing Log</span>
+            </h2>
+            <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-[11px] font-bold">
+              📅 {todayDateFormatted}
+            </Badge>
+          </div>
+          <p className="text-xs text-zinc-400 mt-1">
+            Displaying today&apos;s salon transactions for rapid cashier settlement, thermal receipt reprinting, and client WhatsApp sharing.
           </p>
         </div>
+
+        {currentUser?.role === "admin" && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setActiveTab("admin")}
+            className="gap-1.5 text-xs text-purple-300 hover:text-white border-purple-800/80 hover:bg-purple-950/60 h-9 px-3 cursor-pointer shrink-0"
+          >
+            <ShieldCheck className="h-4 w-4 text-purple-400" />
+            <span>Admin Invoices (Date Filter & Full History)</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
+      {/* TODAY SUMMARY STATS */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Today&apos;s Invoices</span>
+            <Receipt className="h-4 w-4 text-purple-400" />
+          </div>
+          <div className="mt-2 text-2xl font-black text-white font-mono">{todaysInvoices.length}</div>
+          <div className="text-[10px] text-zinc-500 mt-1">
+            {todaySettled.length} active paid / {todayVoidCount} voided
+          </div>
+        </Card>
+
+        <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Today&apos;s Gross Collection</span>
+            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+          </div>
+          <div className="mt-2 text-2xl font-black text-emerald-400 font-mono">
+            {formatCurrency(todayTotalCollection, settings.currency_symbol)}
+          </div>
+          <div className="text-[10px] text-emerald-400/80 mt-1 font-semibold">Today&apos;s total settled volume</div>
+        </Card>
+
+        <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Historical Logs</span>
+            <Calendar className="h-4 w-4 text-zinc-400" />
+          </div>
+          <div className="mt-2 text-sm font-semibold text-zinc-300">
+            {invoices.length} total across all time
+          </div>
+          <div className="text-[10px] text-zinc-500 mt-1">
+            Auditing across custom dates is located in Admin Portal
+          </div>
+        </Card>
       </div>
 
       {/* SEARCH AND FILTER BAR */}
@@ -84,14 +167,14 @@ export function RecentInvoices() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
           <input
             type="text"
-            placeholder="Search by Invoice #, Client Name, or Mobile Number..."
+            placeholder="Search today's invoices by #, Client Name, or Mobile Number..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-9 pl-9 pr-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
           />
         </div>
 
-        {/* PAYMENT MODE FILTER */}
+        {/* PAYMENT MODE & STATUS FILTER */}
         <div className="flex items-center gap-2">
           <select
             value={selectedMode}
@@ -124,7 +207,7 @@ export function RecentInvoices() {
           <table className="w-full text-left text-xs">
             <thead className="border-b border-zinc-800 bg-zinc-950/60 text-[11px] uppercase tracking-wider text-zinc-400">
               <tr>
-                <th className="py-3 px-4">Invoice # & Date</th>
+                <th className="py-3 px-4">Invoice # & Time</th>
                 <th className="py-3 px-4">Customer Details</th>
                 <th className="py-3 px-4">Items Summary</th>
                 <th className="py-3 px-4">Mode & Status</th>
@@ -133,14 +216,18 @@ export function RecentInvoices() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/60 text-zinc-200">
-              {filteredInvoices.length === 0 ? (
+              {todaysInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-zinc-500">
-                    No transactions match your search filter.
+                  <td colSpan={6} className="py-12 text-center text-zinc-500">
+                    <Receipt className="h-8 w-8 mx-auto mb-2 opacity-30 text-zinc-400" />
+                    <p className="text-sm font-semibold text-zinc-400">No invoices found for today</p>
+                    <p className="text-xs text-zinc-600 mt-0.5">
+                      New bills generated at the POS will show up here automatically.
+                    </p>
                   </td>
                 </tr>
               ) : (
-                filteredInvoices.map((inv) => {
+                todaysInvoices.map((inv) => {
                   const isVoid = inv.status === "void";
                   const whatsappUrl = generateWhatsAppReceiptUrl(inv, settings);
 
@@ -157,7 +244,10 @@ export function RecentInvoices() {
                           {inv.invoice_number}
                         </div>
                         <div className="text-[10px] text-zinc-400 mt-0.5">
-                          {formatDate(inv.created_at)}
+                          {new Date(inv.created_at).toLocaleTimeString("en-IN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </div>
                       </td>
 
@@ -178,10 +268,10 @@ export function RecentInvoices() {
                       {/* ITEMS SUMMARY */}
                       <td className="py-3 px-4 max-w-xs">
                         <div className="text-zinc-300 font-medium truncate">
-                          {inv.items.map((i) => `${i.item_name} (${i.quantity}x)`).join(", ")}
+                          {(inv.items || []).map((i) => `${i.item_name} (${i.quantity}x)`).join(", ")}
                         </div>
                         <div className="text-[10px] text-zinc-500 mt-0.5">
-                          {inv.items.length} line items
+                          {inv.items?.length || 0} line items
                         </div>
                       </td>
 
@@ -216,14 +306,14 @@ export function RecentInvoices() {
                         {formatCurrency(inv.grand_total, settings.currency_symbol)}
                       </td>
 
-                      {/* ACTIONS: PRINT, WHATSAPP, VOID */}
+                      {/* ACTIONS: PRINT, EDIT, WHATSAPP, VOID */}
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           {/* PRINT TRIGGER */}
                           <button
                             type="button"
                             onClick={() => setPrintInvoice(inv)}
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-purple-600 text-zinc-300 hover:text-white transition-all"
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-purple-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
                             title="Print / View Thermal Receipt"
                           >
                             <Printer className="h-3.5 w-3.5" />
@@ -233,7 +323,7 @@ export function RecentInvoices() {
                           <button
                             type="button"
                             onClick={() => setEditingInvoice(inv)}
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-blue-600 text-zinc-300 hover:text-white transition-all"
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-blue-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
                             title="Edit Invoice (Items, Client, Staff, Discount)"
                           >
                             <FileEdit className="h-3.5 w-3.5 text-blue-400 hover:text-white" />
@@ -244,7 +334,7 @@ export function RecentInvoices() {
                             href={whatsappUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-600 text-zinc-300 hover:text-white transition-all"
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-600 text-zinc-300 hover:text-white transition-all cursor-pointer"
                             title="Share on WhatsApp"
                           >
                             <MessageCircle className="h-3.5 w-3.5" />
@@ -258,13 +348,12 @@ export function RecentInvoices() {
                                   voidInvoice(inv.id);
                                 }
                               }}
-                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-amber-600 text-zinc-400 hover:text-white transition-all"
+                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-amber-600 text-zinc-400 hover:text-white transition-all cursor-pointer"
                               title="Void Invoice"
                             >
                               <Ban className="h-3.5 w-3.5" />
                             </button>
                           )}
-
                         </div>
                       </td>
                     </tr>
