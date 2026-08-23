@@ -284,11 +284,6 @@ export function LoginModal() {
                       >
                         {isAdmin ? "👑 Admin" : "💼 Reception"}
                       </span>
-
-                      {/* Demo PIN indicator badge */}
-                      <span className="text-[9px] text-zinc-400 font-mono mt-1">
-                        PIN: {user.pin || (isAdmin ? "9999" : "1001")}
-                      </span>
                     </div>
                   );
                 })}
@@ -394,14 +389,9 @@ export function LoginModal() {
             </div>
 
             <div>
-              <label className="text-xs font-bold text-zinc-300 mb-1.5 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <Lock className="h-3.5 w-3.5 text-purple-400" />
-                  <span>4-Digit Security PIN</span>
-                </span>
-                <span className="text-[11px] font-normal text-zinc-400">
-                  (e.g. 1234 or any 4 digits)
-                </span>
+              <label className="text-xs font-bold text-zinc-300 mb-1.5 flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5 text-purple-400" />
+                <span>4-Digit Security PIN</span>
               </label>
               <Input
                 type="password"
