@@ -67,15 +67,18 @@ export function generateInvoiceNumber(prefix: string = "BZ-"): string {
   return `${prefix}${year}${month}${day}-${random}`;
 }
 
-export function generateWhatsAppReceiptUrl(invoice: Invoice, settings: SalonSettings): string {
-  const cleanPhone = (invoice.customer_phone || "").replace(/[^\d]/g, "");
-  
+export function getReceiptPublicUrl(invoice: Invoice): string {
   const baseUrl = typeof window !== "undefined" && window.location.origin
     ? window.location.origin
     : "https://belezia-salon-billing-app.vercel.app";
 
-  const receiptUrl = `${baseUrl}/receipt/${invoice.id || invoice.invoice_number}`;
-  
+  const identifier = invoice.invoice_number || invoice.id;
+  return `${baseUrl}/receipt/${encodeURIComponent(identifier)}`;
+}
+
+export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSettings): { text: string; receiptUrl: string } {
+  const receiptUrl = getReceiptPublicUrl(invoice);
+
   const itemsText = (invoice.items || [])
     .map(
       (item, idx) =>
@@ -86,7 +89,7 @@ export function generateWhatsAppReceiptUrl(invoice: Invoice, settings: SalonSett
   const message = `✨ *${settings.salon_name}* ✨
 📍 _${settings.tagline}_
 --------------------------------
-🧾 *INVOICE: ${invoice.invoice_number}*
+🧾 *TAX INVOICE: ${invoice.invoice_number}*
 📅 Date: ${formatDate(invoice.created_at)}
 👤 Client: *${invoice.customer_name}*
 --------------------------------
@@ -99,19 +102,25 @@ ${invoice.discount_amount > 0 ? `Discount: -${settings.currency_symbol}${invoice
 }*Grand Total:* *${settings.currency_symbol}${invoice.grand_total.toFixed(2)}*
 Payment: *${invoice.payment_mode.toUpperCase()}* (${invoice.status.toUpperCase()})
 --------------------------------
-📄 *VIEW & DOWNLOAD ORIGINAL BILL (PDF/IMAGE):*
-🔗 ${receiptUrl}
+📄 *DOWNLOAD ORIGINAL BILL (PDF/IMAGE):*
+👉 ${receiptUrl}
 --------------------------------
-🌟 *We love your feedback!*
-Leave us a 5-star review on Google:
+🌟 *Rate your experience (5-Stars):*
 ${settings.google_review_url}
 
 📸 Follow us on Instagram:
 ${settings.instagram_url}
 
-Thank you for visiting ${settings.salon_name}! Have a glamorous day ahead! 💇‍♀️💅`;
+Thank you for visiting ${settings.salon_name}! Have a fabulous day ahead! 💇‍♀️💅`;
 
-  const encoded = encodeURIComponent(message);
+  return { text: message, receiptUrl };
+}
+
+export function generateWhatsAppReceiptUrl(invoice: Invoice, settings: SalonSettings): string {
+  const cleanPhone = (invoice.customer_phone || "").replace(/[^\d]/g, "");
+  const { text } = generateWhatsAppMessageText(invoice, settings);
+  const encoded = encodeURIComponent(text);
+
   return cleanPhone.length >= 10
     ? `https://wa.me/${cleanPhone.startsWith("91") ? cleanPhone : `91${cleanPhone}`}?text=${encoded}`
     : `https://wa.me/?text=${encoded}`;

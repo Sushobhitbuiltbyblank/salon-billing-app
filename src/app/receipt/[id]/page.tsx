@@ -65,11 +65,16 @@ export default function PublicReceiptPage() {
 
         // 2. Fetch from Supabase PostgreSQL if configured
         if (isSupabaseConfigured() && supabase) {
-          const { data: invData, error: invErr } = await supabase
-            .from("invoices")
-            .select("*, invoice_items(*)")
-            .or(`id.eq.${invoiceId},invoice_number.eq.${invoiceId}`)
-            .single();
+          const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invoiceId);
+
+          let query = supabase.from("invoices").select("*, invoice_items(*)");
+          if (isValidUUID) {
+            query = query.or(`id.eq.${invoiceId},invoice_number.eq.${invoiceId}`);
+          } else {
+            query = query.eq("invoice_number", invoiceId);
+          }
+
+          const { data: invData, error: invErr } = await query.maybeSingle();
 
           if (invData && !invErr) {
             const formattedInvoice: Invoice = {

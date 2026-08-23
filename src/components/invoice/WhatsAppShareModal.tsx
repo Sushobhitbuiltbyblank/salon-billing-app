@@ -28,7 +28,13 @@ import {
   Check,
   AlertCircle,
 } from "lucide-react";
-import { formatCurrency, formatDate, generateWhatsAppReceiptUrl } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatDate,
+  generateWhatsAppReceiptUrl,
+  generateWhatsAppMessageText,
+  getReceiptPublicUrl,
+} from "@/lib/utils";
 
 export function WhatsAppShareModal() {
   const { whatsAppInvoice, setWhatsAppInvoice, settings, staff } = useApp();
@@ -37,9 +43,15 @@ export function WhatsAppShareModal() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [copiedImage, setCopiedImage] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   if (!whatsAppInvoice) return null;
+
+  const { text: fullWhatsAppText, receiptUrl: publicReceiptUrl } = generateWhatsAppMessageText(
+    whatsAppInvoice,
+    settings
+  );
 
   const cleanPhone = (whatsAppInvoice.customer_phone || "").replace(/[^\d]/g, "");
   const formattedPhone = cleanPhone.length >= 10
@@ -131,8 +143,6 @@ export function WhatsAppShareModal() {
   const handleNativeShare = async (type: "pdf" | "image" = "pdf") => {
     setIsGenerating(true);
     try {
-      const waText = `🧾 Invoice ${whatsAppInvoice.invoice_number} from ${settings.salon_name}\nGrand Total: ${settings.currency_symbol}${whatsAppInvoice.grand_total.toFixed(2)}`;
-
       if (type === "pdf") {
         const pdfData = await generatePdfBlob();
         if (!pdfData) return;
@@ -142,7 +152,7 @@ export function WhatsAppShareModal() {
           await navigator.share({
             files: [file],
             title: `Belezia Invoice #${whatsAppInvoice.invoice_number}`,
-            text: waText,
+            text: fullWhatsAppText,
           });
           showToast("✅ Shared PDF receipt successfully!");
           return;
@@ -157,7 +167,7 @@ export function WhatsAppShareModal() {
           await navigator.share({
             files: [file],
             title: `Belezia Invoice #${whatsAppInvoice.invoice_number}`,
-            text: waText,
+            text: fullWhatsAppText,
           });
           showToast("✅ Shared Image receipt successfully!");
           return;
@@ -238,6 +248,30 @@ export function WhatsAppShareModal() {
       alert("Please allow clipboard permissions to copy the bill image.");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // 9. ACTION: COPY FULL WHATSAPP MESSAGE TEXT
+  const handleCopyMessageText = async () => {
+    try {
+      await navigator.clipboard.writeText(fullWhatsAppText);
+      setCopiedText(true);
+      setTimeout(() => setCopiedText(false), 3000);
+      showToast("📋 WhatsApp message text copied to clipboard!");
+    } catch (err) {
+      console.error("Copy text error:", err);
+    }
+  };
+
+  // 10. ACTION: COPY DIGITAL BILL LINK
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(publicReceiptUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 3000);
+      showToast("🔗 Digital Bill link copied to clipboard!");
+    } catch (err) {
+      console.error("Copy link error:", err);
     }
   };
 
@@ -343,6 +377,51 @@ export function WhatsAppShareModal() {
                 </>
               )}
             </Button>
+          </div>
+
+          {/* DIGITAL BILL PUBLIC LINK & MESSAGE HELPER */}
+          <div className="p-3.5 rounded-2xl bg-zinc-950/80 border border-zinc-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-zinc-300 flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5 text-emerald-400" />
+                <span>Customer Download Link (PDF / Image):</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="text-[10px] text-emerald-400 hover:text-emerald-300 font-mono font-bold flex items-center gap-1 cursor-pointer bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-500/30"
+              >
+                {copiedLink ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                <span>{copiedLink ? "Link Copied!" : "Copy Link"}</span>
+              </button>
+            </div>
+
+            <div className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-between gap-2">
+              <span className="text-[11px] text-emerald-300 font-mono truncate select-all">
+                {publicReceiptUrl}
+              </span>
+              <a
+                href={publicReceiptUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white shrink-0"
+                title="Open Public Receipt Page"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] text-zinc-400">Includes live bill link & items</span>
+              <button
+                type="button"
+                onClick={handleCopyMessageText}
+                className="text-[10px] text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                {copiedText ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                <span>{copiedText ? "Message Copied!" : "Copy WhatsApp Text Message"}</span>
+              </button>
+            </div>
           </div>
 
           {/* ADDITIONAL DIGITAL BILL ACTIONS */}
