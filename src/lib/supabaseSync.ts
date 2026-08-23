@@ -154,8 +154,6 @@ export const SupabaseSync = {
           return list;
         })(),
         catalog: (() => {
-          const deletedIds = typeof window !== "undefined" ? Storage.getDeletedCatalogIds() : [];
-
           const remoteCatalog = (catalogRes.data || []).map((c: any) => {
             let itemType: ItemType = c.type;
             let package_service_ids: string[] | undefined = c.package_service_ids;
@@ -188,7 +186,7 @@ export const SupabaseSync = {
               price: Number(c.price) || 0,
               cost_price: Number(c.cost_price) || 0,
             };
-          }).filter((c: any) => !deletedIds.includes(c.id));
+          });
 
           return remoteCatalog;
         })(),

@@ -268,72 +268,6 @@ export const DEFAULT_CATALOG: CatalogItem[] = [
   { id: "33333333-3333-3333-3333-333333330134", category_id: "22222222-2222-2222-2222-222222222208", name: "Ozone Acne Check - Cream", type: "product", cost_price: 350, price: 350 * 4, sku: "PRD-OZN-09", is_active: true },
   { id: "33333333-3333-3333-3333-333333330135", category_id: "22222222-2222-2222-2222-222222222208", name: "Kanpeki - Balancing Cleanser", type: "product", cost_price: 960, price: 960 * 4, sku: "PRD-KNP-01", is_active: true },
   { id: "33333333-3333-3333-3333-333333330136", category_id: "22222222-2222-2222-2222-222222222208", name: "Kanpeki - Facial Wash", type: "product", cost_price: 960, price: 960 * 4, sku: "PRD-KNP-02", is_active: true },
-
-  // 9. Packages & Value Combos (Multi-Service Bundles with Special Package Pricing)
-  {
-    id: "33333333-3333-3333-3333-333333330201",
-    category_id: "22222222-2222-2222-2222-222222222209",
-    name: "Hair Cut + Shaving",
-    type: "package",
-    price: 220,
-    package_regular_price: 250,
-    duration_mins: 40,
-    package_service_ids: ["33333333-3333-3333-3333-333333330002", "33333333-3333-3333-3333-333333330001"],
-    is_active: true,
-  },
-  {
-    id: "33333333-3333-3333-3333-333333330202",
-    category_id: "22222222-2222-2222-2222-222222222209",
-    name: "Hair Cut + Head Wash",
-    type: "package",
-    price: 220,
-    package_regular_price: 250,
-    duration_mins: 35,
-    package_service_ids: ["33333333-3333-3333-3333-333333330002", "33333333-3333-3333-3333-333333330003"],
-    is_active: true,
-  },
-  {
-    id: "33333333-3333-3333-3333-333333330203",
-    category_id: "22222222-2222-2222-2222-222222222209",
-    name: "Hair Cut + Head Wash + Shaving",
-    type: "package",
-    price: 300,
-    package_regular_price: 350,
-    duration_mins: 50,
-    package_service_ids: [
-      "33333333-3333-3333-3333-333333330002",
-      "33333333-3333-3333-3333-333333330003",
-      "33333333-3333-3333-3333-333333330001",
-    ],
-    is_active: true,
-  },
-  {
-    id: "33333333-3333-3333-3333-333333330204",
-    category_id: "22222222-2222-2222-2222-222222222209",
-    name: "Detan + Facial Glow Combo",
-    type: "package",
-    price: 1600,
-    package_regular_price: 1800,
-    duration_mins: 60,
-    package_service_ids: ["33333333-3333-3333-3333-333333330005", "33333333-3333-3333-3333-333333330014"],
-    is_active: true,
-  },
-  {
-    id: "33333333-3333-3333-3333-333333330205",
-    category_id: "22222222-2222-2222-2222-222222222209",
-    name: "Men's Deluxe Grooming (Cut + Shave + Wash + Detan)",
-    type: "package",
-    price: 550,
-    package_regular_price: 650,
-    duration_mins: 70,
-    package_service_ids: [
-      "33333333-3333-3333-3333-333333330002",
-      "33333333-3333-3333-3333-333333330001",
-      "33333333-3333-3333-3333-333333330003",
-      "33333333-3333-3333-3333-333333330005",
-    ],
-    is_active: true,
-  },
 ];
 
 export const DEFAULT_CUSTOMERS: Customer[] = [];
@@ -593,46 +527,13 @@ export const Storage = {
   },
 
   // CATALOG
-  getDeletedCatalogIds(): string[] {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(KEYS.DELETED_CATALOG_IDS);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  },
-  addDeletedCatalogId(id: string): void {
-    if (typeof window === "undefined") return;
-    try {
-      const list = this.getDeletedCatalogIds();
-      if (!list.includes(id)) {
-        list.push(id);
-        localStorage.setItem(KEYS.DELETED_CATALOG_IDS, JSON.stringify(list));
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  },
-  removeDeletedCatalogId(id: string): void {
-    if (typeof window === "undefined") return;
-    try {
-      const list = this.getDeletedCatalogIds().filter((i) => i !== id);
-      localStorage.setItem(KEYS.DELETED_CATALOG_IDS, JSON.stringify(list));
-    } catch (e) {
-      console.error(e);
-    }
-  },
-
   getCatalog(): CatalogItem[] {
     if (typeof window === "undefined") return DEFAULT_CATALOG;
     try {
       const raw = localStorage.getItem(KEYS.CATALOG);
-      const deletedIds = this.getDeletedCatalogIds();
-      if (!raw) return DEFAULT_CATALOG.filter((i) => !deletedIds.includes(i.id));
+      if (!raw) return DEFAULT_CATALOG;
       const parsed = JSON.parse(raw);
-      const list = Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_CATALOG;
-      return list.filter((i: CatalogItem) => !deletedIds.includes(i.id));
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_CATALOG;
     } catch {
       return DEFAULT_CATALOG;
     }
@@ -646,7 +547,6 @@ export const Storage = {
     }
   },
   saveCatalogItem(item: CatalogItem): void {
-    this.removeDeletedCatalogId(item.id);
     const list = this.getCatalog();
     const index = list.findIndex((i) => i.id === item.id);
     if (index >= 0) {
@@ -657,7 +557,6 @@ export const Storage = {
     this.saveCatalog(list);
   },
   deleteCatalogItem(itemId: string): void {
-    this.addDeletedCatalogId(itemId);
     const list = this.getCatalog().filter((i) => i.id !== itemId);
     this.saveCatalog(list);
   },

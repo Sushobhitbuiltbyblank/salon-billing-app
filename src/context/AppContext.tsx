@@ -418,8 +418,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // CATALOG CRUD ACTIONS
   const addCatalogItem = async (item: CatalogItem) => {
-    Storage.saveCatalogItem(item);
-    setCatalog((prev) => [...prev.filter((i) => i.id !== item.id), item]);
     if (isSupabaseConfigured()) {
       await SupabaseSync.saveCatalogItem(item);
       const cloudData = await SupabaseSync.loadAllData();
@@ -427,20 +425,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setCatalog(cloudData.catalog);
         Storage.saveCatalog(cloudData.catalog);
       }
+    } else {
+      Storage.saveCatalogItem(item);
+      setCatalog((prev) => [...prev.filter((i) => i.id !== item.id), item]);
     }
   };
 
   const saveCatalogItem = async (item: CatalogItem) => {
-    Storage.saveCatalogItem(item);
-    setCatalog((prev) => {
-      const idx = prev.findIndex((i) => i.id === item.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = item;
-        return next;
-      }
-      return [...prev, item];
-    });
     if (isSupabaseConfigured()) {
       await SupabaseSync.saveCatalogItem(item);
       const cloudData = await SupabaseSync.loadAllData();
@@ -448,12 +439,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setCatalog(cloudData.catalog);
         Storage.saveCatalog(cloudData.catalog);
       }
+    } else {
+      Storage.saveCatalogItem(item);
+      setCatalog((prev) => {
+        const idx = prev.findIndex((i) => i.id === item.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = item;
+          return next;
+        }
+        return [...prev, item];
+      });
     }
   };
 
   const deleteCatalogItem = async (itemId: string) => {
-    Storage.deleteCatalogItem(itemId);
-    setCatalog((prev) => prev.filter((i) => i.id !== itemId));
     if (isSupabaseConfigured()) {
       await SupabaseSync.deleteCatalogItem(itemId);
       const cloudData = await SupabaseSync.loadAllData();
@@ -461,6 +461,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setCatalog(cloudData.catalog);
         Storage.saveCatalog(cloudData.catalog);
       }
+    } else {
+      Storage.deleteCatalogItem(itemId);
+      setCatalog((prev) => prev.filter((i) => i.id !== itemId));
     }
   };
 
