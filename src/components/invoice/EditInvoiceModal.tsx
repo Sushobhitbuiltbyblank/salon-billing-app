@@ -749,6 +749,10 @@ export function EditInvoiceModal() {
                       <div className="space-y-1 bg-zinc-950/80 p-2 rounded-xl border border-purple-900/30">
                         {(item.package_services || []).map((svc, sIdx) => {
                           const isUnassigned = !svc.primary_staff_id;
+                          const actualValue =
+                            svc.regular_price ||
+                            catalog.find((c) => c.id === svc.service_id)?.price ||
+                            svc.price;
 
                           return (
                             <div
@@ -759,15 +763,16 @@ export function EditInvoiceModal() {
                                   : "bg-zinc-900/80 border-zinc-800/80"
                               }`}
                             >
-                              <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                                 <span className="font-bold text-zinc-200 truncate text-[11px]">
                                   • {svc.service_name}
                                 </span>
-                                {svc.regular_price && (
-                                  <span className="text-[10px] text-zinc-500 font-mono">
-                                    (MRP: ₹{svc.regular_price})
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/90 border border-zinc-700/80 text-[10px] font-mono text-zinc-200">
+                                  <span className="text-zinc-400 font-medium">Actual:</span>
+                                  <span className="font-bold text-amber-300">
+                                    {formatCurrency(actualValue, settings.currency_symbol)}
                                   </span>
-                                )}
+                                </span>
                               </div>
 
                               <div className="flex items-center gap-2 shrink-0">

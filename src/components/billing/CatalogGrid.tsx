@@ -26,13 +26,11 @@ export function CatalogGrid() {
   const [selectedType, setSelectedType] = useState<"all" | "service" | "package" | "product">("all");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
 
-  // Map of service id -> service name for quick lookup on package cards
-  const serviceMap = useMemo(() => {
-    const map = new Map<string, string>();
+  // Map of service id -> full catalog item for quick lookup on package cards
+  const serviceItemMap = useMemo(() => {
+    const map = new Map<string, CatalogItem>();
     catalog.forEach((item) => {
-      if (item.type === "service") {
-        map.set(item.id, item.name);
-      }
+      map.set(item.id, item);
     });
     return map;
   }, [catalog]);
@@ -268,16 +266,30 @@ export function CatalogGrid() {
                           {item.name}
                         </h4>
 
-                        {/* INCLUDED SERVICES IN PACKAGE */}
+                        {/* INCLUDED SERVICES IN PACKAGE WITH ACTUAL VALUES */}
                         {isPackage && item.package_service_ids && item.package_service_ids.length > 0 && (
-                          <div className="mt-1 flex items-center gap-1 text-[10px] text-zinc-400 line-clamp-1">
-                            <Layers className="h-3 w-3 text-pink-400 shrink-0" />
-                            <span className="truncate">
-                              {item.package_service_ids
-                                .map((id) => serviceMap.get(id) || "")
-                                .filter(Boolean)
-                                .join(" + ")}
-                            </span>
+                          <div className="mt-1.5 space-y-1">
+                            <div className="flex items-center gap-1 text-[10px] font-semibold text-pink-300">
+                              <Layers className="h-3 w-3 text-pink-400 shrink-0" />
+                              <span>Includes {item.package_service_ids.length} Services:</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {item.package_service_ids.map((id) => {
+                                const svc = serviceItemMap.get(id);
+                                if (!svc) return null;
+                                return (
+                                  <span
+                                    key={id}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-300"
+                                  >
+                                    <span className="truncate max-w-[110px]">{svc.name}</span>
+                                    <span className="font-mono text-emerald-400 font-bold">
+                                      {formatCurrency(svc.price, settings.currency_symbol)}
+                                    </span>
+                                  </span>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
