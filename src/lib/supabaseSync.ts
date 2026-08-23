@@ -13,6 +13,68 @@ import {
   Staff,
 } from "@/types";
 
+export function encodePackageSku(packageServiceIds?: string[], regularPrice?: number): string {
+  const shortIds = (packageServiceIds || []).map((id) => id.replace(/-/g, "").slice(-8));
+  const str = `P:${Math.round(regularPrice || 0)}|${shortIds.join(",")}`;
+  return str.substring(0, 50);
+}
+
+export function decodePackageSku(
+  sku: string | undefined | null,
+  rawCatalog: any[],
+  itemName?: string,
+  categoryId?: string
+): { package_regular_price: number; package_service_ids: string[] } | null {
+  if (sku && typeof sku === "string") {
+    // 1. Compact SKU format (e.g. "P:300|33330002,33330001")
+    if (sku.startsWith("P:")) {
+      const match = sku.match(/^P:(\d+)\|(.*)$/);
+      if (match) {
+        const regularPrice = Number(match[1]) || 0;
+        const shortIds = match[2].split(",").filter(Boolean);
+        const matchedServiceIds = shortIds
+          .map((shortId) => {
+            const found = rawCatalog.find(
+              (c) =>
+                c.id.replace(/-/g, "").endsWith(shortId) ||
+                c.id.replace(/-/g, "").startsWith(shortId)
+            );
+            return found ? found.id : null;
+          })
+          .filter(Boolean) as string[];
+        return { package_regular_price: regularPrice, package_service_ids: matchedServiceIds };
+      }
+    }
+
+    // 2. PKG_META format fallback
+    if (sku.startsWith("PKG_META:")) {
+      try {
+        const jsonStr = sku.replace("PKG_META:", "");
+        const meta = JSON.parse(jsonStr);
+        return {
+          package_service_ids: meta.package_service_ids || [],
+          package_regular_price: Number(meta.package_regular_price) || 0,
+        };
+      } catch {}
+    }
+  }
+
+  // 3. Fallback: match by package name against DEFAULT_CATALOG or known services
+  if (itemName) {
+    const defaultMatch = DEFAULT_CATALOG.find(
+      (item) => item.type === "package" && item.name.toLowerCase().trim() === itemName.toLowerCase().trim()
+    );
+    if (defaultMatch) {
+      return {
+        package_service_ids: defaultMatch.package_service_ids || [],
+        package_regular_price: defaultMatch.package_regular_price || defaultMatch.price,
+      };
+    }
+  }
+
+  return null;
+}
+
 export const SupabaseSync = {
   // 1. FETCH ALL DATA FROM SUPABASE
   async loadAllData() {
@@ -97,21 +159,24 @@ export const SupabaseSync = {
           const remoteCatalog = (catalogRes.data || []).map((c: any) => {
             let itemType: ItemType = c.type;
             let package_service_ids: string[] | undefined = c.package_service_ids;
-            let package_regular_price: number | undefined = c.package_regular_price ? Number(c.package_regular_price) : undefined;
+            let package_regular_price: number | undefined = c.package_regular_price
+              ? Number(c.package_regular_price)
+              : undefined;
             let sku = c.sku;
 
-            // Decode backward-compatible package metadata from SKU
-            if (c.sku && typeof c.sku === "string" && c.sku.startsWith("PKG_META:")) {
-              try {
-                const jsonStr = c.sku.replace("PKG_META:", "");
-                const meta = JSON.parse(jsonStr);
-                itemType = "package";
-                package_service_ids = meta.package_service_ids || [];
-                package_regular_price = Number(meta.package_regular_price) || Number(c.price);
-                sku = "";
-              } catch (e) {
-                console.warn("Failed to parse package metadata from SKU:", e);
+            // Check if item is a package combo
+            const isPackageCategory =
+              c.category_id === "22222222-2222-2222-2222-222222222209" ||
+              (c.sku && typeof c.sku === "string" && (c.sku.startsWith("P:") || c.sku.startsWith("PKG_META:")));
+
+            if (itemType === "package" || isPackageCategory) {
+              itemType = "package";
+              const decoded = decodePackageSku(c.sku, catalogRes.data || [], c.name, c.category_id);
+              if (decoded) {
+                package_service_ids = decoded.package_service_ids;
+                package_regular_price = decoded.package_regular_price || Number(c.price);
               }
+              sku = "";
             }
 
             return {
@@ -125,23 +190,7 @@ export const SupabaseSync = {
             };
           }).filter((c: any) => !deletedIds.includes(c.id));
 
-          const list = [...remoteCatalog];
-          const hasPackages = list.some((c: any) => c.type === "package");
-
-          if (!hasPackages) {
-            // Seed default packages that haven't been deleted
-            const defaultPackages = DEFAULT_CATALOG.filter(
-              (item) => item.type === "package" && !deletedIds.includes(item.id)
-            );
-            defaultPackages.forEach((pkg) => {
-              if (!list.some((existing) => existing.id === pkg.id || existing.name.toLowerCase().trim() === pkg.name.toLowerCase().trim())) {
-                list.push(pkg);
-                SupabaseSync.saveCatalogItem(pkg);
-              }
-            });
-          }
-
-          return list;
+          return remoteCatalog;
         })(),
         customers: (customersRes.data || []).map((cust: any) => ({
           ...cust,
@@ -464,7 +513,7 @@ export const SupabaseSync = {
 
       console.warn("Supabase direct saveCatalogItem failed, attempting backward-compatible payload:", error.message);
 
-      // 2. Compatibility fallback: encode package metadata in SKU so Postgres accepts it
+      // 2. Compatibility fallback: encode package metadata in compact SKU (fits in VARCHAR(50))
       const compatPayload = {
         ...(validId ? { id: validId } : {}),
         category_id: validCatId,
@@ -475,10 +524,7 @@ export const SupabaseSync = {
         cost_price: Number(item.cost_price) || 0,
         sku:
           item.type === "package"
-            ? `PKG_META:${JSON.stringify({
-                package_service_ids: item.package_service_ids || [],
-                package_regular_price: Number(item.package_regular_price) || Number(item.price) || 0,
-              })}`
+            ? encodePackageSku(item.package_service_ids, item.package_regular_price || item.price)
             : item.sku || null,
         is_active: item.is_active !== false,
         created_at: item.created_at || new Date().toISOString(),
