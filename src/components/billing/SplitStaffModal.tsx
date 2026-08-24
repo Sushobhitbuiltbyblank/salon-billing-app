@@ -226,23 +226,25 @@ export function SplitStaffModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="2xl" className="max-w-2xl w-full">
-      <DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="2xl" className="max-w-2xl w-full p-0 overflow-hidden flex flex-col max-h-[90vh]">
+      {/* FIXED HEADER */}
+      <div className="p-4 sm:p-5 pb-3 border-b border-zinc-800 shrink-0 bg-zinc-900/90">
         <div className="flex items-center gap-3 pr-8">
           <div className="h-10 w-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30 shadow-lg shrink-0">
             <Users className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <DialogTitle className="text-base sm:text-lg font-bold">Split Staff & Commission</DialogTitle>
-            <DialogDescription className="text-xs text-zinc-400 truncate">
+            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">Split Staff & Commission</h2>
+            <p className="text-xs text-zinc-400 truncate">
               Assign staff members and custom amounts for <span className="text-white font-semibold">{item.item_name}</span>
-            </DialogDescription>
+            </p>
           </div>
         </div>
-      </DialogHeader>
+      </div>
 
-      <div className="space-y-4 pt-2">
-        {/* ITEM PRICE & TALLIES CARD (GRID LAYOUT PREVENTS ALL OVERLAPS) */}
+      {/* UNIFIED SMOOTH SCROLLABLE CONTENT BODY */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 min-h-0 overscroll-contain">
+        {/* ITEM PRICE & TALLIES CARD */}
         <div className="p-3.5 rounded-2xl bg-zinc-950/90 border border-zinc-800 shadow-inner space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -329,8 +331,8 @@ export function SplitStaffModal({
           )}
         </div>
 
-        {/* N-STAFF ROWS LIST */}
-        <div className="space-y-3 max-h-[46vh] overflow-y-auto pr-1">
+        {/* N-STAFF ROWS LIST (NATURAL FLOW WITHOUT NESTED SCROLL CONTAINERS) */}
+        <div className="space-y-3">
           {splitRows.map((row, idx) => {
             const stylist = staff.find((s) => s.id === row.staff_id);
             const numAmount = Number(row.amount) || 0;
@@ -355,7 +357,7 @@ export function SplitStaffModal({
                     <select
                       value={row.staff_id}
                       onChange={(e) => handleStaffChange(idx, e.target.value)}
-                      className="w-full h-9 px-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white font-medium focus:outline-none focus:ring-1 focus:ring-purple-500 truncate"
+                      className="w-full h-9 px-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white font-medium focus:outline-none focus:ring-1 focus:ring-purple-500 truncate cursor-pointer"
                     >
                       <option value="">-- Select Stylist #{idx + 1} * --</option>
                       {staff.map((s) => (
@@ -443,22 +445,23 @@ export function SplitStaffModal({
           type="button"
           variant="outline"
           onClick={handleAddStylist}
-          className="w-full h-9 border-dashed border-zinc-700 bg-zinc-950/40 hover:bg-zinc-900 text-purple-300 hover:text-white text-xs gap-1.5 font-bold cursor-pointer"
+          className="w-full h-10 border-dashed border-zinc-700 bg-zinc-950/40 hover:bg-zinc-900 text-purple-300 hover:text-white text-xs gap-1.5 font-bold cursor-pointer transition-all"
         >
           <Plus className="h-4 w-4" />
           <span>+ Add Another Stylist to Split</span>
         </Button>
       </div>
 
-      <DialogFooter className="mt-4 border-t border-zinc-800/80 pt-3">
-        <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
+      {/* FIXED PINNED FOOTER */}
+      <div className="p-4 sm:p-5 pt-3 border-t border-zinc-800 shrink-0 bg-zinc-950/90 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+        <Button variant="outline" type="button" onClick={() => onOpenChange(false)} className="text-xs">
           Cancel
         </Button>
-        <Button variant="glow" type="button" onClick={handleConfirm} className="gap-1.5 font-bold">
+        <Button variant="glow" type="button" onClick={handleConfirm} className="gap-1.5 font-bold text-xs">
           <CheckCircle2 className="h-4 w-4" />
           <span>Apply Split Amount</span>
         </Button>
-      </DialogFooter>
+      </div>
     </Dialog>
   );
 }
