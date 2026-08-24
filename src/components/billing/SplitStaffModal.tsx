@@ -226,85 +226,87 @@ export function SplitStaffModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="lg">
+    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="xl" className="max-w-2xl">
       <DialogHeader>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="h-10 w-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30 shadow-lg">
-              <Users className="h-5 w-5" />
-            </div>
-            <div>
-              <DialogTitle>Split Staff & Commission by Amount</DialogTitle>
-              <DialogDescription>
-                Assign multiple staff members and allocate custom ₹ amounts for <span className="text-white font-semibold">{item.item_name}</span>
-              </DialogDescription>
-            </div>
+        <div className="flex items-center gap-2.5 pr-8">
+          <div className="h-10 w-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30 shadow-lg shrink-0">
+            <Users className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="text-base sm:text-lg">Split Staff & Commission by Amount</DialogTitle>
+            <DialogDescription className="text-xs truncate">
+              Assign multiple staff members and allocate custom ₹ amounts for <span className="text-white font-semibold">{item.item_name}</span>
+            </DialogDescription>
           </div>
         </div>
       </DialogHeader>
 
       <div className="space-y-4 pt-2">
         {/* ITEM PRICE & LIVE ALLOCATION BANNER */}
-        <div className="p-3.5 rounded-2xl bg-zinc-950/90 border border-zinc-800 shadow-inner flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <span className="text-[11px] text-zinc-400 font-medium">Billed Item Total</span>
-            <div className="text-base font-bold text-white flex items-center gap-2">
-              <span>{item.item_name}</span>
-              <span className="text-xs font-mono text-zinc-400">(Qty: {item.quantity})</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Total Value</span>
-              <div className="text-lg font-black text-emerald-400 font-mono">
-                {formatCurrency(itemTotal, settings.currency_symbol)}
+        <div className="p-3.5 rounded-2xl bg-zinc-950/90 border border-zinc-800 shadow-inner">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] text-zinc-400 font-medium block">Billed Item Total</span>
+              <div className="text-sm sm:text-base font-bold text-white flex items-center gap-2 flex-wrap">
+                <span className="break-words">{item.item_name}</span>
+                <span className="text-xs font-mono text-zinc-400 shrink-0 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
+                  Qty: {item.quantity}
+                </span>
               </div>
             </div>
 
-            <div className="h-8 w-px bg-zinc-800 hidden sm:block" />
+            <div className="flex items-center gap-3 sm:gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80">
+              <div className="text-left sm:text-right">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold block">Total Value</span>
+                <div className="text-base sm:text-lg font-black text-emerald-400 font-mono">
+                  {formatCurrency(itemTotal, settings.currency_symbol)}
+                </div>
+              </div>
 
-            <div className="text-right">
-              <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Total Allocated</span>
-              <div
-                className={`text-lg font-black font-mono ${
-                  isBalanced
-                    ? "text-emerald-400"
-                    : isOverallocated
-                    ? "text-rose-400"
-                    : "text-amber-400"
-                }`}
-              >
-                {formatCurrency(allocatedSum, settings.currency_symbol)}
+              <div className="h-8 w-px bg-zinc-800" />
+
+              <div className="text-left sm:text-right">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold block">Total Allocated</span>
+                <div
+                  className={`text-base sm:text-lg font-black font-mono ${
+                    isBalanced
+                      ? "text-emerald-400"
+                      : isOverallocated
+                      ? "text-rose-400"
+                      : "text-amber-400"
+                  }`}
+                >
+                  {formatCurrency(allocatedSum, settings.currency_symbol)}
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         {/* STATUS BALANCE PILL & QUICK HELPERS */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-xs">
           {/* BALANCE STATUS */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             {isBalanced ? (
               <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                <CheckCircle2 className="h-4 w-4" />
-                <span>100% Balanced ({formatCurrency(itemTotal, settings.currency_symbol)} allocated across {splitRows.length} staff)</span>
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span className="truncate">100% Balanced ({formatCurrency(itemTotal, settings.currency_symbol)} across {splitRows.length} staff)</span>
               </div>
             ) : isOverallocated ? (
               <div className="flex items-center gap-1.5 text-rose-400 font-bold">
-                <AlertCircle className="h-4 w-4" />
-                <span>Overallocated by {formatCurrency(Math.abs(remainingAmount), settings.currency_symbol)}</span>
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span className="truncate">Overallocated by {formatCurrency(Math.abs(remainingAmount), settings.currency_symbol)}</span>
               </div>
             ) : (
               <div className="flex items-center gap-1.5 text-amber-400 font-bold">
-                <AlertCircle className="h-4 w-4 animate-pulse" />
-                <span>{formatCurrency(remainingAmount, settings.currency_symbol)} remaining unallocated</span>
+                <AlertCircle className="h-4 w-4 shrink-0 animate-pulse" />
+                <span className="truncate">{formatCurrency(remainingAmount, settings.currency_symbol)} remaining unallocated</span>
               </div>
             )}
           </div>
 
           {/* QUICK DISTRIBUTION SHORTCUTS */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
             {splitRows.length > 1 && (
               <button
                 type="button"
@@ -332,7 +334,7 @@ export function SplitStaffModal({
         </div>
 
         {/* N-STAFF ROWS LIST */}
-        <div className="space-y-2.5 max-h-[48vh] overflow-y-auto pr-1">
+        <div className="space-y-3 max-h-[48vh] overflow-y-auto pr-1">
           {splitRows.map((row, idx) => {
             const stylist = staff.find((s) => s.id === row.staff_id);
             const numAmount = Number(row.amount) || 0;
@@ -342,19 +344,19 @@ export function SplitStaffModal({
             return (
               <div
                 key={idx}
-                className="p-3 rounded-2xl bg-zinc-950/90 border border-zinc-800/90 hover:border-purple-500/40 transition-all space-y-2"
+                className="p-3.5 rounded-2xl bg-zinc-950/90 border border-zinc-800/90 hover:border-purple-500/40 transition-all space-y-2.5"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  {/* STYLIST SELECTOR */}
-                  <div className="flex items-center gap-2.5 flex-1 min-w-[220px]">
+                {/* LINE 1: STYLIST SELECTOR & DELETE BUTTON */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
                     <div
-                      className="h-8 w-8 rounded-xl flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-md"
+                      className="h-7 w-7 rounded-xl flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-md"
                       style={{ backgroundColor: stylist?.color || "#8b5cf6" }}
                     >
                       {idx + 1}
                     </div>
 
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <select
                         value={row.staff_id}
                         onChange={(e) => handleStaffChange(idx, e.target.value)}
@@ -374,65 +376,67 @@ export function SplitStaffModal({
                     </div>
                   </div>
 
-                  {/* AMOUNT INPUT & PERCENTAGE */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="flex items-center gap-1">
-                      <span className="text-[11px] font-semibold text-zinc-400">Amount:</span>
-                      <div className="relative w-28">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-emerald-400">
-                          ₹
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="10"
-                          placeholder="0"
-                          value={row.amount === "" ? "" : row.amount}
-                          onChange={(e) => handleAmountChange(idx, e.target.value)}
-                          className="w-full h-9 pl-6 pr-2 text-xs font-mono font-bold text-emerald-400 bg-zinc-900 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        />
-                      </div>
-                    </div>
+                  {/* REMOVE BUTTON */}
+                  {splitRows.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveStylist(idx)}
+                      className="h-8 w-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer shrink-0"
+                      title="Remove stylist from split"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
 
+                {/* LINE 2: AMOUNT INPUT, PERCENTAGE & AUTO-FILL */}
+                <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-zinc-900">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-[170px]">
+                    <span className="text-[11px] font-semibold text-zinc-400 shrink-0">Split Amount:</span>
+                    <div className="relative flex-1 max-w-[180px]">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-emerald-400">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="10"
+                        placeholder="0"
+                        value={row.amount === "" ? "" : row.amount}
+                        onChange={(e) => handleAmountChange(idx, e.target.value)}
+                        className="w-full h-8 pl-6 pr-2 text-xs font-mono font-bold text-emerald-400 bg-zinc-900 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {/* PERCENTAGE PILL */}
-                    <div className="px-2 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] font-mono font-bold text-purple-300 min-w-[50px] text-center">
+                    <div className="px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] font-mono font-bold text-purple-300 min-w-[55px] text-center">
                       {pct}%
                     </div>
 
-                    {/* AUTO FILL BUTTON IF REMAINING */}
+                    {/* AUTO FILL BUTTON */}
                     {remainingAmount !== 0 && (
                       <button
                         type="button"
                         onClick={() => handleAutoFillRemaining(idx)}
-                        className="px-2 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[10px] text-amber-400 font-bold hover:text-amber-300 transition-colors"
-                        title="Auto-fill remaining balance into this stylist"
+                        className="px-2.5 py-1 rounded-xl bg-purple-950/40 hover:bg-purple-900/60 border border-purple-800/60 text-[11px] text-purple-300 font-semibold hover:text-white transition-colors cursor-pointer"
+                        title="Auto-fill remaining unassigned amount into this stylist"
                       >
                         Auto-fill
-                      </button>
-                    )}
-
-                    {/* REMOVE BUTTON */}
-                    {splitRows.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveStylist(idx)}
-                        className="h-9 w-9 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
-                        title="Remove stylist from split"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* INCENTIVE CALCULATION SUMMARY BAR FOR THIS ROW */}
+                {/* LINE 3: INCENTIVE CALCULATION SUMMARY BAR FOR THIS ROW */}
                 {stylist && (
-                  <div className="flex items-center justify-between text-[11px] bg-purple-950/20 border border-purple-900/30 px-3 py-1.5 rounded-xl text-purple-200">
+                  <div className="flex items-center justify-between text-[11px] bg-purple-950/20 border border-purple-900/30 px-3 py-1.5 rounded-xl text-purple-200 flex-wrap gap-1">
                     <span className="text-zinc-400">
-                      Tier: <span className="text-purple-300 font-semibold">{rowIncentive.label || "0%"}</span>
+                      Commission Tier: <span className="text-purple-300 font-semibold">{rowIncentive.label || "0%"}</span>
                     </span>
                     <span className="font-mono font-bold text-emerald-400">
-                      Earned Commission: {formatCurrency(rowIncentive.commission, settings.currency_symbol)}
+                      Calculated Incentive: {formatCurrency(rowIncentive.commission, settings.currency_symbol)}
                     </span>
                   </div>
                 )}
@@ -446,7 +450,7 @@ export function SplitStaffModal({
           type="button"
           variant="outline"
           onClick={handleAddStylist}
-          className="w-full h-9 border-dashed border-zinc-700 bg-zinc-950/40 hover:bg-zinc-900 text-purple-300 hover:text-white text-xs gap-1.5 font-bold"
+          className="w-full h-9 border-dashed border-zinc-700 bg-zinc-950/40 hover:bg-zinc-900 text-purple-300 hover:text-white text-xs gap-1.5 font-bold cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           <span>+ Add Another Stylist to Split</span>
