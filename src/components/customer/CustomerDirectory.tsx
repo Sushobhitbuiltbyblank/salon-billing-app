@@ -16,6 +16,12 @@ import {
 } from "@/components/ui/dialog";
 import { formatCurrency, formatDate, generateUUID } from "@/lib/utils";
 import {
+  unifyCustomerList,
+  normalizePhoneNumber,
+  normalizeCustomerName,
+  isAnonymousCustomerName,
+} from "@/lib/customerUtils";
+import {
   UserCheck,
   User,
   Plus,
@@ -74,92 +80,7 @@ export function CustomerDirectory() {
 
   // UNIFIED CUSTOMER LIST COMBINING REGISTERED PROFILES & INVOICE DATA
   const unifiedCustomers = useMemo(() => {
-    const map = new Map<string, Customer>();
-
-    // 1. Add all registered customers from database
-    customers.forEach((cust) => {
-      const cleanPhone = cust.phone ? cust.phone.replace(/\D/g, "").trim() : "";
-      const cleanName = (cust.name || "").toLowerCase().trim();
-      const key = cleanPhone || cleanName;
-      if (key) {
-        map.set(key, { ...cust });
-      }
-    });
-
-    // 2. Scan all invoices to discover any customer records & augment details
-    invoices.forEach((inv) => {
-      if (inv.status === "void") return;
-      const rawName = inv.customer_name?.trim() || "";
-      const isAnonymous = !rawName || rawName.toLowerCase() === "walk-in guest";
-      const cleanPhone = inv.customer_phone ? inv.customer_phone.replace(/\D/g, "").trim() : "";
-
-      if (!isAnonymous || cleanPhone) {
-        const key = cleanPhone || rawName.toLowerCase();
-        if (!key) return;
-
-        const existing = map.get(key);
-        if (existing) {
-          if (inv.created_at) {
-            if (!existing.last_visit || new Date(inv.created_at) > new Date(existing.last_visit)) {
-              existing.last_visit = inv.created_at;
-            }
-          }
-          if (!existing.email && inv.customer_email) {
-            existing.email = inv.customer_email;
-          }
-          if (!existing.phone && inv.customer_phone) {
-            existing.phone = inv.customer_phone;
-          }
-        } else {
-          const newCust: Customer = {
-            id: inv.customer_id || generateUUID(),
-            name: rawName || (cleanPhone ? `Guest (${cleanPhone})` : "Guest"),
-            phone: inv.customer_phone || "",
-            email: inv.customer_email || undefined,
-            gender: "unspecified",
-            total_visits: 0,
-            total_spent: 0,
-            last_visit: inv.created_at,
-            created_at: inv.created_at || new Date().toISOString(),
-          };
-          map.set(key, newCust);
-        }
-      }
-    });
-
-    // 3. Compute accurate visit counts and total spend for every customer from real invoices
-    const allUnified = Array.from(map.values()).map((cust) => {
-      const cleanPhone = cust.phone ? cust.phone.replace(/\D/g, "").trim() : "";
-      const custName = (cust.name || "").toLowerCase().trim();
-
-      const custInvoices = invoices.filter((inv) => {
-        if (inv.status === "void") return false;
-        const invPhone = inv.customer_phone ? inv.customer_phone.replace(/\D/g, "").trim() : "";
-        const invName = (inv.customer_name || "").toLowerCase().trim();
-
-        if (cleanPhone && invPhone) {
-          return cleanPhone === invPhone;
-        }
-        if (cust.id && inv.customer_id) {
-          return cust.id === inv.customer_id;
-        }
-        return custName && custName === invName && custName !== "walk-in guest";
-      });
-
-      const invoiceVisits = custInvoices.length;
-      const invoiceSpent = custInvoices.reduce((sum, inv) => sum + (inv.grand_total || 0), 0);
-
-      const total_visits = Math.max(cust.total_visits || 0, invoiceVisits);
-      const total_spent = Math.max(cust.total_spent || 0, invoiceSpent);
-
-      return {
-        ...cust,
-        total_visits,
-        total_spent,
-      };
-    });
-
-    return allUnified;
+    return unifyCustomerList(customers, invoices);
   }, [customers, invoices]);
 
   // COMPUTED STATS ACROSS UNIFIED CUSTOMERS
@@ -247,18 +168,21 @@ export function CustomerDirectory() {
   // GET INVOICES FOR SELECTED CUSTOMER
   const customerInvoices = useMemo(() => {
     if (!selectedHistoryCustomer) return [];
-    const cleanPhone = selectedHistoryCustomer.phone
-      ? selectedHistoryCustomer.phone.replace(/\D/g, "").trim()
-      : "";
-    const custName = (selectedHistoryCustomer.name || "").toLowerCase().trim();
+    const cleanPhone = normalizePhoneNumber(selectedHistoryCustomer.phone);
+    const custName = normalizeCustomerName(selectedHistoryCustomer.name);
+    const isAnon = isAnonymousCustomerName(selectedHistoryCustomer.name);
 
     return invoices.filter((inv) => {
-      const invPhone = inv.customer_phone ? inv.customer_phone.replace(/\D/g, "").trim() : "";
-      const invName = (inv.customer_name || "").toLowerCase().trim();
+      if (inv.status === "void") return false;
+      const invPhone = normalizePhoneNumber(inv.customer_phone);
+      const invName = normalizeCustomerName(inv.customer_name);
 
-      if (cleanPhone && invPhone) return cleanPhone === invPhone;
+      if (cleanPhone.length >= 7 && invPhone.length >= 7) return cleanPhone === invPhone;
       if (selectedHistoryCustomer.id && inv.customer_id) return selectedHistoryCustomer.id === inv.customer_id;
-      return custName && custName === invName && custName !== "walk-in guest";
+      if (!isAnon && custName && custName === invName) {
+        return !invPhone || !cleanPhone || invPhone === cleanPhone;
+      }
+      return false;
     });
   }, [selectedHistoryCustomer, invoices]);
 

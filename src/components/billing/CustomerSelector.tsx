@@ -20,6 +20,12 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, generateUUID } from "@/lib/utils";
+import {
+  unifyCustomerList,
+  normalizePhoneNumber,
+  normalizeCustomerName,
+  isAnonymousCustomerName,
+} from "@/lib/customerUtils";
 
 export function CustomerSelector() {
   const { customers, invoices, draftCustomer, setDraftCustomer, settings, saveCustomer } = useApp();
@@ -32,97 +38,29 @@ export function CustomerSelector() {
 
   // UNIFY REGISTERED CUSTOMERS + INVOICE CUSTOMER RECORDS
   const allAvailableCustomers = useMemo(() => {
-    const map = new Map<string, Customer>();
-
-    // 1. Add all registered customers
-    customers.forEach((cust) => {
-      const cleanPhone = cust.phone ? cust.phone.replace(/\D/g, "").trim() : "";
-      const cleanName = (cust.name || "").toLowerCase().trim();
-      const key = cleanPhone || cleanName;
-      if (key) {
-        map.set(key, { ...cust });
-      }
-    });
-
-    // 2. Scan all invoices to discover customer records
-    invoices.forEach((inv) => {
-      if (inv.status === "void") return;
-      const rawName = inv.customer_name?.trim() || "";
-      const isAnonymous = !rawName || rawName.toLowerCase() === "walk-in guest";
-      const cleanPhone = inv.customer_phone ? inv.customer_phone.replace(/\D/g, "").trim() : "";
-
-      if (!isAnonymous || cleanPhone) {
-        const key = cleanPhone || rawName.toLowerCase();
-        if (!key) return;
-
-        const existing = map.get(key);
-        if (existing) {
-          if (inv.created_at && (!existing.last_visit || new Date(inv.created_at) > new Date(existing.last_visit))) {
-            existing.last_visit = inv.created_at;
-          }
-          if (!existing.email && inv.customer_email) existing.email = inv.customer_email;
-          if (!existing.phone && inv.customer_phone) existing.phone = inv.customer_phone;
-        } else {
-          map.set(key, {
-            id: inv.customer_id || generateUUID(),
-            name: rawName || (cleanPhone ? `Guest (${cleanPhone})` : "Guest"),
-            phone: inv.customer_phone || "",
-            email: inv.customer_email || undefined,
-            gender: "female",
-            total_visits: 0,
-            total_spent: 0,
-            last_visit: inv.created_at,
-            created_at: inv.created_at || new Date().toISOString(),
-          });
-        }
-      }
-    });
-
-    // 3. Compute accurate visit counts and spend from real invoices
-    return Array.from(map.values()).map((cust) => {
-      const cleanPhone = cust.phone ? cust.phone.replace(/\D/g, "").trim() : "";
-      const custName = (cust.name || "").toLowerCase().trim();
-
-      const custInvoices = invoices.filter((inv) => {
-        if (inv.status === "void") return false;
-        const invPhone = inv.customer_phone ? inv.customer_phone.replace(/\D/g, "").trim() : "";
-        const invName = (inv.customer_name || "").toLowerCase().trim();
-
-        if (cleanPhone && invPhone) return cleanPhone === invPhone;
-        if (cust.id && inv.customer_id) return cust.id === inv.customer_id;
-        return custName && custName === invName && custName !== "walk-in guest";
-      });
-
-      return {
-        ...cust,
-        total_visits: Math.max(cust.total_visits || 0, custInvoices.length),
-        total_spent: Math.max(
-          cust.total_spent || 0,
-          custInvoices.reduce((sum, inv) => sum + (inv.grand_total || 0), 0)
-        ),
-      };
-    });
+    return unifyCustomerList(customers, invoices);
   }, [customers, invoices]);
 
   // Filter customers by name or phone number across all sources
   const filteredCustomers = useMemo(() => {
     const rawQ = searchQuery.trim().toLowerCase();
     if (!rawQ) return [];
-    const digitsOnly = rawQ.replace(/\D/g, "");
+    const digitsOnly = normalizePhoneNumber(rawQ);
 
     return allAvailableCustomers.filter((c: Customer) => {
-      const custName = (c.name || "").toLowerCase().trim();
-      const custPhone = (c.phone || "").replace(/\D/g, "");
+      const custName = normalizeCustomerName(c.name);
+      const custPhone = normalizePhoneNumber(c.phone);
 
       // 1. Name Match: partial substring, starts-with, or word match
-      const nameMatch = custName.length > 0 && (
-        custName.includes(rawQ) ||
-        custName.split(/\s+/).some((part) => part.startsWith(rawQ))
-      );
+      const nameMatch =
+        custName.length > 0 &&
+        (custName.includes(rawQ) ||
+          custName.split(/\s+/).some((part) => part.startsWith(rawQ)));
 
       // 2. Phone Match: digits match or raw match
       const phoneMatch = Boolean(
-        digitsOnly.length > 0 && custPhone.includes(digitsOnly)
+        digitsOnly.length > 0 &&
+          (custPhone.includes(digitsOnly) || (c.phone && c.phone.includes(digitsOnly)))
       ) || (c.phone && c.phone.toLowerCase().includes(rawQ));
 
       // 3. Email Match
@@ -197,21 +135,27 @@ export function CustomerSelector() {
 
   const matchedCustomer = useMemo(() => {
     if (!draftCustomer) return null;
-    const cleanPhone = draftCustomer.phone ? draftCustomer.phone.replace(/\D/g, "").trim() : "";
-    const cleanName = (draftCustomer.name || "").toLowerCase().trim();
+    const cleanPhone = normalizePhoneNumber(draftCustomer.phone);
+    const cleanName = normalizeCustomerName(draftCustomer.name);
+    const isAnon = isAnonymousCustomerName(draftCustomer.name);
 
-    if (cleanPhone) {
+    if (cleanPhone.length >= 7) {
       const byPhone = allAvailableCustomers.find(
-        (c: Customer) => c.phone && c.phone.replace(/\D/g, "").trim() === cleanPhone
+        (c: Customer) => normalizePhoneNumber(c.phone) === cleanPhone
       );
       if (byPhone) return byPhone;
     }
 
-    if (cleanName && cleanName !== "walk-in guest") {
+    if (!isAnon && cleanName) {
       return (
-        allAvailableCustomers.find(
-          (c: Customer) => (c.name || "").toLowerCase().trim() === cleanName
-        ) || null
+        allAvailableCustomers.find((c: Customer) => {
+          const cName = normalizeCustomerName(c.name);
+          const cPhone = normalizePhoneNumber(c.phone);
+          if (cName === cleanName) {
+            return !cleanPhone || !cPhone || cleanPhone === cPhone;
+          }
+          return false;
+        }) || null
       );
     }
 

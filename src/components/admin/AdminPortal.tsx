@@ -20,6 +20,7 @@ import { CustomerModal } from "@/components/customer/CustomerModal";
 import { AdminAnalyticsDashboard } from "@/components/admin/AdminAnalyticsDashboard";
 import { AdminInvoiceManagement } from "@/components/admin/AdminInvoiceManagement";
 import { formatCurrency, formatDate, generateUUID } from "@/lib/utils";
+import { unifyCustomerList } from "@/lib/customerUtils";
 import {
   Shield,
   Users,
@@ -667,71 +668,7 @@ export function AdminPortal() {
 
           {/* CUSTOMERS LIST / TABLE */}
           {(() => {
-            const map = new Map<string, Customer>();
-
-            customers.forEach((cust) => {
-              const cleanPhone = cust.phone ? cust.phone.replace(/\D/g, "").trim() : "";
-              const cleanName = (cust.name || "").toLowerCase().trim();
-              const key = cleanPhone || cleanName;
-              if (key) map.set(key, { ...cust });
-            });
-
-            invoices.forEach((inv) => {
-              if (inv.status === "void") return;
-              const rawName = inv.customer_name?.trim() || "";
-              const isAnonymous = !rawName || rawName.toLowerCase() === "walk-in guest";
-              const cleanPhone = inv.customer_phone ? inv.customer_phone.replace(/\D/g, "").trim() : "";
-
-              if (!isAnonymous || cleanPhone) {
-                const key = cleanPhone || rawName.toLowerCase();
-                if (!key) return;
-
-                const existing = map.get(key);
-                if (existing) {
-                  if (inv.created_at && (!existing.last_visit || new Date(inv.created_at) > new Date(existing.last_visit))) {
-                    existing.last_visit = inv.created_at;
-                  }
-                  if (!existing.email && inv.customer_email) existing.email = inv.customer_email;
-                  if (!existing.phone && inv.customer_phone) existing.phone = inv.customer_phone;
-                } else {
-                  map.set(key, {
-                    id: inv.customer_id || generateUUID(),
-                    name: rawName || (cleanPhone ? `Guest (${cleanPhone})` : "Guest"),
-                    phone: inv.customer_phone || "",
-                    email: inv.customer_email || undefined,
-                    gender: "unspecified",
-                    total_visits: 0,
-                    total_spent: 0,
-                    last_visit: inv.created_at,
-                    created_at: inv.created_at || new Date().toISOString(),
-                  });
-                }
-              }
-            });
-
-            const allUnified = Array.from(map.values()).map((cust) => {
-              const cleanPhone = cust.phone ? cust.phone.replace(/\D/g, "").trim() : "";
-              const custName = (cust.name || "").toLowerCase().trim();
-
-              const custInvoices = invoices.filter((inv) => {
-                if (inv.status === "void") return false;
-                const invPhone = inv.customer_phone ? inv.customer_phone.replace(/\D/g, "").trim() : "";
-                const invName = (inv.customer_name || "").toLowerCase().trim();
-
-                if (cleanPhone && invPhone) return cleanPhone === invPhone;
-                if (cust.id && inv.customer_id) return cust.id === inv.customer_id;
-                return custName && custName === invName && custName !== "walk-in guest";
-              });
-
-              return {
-                ...cust,
-                total_visits: Math.max(cust.total_visits || 0, custInvoices.length),
-                total_spent: Math.max(
-                  cust.total_spent || 0,
-                  custInvoices.reduce((sum, inv) => sum + (inv.grand_total || 0), 0)
-                ),
-              };
-            });
+            const allUnified = unifyCustomerList(customers, invoices);
 
             const filteredCustomers = allUnified.filter((c) => {
               const q = customerSearchQuery.toLowerCase().trim();

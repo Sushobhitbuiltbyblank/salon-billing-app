@@ -9,6 +9,12 @@ import {
   Staff,
 } from "@/types";
 import { generateUUID } from "./utils";
+import {
+  deduplicateCustomerArray,
+  normalizePhoneNumber,
+  normalizeCustomerName,
+  isAnonymousCustomerName,
+} from "./customerUtils";
 
 // STORAGE KEYS
 const STORAGE_PREFIX = "belezia_pos_";
@@ -568,7 +574,7 @@ export const Storage = {
       const raw = localStorage.getItem(KEYS.CUSTOMERS);
       if (!raw) return DEFAULT_CUSTOMERS;
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : DEFAULT_CUSTOMERS;
+      return Array.isArray(parsed) ? deduplicateCustomerArray(parsed) : DEFAULT_CUSTOMERS;
     } catch {
       return DEFAULT_CUSTOMERS;
     }
@@ -576,26 +582,67 @@ export const Storage = {
   saveCustomers(customers: Customer[]): void {
     if (typeof window === "undefined") return;
     try {
-      localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(customers));
+      const deduped = deduplicateCustomerArray(customers);
+      localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(deduped));
     } catch (e) {
       console.error(e);
     }
   },
   saveCustomer(customer: Customer): Customer {
     const list = this.getCustomers();
-    const index = list.findIndex(
-      (c) => c.id === customer.id || (c.phone && c.phone === customer.phone)
-    );
+    const cleanPhone = normalizePhoneNumber(customer.phone);
+    const cleanName = normalizeCustomerName(customer.name);
+    const isAnon = isAnonymousCustomerName(customer.name);
+
+    const index = list.findIndex((c) => {
+      if (c.id && customer.id && c.id === customer.id) return true;
+      const cPhone = normalizePhoneNumber(c.phone);
+      if (cleanPhone.length >= 7 && cPhone.length >= 7 && cleanPhone === cPhone) return true;
+      const cName = normalizeCustomerName(c.name);
+      if (!isAnon && cleanName && cName && cleanName === cName) {
+        return !cPhone || !cleanPhone || cPhone === cleanPhone;
+      }
+      return false;
+    });
+
     if (index >= 0) {
-      list[index] = { ...list[index], ...customer };
+      const existing = list[index];
+      const merged: Customer = {
+        ...existing,
+        ...customer,
+        id: existing.id || customer.id || generateUUID(),
+        name:
+          (!customer.name || isAnonymousCustomerName(customer.name)) && !isAnonymousCustomerName(existing.name)
+            ? existing.name
+            : customer.name || existing.name,
+        phone: cleanPhone.length === 10 ? cleanPhone : customer.phone || existing.phone || "",
+        gender:
+          customer.gender && customer.gender !== "unspecified"
+            ? customer.gender
+            : existing.gender && existing.gender !== "unspecified"
+            ? existing.gender
+            : "unspecified",
+        email: customer.email || existing.email,
+        birthday: customer.birthday || existing.birthday,
+        anniversary: customer.anniversary || existing.anniversary,
+        notes: customer.notes || existing.notes,
+        total_visits: Math.max(existing.total_visits || 0, customer.total_visits || 0),
+        total_spent: Math.max(existing.total_spent || 0, customer.total_spent || 0),
+        last_visit: customer.last_visit || existing.last_visit,
+        created_at: existing.created_at || customer.created_at || new Date().toISOString(),
+      };
+      list[index] = merged;
       this.saveCustomers(list);
-      return list[index];
+      return merged;
     } else {
-      const newCustomer = {
+      const newCustomer: Customer = {
         ...customer,
         id: customer.id || generateUUID(),
+        phone: cleanPhone.length === 10 ? cleanPhone : customer.phone || "",
+        gender: customer.gender || "unspecified",
         total_visits: customer.total_visits || 1,
         total_spent: customer.total_spent || 0,
+        created_at: customer.created_at || new Date().toISOString(),
       };
       list.push(newCustomer);
       this.saveCustomers(list);
@@ -633,22 +680,39 @@ export const Storage = {
     invoices.unshift(invoice);
     this.saveInvoices(invoices);
 
-    // Update customer stats if phone or customer_id exists
-    if (invoice.customer_phone) {
-      const cleanPhone = invoice.customer_phone.replace(/[^\d]/g, "");
+    // Update customer stats if phone or customer_name exists
+    const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
+    const cleanName = normalizeCustomerName(invoice.customer_name);
+    const isAnon = isAnonymousCustomerName(invoice.customer_name);
+
+    if (cleanPhone || (!isAnon && cleanName)) {
       const customers = this.getCustomers();
-      const existing = customers.find((c) => c.phone.replace(/[^\d]/g, "") === cleanPhone);
+      const existing = customers.find((c) => {
+        const cPhone = normalizePhoneNumber(c.phone);
+        if (cleanPhone.length >= 7 && cPhone.length >= 7 && cleanPhone === cPhone) return true;
+        if (invoice.customer_id && c.id === invoice.customer_id) return true;
+        const cName = normalizeCustomerName(c.name);
+        if (!isAnon && cleanName && cName && cleanName === cName) {
+          return !cPhone || !cleanPhone || cPhone === cleanPhone;
+        }
+        return false;
+      });
+
       if (existing) {
         existing.total_visits = (existing.total_visits || 0) + 1;
         existing.total_spent = (existing.total_spent || 0) + invoice.grand_total;
         existing.last_visit = invoice.created_at;
+        if ((!existing.phone || existing.phone.length < 10) && cleanPhone) {
+          existing.phone = cleanPhone;
+        }
         this.saveCustomers(customers);
-      } else if (invoice.customer_name && invoice.customer_phone) {
+      } else if (!isAnon && invoice.customer_name) {
         this.saveCustomer({
-          id: generateUUID(),
+          id: invoice.customer_id || generateUUID(),
           name: invoice.customer_name,
-          phone: invoice.customer_phone,
+          phone: cleanPhone || invoice.customer_phone || "",
           email: invoice.customer_email,
+          gender: "unspecified",
           total_visits: 1,
           total_spent: invoice.grand_total,
           last_visit: invoice.created_at,
