@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 
 export function StaffPerformance() {
-  const { staff, invoices, toggleStaffStatus, updateStaff, settings, attendance } = useApp();
+  const { staff, invoices, toggleStaffStatus, setStaffDailyStatus, updateStaff, settings, attendance } = useApp();
 
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -208,32 +208,25 @@ export function StaffPerformance() {
                     <td className="py-3.5 px-4">
                       <div className="text-zinc-300 font-medium">{s.role}</div>
                       <div className="flex items-center gap-1.5 mt-1">
-                        <button
-                          onClick={() => toggleStaffStatus(s.id)}
-                          className="cursor-pointer transition-opacity hover:opacity-80"
-                          title="Click to cycle status: Active -> Half Day -> On Leave"
+                        <select
+                          value={status}
+                          onChange={(e) => setStaffDailyStatus(s.id, e.target.value as any)}
+                          className={`h-6 px-1.5 text-[10px] rounded-lg font-bold border transition-colors cursor-pointer focus:outline-none focus:ring-1 ${
+                            status === "active"
+                              ? "bg-emerald-950/70 text-emerald-300 border-emerald-700/60 focus:ring-emerald-500"
+                              : status === "half_day"
+                              ? "bg-amber-950/70 text-amber-300 border-amber-600/70 focus:ring-amber-500"
+                              : status === "on_leave"
+                              ? "bg-rose-950/70 text-rose-300 border-rose-600/70 focus:ring-rose-500"
+                              : "bg-zinc-900 text-zinc-400 border-zinc-700 focus:ring-zinc-500"
+                          }`}
+                          title="Change attendance / floor status"
                         >
-                          {status === "active" && (
-                            <Badge variant="success" className="text-[10px] py-0 px-2 font-bold">
-                              🟢 Present
-                            </Badge>
-                          )}
-                          {status === "half_day" && (
-                            <Badge variant="warning" className="text-[10px] py-0 px-2 font-bold bg-amber-950 text-amber-300 border-amber-600">
-                              🟡 Half Day
-                            </Badge>
-                          )}
-                          {status === "on_leave" && (
-                            <Badge variant="destructive" className="text-[10px] py-0 px-2 font-bold bg-rose-950 text-rose-300 border-rose-600">
-                              🔴 On Leave
-                            </Badge>
-                          )}
-                          {status === "weekly_off" && (
-                            <Badge variant="outline" className="text-[10px] py-0 px-2 font-bold text-zinc-400 border-zinc-700">
-                              ⚪ Weekly Off
-                            </Badge>
-                          )}
-                        </button>
+                          <option value="active" className="bg-zinc-950 text-emerald-400">🟢 Present</option>
+                          <option value="half_day" className="bg-zinc-950 text-amber-400">🟡 Half Day</option>
+                          <option value="on_leave" className="bg-zinc-950 text-rose-400">🔴 On Leave</option>
+                          <option value="weekly_off" className="bg-zinc-950 text-zinc-400">⚪ Weekly Off</option>
+                        </select>
 
                         <span className="text-[10px] text-zinc-500 font-mono hidden xl:inline" title="Monthly attendance">
                           ({pCount}P • {hdCount}HD • {lCount}L)
@@ -359,11 +352,13 @@ export function StaffPerformance() {
                 <select
                   value={editingStaff.status}
                   onChange={(e) => setEditingStaff({ ...editingStaff, status: e.target.value as any })}
-                  className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
                 >
-                  <option value="active">Active on Floor</option>
-                  <option value="on_leave">On Leave</option>
-                  <option value="inactive">Inactive</option>
+                  <option value="active">🟢 Active on Floor (Present)</option>
+                  <option value="half_day">🟡 Half Day</option>
+                  <option value="on_leave">🔴 On Leave</option>
+                  <option value="weekly_off">⚪ Weekly Off</option>
+                  <option value="inactive">⚫ Inactive</option>
                 </select>
               </div>
             </div>
