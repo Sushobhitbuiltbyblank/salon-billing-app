@@ -209,32 +209,49 @@ export function AdminAnalyticsDashboard() {
 
     filteredInvoices.forEach((inv) => {
       inv.items?.forEach((it) => {
-        if (it.primary_staff_id && staffMap.has(it.primary_staff_id)) {
-          const entry = staffMap.get(it.primary_staff_id)!;
-          const ratio = (it.primary_split_ratio || 100) / 100;
-          const itemRev = (it.total_price || 0) * ratio;
+        if (it.staff_splits && it.staff_splits.length > 0) {
+          it.staff_splits.forEach((split) => {
+            if (split.staff_id && staffMap.has(split.staff_id)) {
+              const entry = staffMap.get(split.staff_id)!;
+              const itemRev = Number(split.amount) || 0;
 
-          if (it.item_type === "product") {
-            entry.productRev += itemRev;
-          } else {
-            entry.serviceRev += itemRev;
+              if (it.item_type === "product") {
+                entry.productRev += itemRev;
+              } else {
+                entry.serviceRev += itemRev;
+              }
+              entry.totalRev += itemRev;
+              entry.count += 1;
+            }
+          });
+        } else {
+          if (it.primary_staff_id && staffMap.has(it.primary_staff_id)) {
+            const entry = staffMap.get(it.primary_staff_id)!;
+            const ratio = (it.primary_split_ratio || 100) / 100;
+            const itemRev = (it.total_price || 0) * ratio;
+
+            if (it.item_type === "product") {
+              entry.productRev += itemRev;
+            } else {
+              entry.serviceRev += itemRev;
+            }
+            entry.totalRev += itemRev;
+            entry.count += 1;
           }
-          entry.totalRev += itemRev;
-          entry.count += 1;
-        }
 
-        if (it.secondary_staff_id && staffMap.has(it.secondary_staff_id)) {
-          const entry = staffMap.get(it.secondary_staff_id)!;
-          const ratio = (it.secondary_split_ratio || 0) / 100;
-          const itemRev = (it.total_price || 0) * ratio;
+          if (it.secondary_staff_id && staffMap.has(it.secondary_staff_id)) {
+            const entry = staffMap.get(it.secondary_staff_id)!;
+            const ratio = (it.secondary_split_ratio || 0) / 100;
+            const itemRev = (it.total_price || 0) * ratio;
 
-          if (it.item_type === "product") {
-            entry.productRev += itemRev;
-          } else {
-            entry.serviceRev += itemRev;
+            if (it.item_type === "product") {
+              entry.productRev += itemRev;
+            } else {
+              entry.serviceRev += itemRev;
+            }
+            entry.totalRev += itemRev;
+            entry.count += 1;
           }
-          entry.totalRev += itemRev;
-          entry.count += 1;
         }
       });
     });

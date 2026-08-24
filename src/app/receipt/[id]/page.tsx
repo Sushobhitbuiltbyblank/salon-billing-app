@@ -283,7 +283,18 @@ export default function PublicReceiptPage() {
                 {(invoice.items || []).map((item, idx) => {
                   const primaryStaff = staff.find((s) => s.id === item.primary_staff_id)?.name;
                   const secondaryStaff = item.secondary_staff_id ? staff.find((s) => s.id === item.secondary_staff_id)?.name : null;
-                  const staffDisplay = primaryStaff ? (secondaryStaff ? `${primaryStaff} & ${secondaryStaff}` : primaryStaff) : null;
+
+                  let staffDisplay = "";
+                  if (item.staff_splits && item.staff_splits.length > 1) {
+                    staffDisplay = item.staff_splits
+                      .map((s) => {
+                        const st = staff.find((staffMember) => staffMember.id === s.staff_id);
+                        return `${st?.name || "Staff"} (₹${s.amount})`;
+                      })
+                      .join(" + ");
+                  } else {
+                    staffDisplay = primaryStaff ? (secondaryStaff ? `${primaryStaff} & ${secondaryStaff}` : primaryStaff) : "";
+                  }
 
                   let services = item.package_services;
                   if (

@@ -89,12 +89,21 @@ export interface Customer {
   created_at?: string;
 }
 
+export interface StaffSplitAssignment {
+  staff_id: string;
+  staff_name?: string;
+  amount: number; // Allocated sales volume in ₹
+  ratio?: number; // Calculated percentage (e.g. 50%)
+  notes?: string;
+}
+
 export interface PackageServiceItem {
   service_id: string;
   service_name: string;
   price: number; // custom / allocated service amount in this package
   regular_price?: number;
   duration_mins?: number;
+  staff_splits?: StaffSplitAssignment[];
   primary_staff_id?: string;
   secondary_staff_id?: string;
   primary_split_ratio?: number;
@@ -116,11 +125,14 @@ export interface InvoiceItem {
   package_regular_price?: number;
   package_services?: PackageServiceItem[];
 
-  // Split Staff Assignment
+  // N-Staff Split Assignment with explicit amounts (₹)
+  staff_splits?: StaffSplitAssignment[];
+
+  // Backwards compatibility fields
   primary_staff_id?: string;
   secondary_staff_id?: string;
-  primary_split_ratio: number; // e.g. 100 or 50 or 60
-  secondary_split_ratio: number; // e.g. 0 or 50 or 40
+  primary_split_ratio?: number; // e.g. 100 or 50 or 60
+  secondary_split_ratio?: number; // e.g. 0 or 50 or 40
   
   notes?: string;
 }

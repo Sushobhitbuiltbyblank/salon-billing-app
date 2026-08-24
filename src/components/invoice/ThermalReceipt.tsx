@@ -148,7 +148,9 @@ export function ThermalReceipt({
                       </div>
                     ) : (
                       <div style={{ fontSize: "8.5px", color: "#555555", fontStyle: "italic" }}>
-                        {secondary ? (
+                        {item.staff_splits && item.staff_splits.length > 1 ? (
+                          <>{item.staff_splits.map((s) => `${getStaffName(s.staff_id) || "Staff"} (₹${s.amount})`).join(" + ")}</>
+                        ) : secondary ? (
                           <>{primary || "Salon Staff"} ({item.primary_split_ratio}%) + {secondary} ({item.secondary_split_ratio}%)</>
                         ) : (
                           <>{primary || "Salon Staff"}</>

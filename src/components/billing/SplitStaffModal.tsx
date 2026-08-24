@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
-import { InvoiceItem, Staff } from "@/types";
+import { InvoiceItem, Staff, StaffSplitAssignment } from "@/types";
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Users, User, Percent, Sparkles, AlertCircle } from "lucide-react";
+import { Users, User, Plus, Trash2, CheckCircle2, AlertCircle, Sparkles, Scale, RefreshCw } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 interface SplitStaffModalProps {
@@ -13,6 +13,11 @@ interface SplitStaffModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (updatedItem: Partial<InvoiceItem>) => void;
+}
+
+interface StaffSplitRow {
+  staff_id: string;
+  amount: number | string;
 }
 
 export function SplitStaffModal({
@@ -23,323 +28,438 @@ export function SplitStaffModal({
 }: SplitStaffModalProps) {
   const { staff, settings } = useApp();
 
-  const [primaryStaffId, setPrimaryStaffId] = useState<string>("");
-  const [secondaryStaffId, setSecondaryStaffId] = useState<string>("");
-  const [primaryRatio, setPrimaryRatio] = useState<number>(100);
-  const [secondaryRatio, setSecondaryRatio] = useState<number>(0);
+  const [splitRows, setSplitRows] = useState<StaffSplitRow[]>([]);
+
+  const itemTotal = useMemo(() => {
+    if (!item) return 0;
+    return item.total_price || (item.unit_price * item.quantity);
+  }, [item]);
+
+  const isProduct = item?.item_type === "product";
 
   useEffect(() => {
     if (open && item) {
-      setPrimaryStaffId(item.primary_staff_id || "");
-      setSecondaryStaffId(item.secondary_staff_id || "");
-      setPrimaryRatio(item.primary_split_ratio ?? 100);
-      setSecondaryRatio(item.secondary_split_ratio ?? 0);
+      const currentItemTotal = item.total_price || (item.unit_price * item.quantity);
+
+      if (item.staff_splits && item.staff_splits.length > 0) {
+        setSplitRows(
+          item.staff_splits.map((s) => ({
+            staff_id: s.staff_id,
+            amount: s.amount,
+          }))
+        );
+      } else if (item.secondary_staff_id) {
+        const pRatio = item.primary_split_ratio ?? 50;
+        const pAmount = Math.round((currentItemTotal * pRatio) / 100);
+        const sAmount = currentItemTotal - pAmount;
+        setSplitRows([
+          { staff_id: item.primary_staff_id || "", amount: pAmount },
+          { staff_id: item.secondary_staff_id, amount: sAmount },
+        ]);
+      } else if (item.primary_staff_id) {
+        setSplitRows([{ staff_id: item.primary_staff_id, amount: currentItemTotal }]);
+      } else {
+        // Find first active/available staff
+        const firstActive = staff.find((s) => s.status === "active" || s.status === "half_day");
+        setSplitRows([{ staff_id: firstActive?.id || "", amount: currentItemTotal }]);
+      }
     }
   }, [open, item?.id]);
 
   if (!item) return null;
 
-  const handleRatioChange = (pRatio: number) => {
-    const clampedPrimary = Math.max(0, Math.min(100, pRatio));
-    setPrimaryRatio(clampedPrimary);
-    setSecondaryRatio(100 - clampedPrimary);
+  // Calculate sum of currently allocated amounts
+  const allocatedSum = splitRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const remainingAmount = itemTotal - allocatedSum;
+  const isBalanced = allocatedSum === itemTotal;
+  const isOverallocated = allocatedSum > itemTotal;
+  const isUnderallocated = allocatedSum < itemTotal;
+
+  const handleAddStylist = () => {
+    // Pick an unselected staff if possible
+    const selectedIds = new Set(splitRows.map((r) => r.staff_id));
+    const nextAvailable = staff.find(
+      (s) => !selectedIds.has(s.id) && (s.status === "active" || s.status === "half_day")
+    );
+
+    const nextAmount = Math.max(0, remainingAmount);
+    setSplitRows((prev) => [
+      ...prev,
+      {
+        staff_id: nextAvailable ? nextAvailable.id : "",
+        amount: nextAmount === 0 ? "" : nextAmount,
+      },
+    ]);
   };
 
-  const handlePresetClick = (pRatio: number, sRatio: number) => {
-    setPrimaryRatio(pRatio);
-    setSecondaryRatio(sRatio);
+  const handleRemoveStylist = (indexToRemove: number) => {
+    if (splitRows.length <= 1) return;
+    setSplitRows((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
-  const primaryStaff = staff.find((s) => s.id === primaryStaffId);
-  const secondaryStaff = staff.find((s) => s.id === secondaryStaffId);
+  const handleStaffChange = (index: number, newStaffId: string) => {
+    setSplitRows((prev) =>
+      prev.map((row, idx) => (idx === index ? { ...row, staff_id: newStaffId } : row))
+    );
+  };
 
-  const isProduct = item.item_type === "product";
+  const handleAmountChange = (index: number, val: string) => {
+    const numericVal = val === "" ? "" : Math.max(0, Number(val));
+    setSplitRows((prev) =>
+      prev.map((row, idx) => (idx === index ? { ...row, amount: numericVal } : row))
+    );
+  };
 
-  // Incentive Calculations
-  const itemTotal = item.total_price || item.unit_price * item.quantity;
-  const primarySalesVolume = (itemTotal * primaryRatio) / 100;
-  const secondarySalesVolume = (itemTotal * secondaryRatio) / 100;
+  // Helper: Split equally among all rows
+  const handleEqualSplit = () => {
+    if (splitRows.length === 0) return;
+    const count = splitRows.length;
+    const base = Math.floor(itemTotal / count);
+    const remainder = itemTotal - (base * count);
 
-  // Primary Staff Incentive
-  let primaryCommission = 0;
-  let primaryRateLabel = "";
-  if (primaryStaff) {
+    setSplitRows((prev) =>
+      prev.map((row, idx) => ({
+        ...row,
+        amount: idx === 0 ? base + remainder : base,
+      }))
+    );
+  };
+
+  // Helper: Auto fill remaining amount into this row
+  const handleAutoFillRemaining = (index: number) => {
+    const sumOthers = splitRows
+      .filter((_, idx) => idx !== index)
+      .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+    const fillValue = Math.max(0, itemTotal - sumOthers);
+    setSplitRows((prev) =>
+      prev.map((row, idx) => (idx === index ? { ...row, amount: fillValue } : row))
+    );
+  };
+
+  // Helper: Reset to single staff
+  const handleResetSingle = () => {
+    const leadId = splitRows[0]?.staff_id || staff[0]?.id || "";
+    setSplitRows([{ staff_id: leadId, amount: itemTotal }]);
+  };
+
+  // Calculate incentive for a specific split row
+  const calculateRowIncentive = (staffId: string, rowAmount: number | string) => {
+    const numAmount = Number(rowAmount) || 0;
+    if (!staffId || numAmount <= 0) return { commission: 0, label: "" };
+
+    const stylist = staff.find((s) => s.id === staffId);
+    if (!stylist) return { commission: 0, label: "" };
+
     const rate = isProduct
-      ? (primaryStaff.product_commission_rate ?? primaryStaff.commission_rate)
-      : primaryStaff.commission_rate;
+      ? (stylist.product_commission_rate ?? stylist.commission_rate)
+      : stylist.commission_rate;
     const type = isProduct
-      ? (primaryStaff.product_commission_type ?? primaryStaff.commission_type ?? "percent")
-      : (primaryStaff.commission_type ?? "percent");
+      ? (stylist.product_commission_type ?? stylist.commission_type ?? "percent")
+      : (stylist.commission_type ?? "percent");
 
     if (type === "fixed") {
-      primaryCommission = (rate * item.quantity * primaryRatio) / 100;
-      primaryRateLabel = `${formatCurrency(rate, settings.currency_symbol)} Flat`;
+      const comm = itemTotal > 0 ? (rate * item.quantity * numAmount) / itemTotal : rate * item.quantity;
+      return {
+        commission: comm,
+        label: `${formatCurrency(rate, settings.currency_symbol)} Flat`,
+      };
     } else {
-      primaryCommission = (primarySalesVolume * rate) / 100;
-      primaryRateLabel = `${rate}% Rate`;
+      const comm = (numAmount * rate) / 100;
+      return {
+        commission: comm,
+        label: `${rate}% Rate`,
+      };
     }
-  }
-
-  // Secondary Staff Incentive
-  let secondaryCommission = 0;
-  let secondaryRateLabel = "";
-  if (secondaryStaff) {
-    const rate = isProduct
-      ? (secondaryStaff.product_commission_rate ?? secondaryStaff.commission_rate)
-      : secondaryStaff.commission_rate;
-    const type = isProduct
-      ? (secondaryStaff.product_commission_type ?? secondaryStaff.commission_type ?? "percent")
-      : (secondaryStaff.commission_type ?? "percent");
-
-    if (type === "fixed") {
-      secondaryCommission = (rate * item.quantity * secondaryRatio) / 100;
-      secondaryRateLabel = `${formatCurrency(rate, settings.currency_symbol)} Flat`;
-    } else {
-      secondaryCommission = (secondarySalesVolume * rate) / 100;
-      secondaryRateLabel = `${rate}% Rate`;
-    }
-  }
+  };
 
   const handleConfirm = () => {
-    if ((item.item_type === "service" || item.item_type === "package") && !primaryStaffId) {
-      alert("⚠️ Stylist Selection Required\n\nPlease select a primary stylist for this service / package.");
+    // Validation 1: At least 1 stylist selected
+    if (splitRows.length === 0 || !splitRows[0].staff_id) {
+      alert("⚠️ Stylist Selection Required\n\nPlease select at least one stylist for this item.");
       return;
     }
 
-    onSave({
-      primary_staff_id: primaryStaffId || undefined,
-      secondary_staff_id: secondaryStaffId ? secondaryStaffId : undefined,
-      primary_split_ratio: primaryRatio,
-      secondary_split_ratio: secondaryStaffId ? secondaryRatio : 0,
+    // Validation 2: All rows must have a stylist selected
+    const unselectedRow = splitRows.findIndex((r) => !r.staff_id);
+    if (unselectedRow !== -1) {
+      alert(`⚠️ Incomplete Stylist\n\nPlease select a stylist for Stylist #${unselectedRow + 1} or remove the row.`);
+      return;
+    }
+
+    // Validation 3: Mismatched amounts check
+    if (!isBalanced) {
+      const confirmMismatch = window.confirm(
+        `⚠️ Total Amount Mismatch\n\nTotal Service Price: ${formatCurrency(itemTotal, settings.currency_symbol)}\nAllocated to Staff: ${formatCurrency(allocatedSum, settings.currency_symbol)}\n\nDo you want to save anyway?`
+      );
+      if (!confirmMismatch) return;
+    }
+
+    // Prepare staff_splits array
+    const staffSplits: StaffSplitAssignment[] = splitRows.map((r) => {
+      const stylist = staff.find((s) => s.id === r.staff_id);
+      const amt = Number(r.amount) || 0;
+      const ratio = itemTotal > 0 ? Math.round((amt / itemTotal) * 100) : 0;
+      return {
+        staff_id: r.staff_id,
+        staff_name: stylist?.name,
+        amount: amt,
+        ratio,
+      };
     });
+
+    const primaryRow = splitRows[0];
+    const secondaryRow = splitRows[1];
+
+    const primaryRatio = itemTotal > 0 ? Math.round(((Number(primaryRow?.amount) || 0) / itemTotal) * 100) : 100;
+    const secondaryRatio = itemTotal > 0 && secondaryRow ? Math.round(((Number(secondaryRow?.amount) || 0) / itemTotal) * 100) : 0;
+
+    onSave({
+      staff_splits: staffSplits,
+      primary_staff_id: primaryRow?.staff_id || undefined,
+      secondary_staff_id: secondaryRow ? secondaryRow.staff_id : undefined,
+      primary_split_ratio: primaryRatio,
+      secondary_split_ratio: secondaryRatio,
+    });
+
     onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="md">
+    <Dialog open={open} onOpenChange={onOpenChange} maxWidth="lg">
       <DialogHeader>
-        <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
-            <Users className="h-5 w-5" />
-          </div>
-          <div>
-            <DialogTitle>Split Staff & Commission</DialogTitle>
-            <DialogDescription>
-              Assign 1 or 2 stylists for <span className="text-white font-semibold">{item.item_name}</span>
-            </DialogDescription>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-10 w-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30 shadow-lg">
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle>Split Staff & Commission by Amount</DialogTitle>
+              <DialogDescription>
+                Assign multiple staff members and allocate custom ₹ amounts for <span className="text-white font-semibold">{item.item_name}</span>
+              </DialogDescription>
+            </div>
           </div>
         </div>
       </DialogHeader>
 
-      <div className="space-y-4 pt-4">
-        {/* ITEM PRICE BANNER */}
-        <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/80 border border-zinc-800">
+      <div className="space-y-4 pt-2">
+        {/* ITEM PRICE & LIVE ALLOCATION BANNER */}
+        <div className="p-3.5 rounded-2xl bg-zinc-950/90 border border-zinc-800 shadow-inner flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <span className="text-[11px] text-zinc-400">Line Item Total</span>
-            <div className="text-sm font-bold text-white">{item.item_name}</div>
+            <span className="text-[11px] text-zinc-400 font-medium">Billed Item Total</span>
+            <div className="text-base font-bold text-white flex items-center gap-2">
+              <span>{item.item_name}</span>
+              <span className="text-xs font-mono text-zinc-400">(Qty: {item.quantity})</span>
+            </div>
           </div>
-          <div className="text-right">
-            <span className="text-[10px] text-zinc-500">Service Value</span>
-            <div className="text-base font-extrabold text-emerald-400 font-mono">
-              {formatCurrency(itemTotal, settings.currency_symbol)}
+
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Total Value</span>
+              <div className="text-lg font-black text-emerald-400 font-mono">
+                {formatCurrency(itemTotal, settings.currency_symbol)}
+              </div>
+            </div>
+
+            <div className="h-8 w-px bg-zinc-800 hidden sm:block" />
+
+            <div className="text-right">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold">Total Allocated</span>
+              <div
+                className={`text-lg font-black font-mono ${
+                  isBalanced
+                    ? "text-emerald-400"
+                    : isOverallocated
+                    ? "text-rose-400"
+                    : "text-amber-400"
+                }`}
+              >
+                {formatCurrency(allocatedSum, settings.currency_symbol)}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* PRIMARY STYLIST SELECTOR */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-purple-300 flex items-center gap-1.5">
-              <User className="h-3.5 w-3.5" />
-              Primary Stylist (Lead) *
-            </label>
-            {primaryStaff && (
-              <span className="text-[11px] text-purple-400 font-bold">
-                Incentive: {primaryRateLabel}
-              </span>
+        {/* STATUS BALANCE PILL & QUICK HELPERS */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-xs">
+          {/* BALANCE STATUS */}
+          <div className="flex items-center gap-2">
+            {isBalanced ? (
+              <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                <CheckCircle2 className="h-4 w-4" />
+                <span>100% Balanced ({formatCurrency(itemTotal, settings.currency_symbol)} allocated across {splitRows.length} staff)</span>
+              </div>
+            ) : isOverallocated ? (
+              <div className="flex items-center gap-1.5 text-rose-400 font-bold">
+                <AlertCircle className="h-4 w-4" />
+                <span>Overallocated by {formatCurrency(Math.abs(remainingAmount), settings.currency_symbol)}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                <AlertCircle className="h-4 w-4 animate-pulse" />
+                <span>{formatCurrency(remainingAmount, settings.currency_symbol)} remaining unallocated</span>
+              </div>
             )}
           </div>
-          <select
-            value={primaryStaffId}
-            onChange={(e) => setPrimaryStaffId(e.target.value)}
-            className="w-full h-10 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="">-- Select Stylist --</option>
-            {staff.map((s) => {
-              const rate = isProduct ? (s.product_commission_rate ?? s.commission_rate) : s.commission_rate;
-              const type = isProduct ? (s.product_commission_type ?? s.commission_type ?? "percent") : (s.commission_type ?? "percent");
-              const label = type === "fixed" ? `${settings.currency_symbol}${rate} Flat` : `${rate}%`;
-              return (
-                <option
-                  key={s.id}
-                  value={s.id}
-                  disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
-                >
-                  {s.name} ({s.role}) - {label}{s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
-                </option>
-              );
-            })}
-          </select>
-        </div>
 
-        {/* SECONDARY STYLIST (ASSISTANT / CO-STYLIST) */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-pink-300 flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5" />
-              Secondary Stylist / Assistant (Optional)
-            </label>
-            {secondaryStaff && (
-              <span className="text-[11px] text-pink-400 font-bold">
-                Incentive: {secondaryRateLabel}
-              </span>
+          {/* QUICK DISTRIBUTION SHORTCUTS */}
+          <div className="flex items-center gap-1.5">
+            {splitRows.length > 1 && (
+              <button
+                type="button"
+                onClick={handleEqualSplit}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-[11px] font-semibold transition-colors cursor-pointer"
+                title="Divide total equally among all staff"
+              >
+                <Scale className="h-3 w-3 text-purple-400" />
+                <span>Equal Split (÷ {splitRows.length})</span>
+              </button>
+            )}
+
+            {splitRows.length > 1 && (
+              <button
+                type="button"
+                onClick={handleResetSingle}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-[11px] transition-colors cursor-pointer"
+                title="Reset to 1 primary stylist"
+              >
+                <RefreshCw className="h-3 w-3" />
+                <span>Reset</span>
+              </button>
             )}
           </div>
-          <select
-            value={secondaryStaffId}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSecondaryStaffId(val);
-              if (val && primaryRatio === 100) {
-                // Default to 60/40 when secondary stylist is chosen
-                setPrimaryRatio(60);
-                setSecondaryRatio(40);
-              } else if (!val) {
-                setPrimaryRatio(100);
-                setSecondaryRatio(0);
-              }
-            }}
-            className="w-full h-10 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-100 focus:outline-none focus:ring-2 focus:ring-pink-500"
-          >
-            <option value="">-- None (Single Stylist 100%) --</option>
-            {staff
-              .filter((s) => s.id !== primaryStaffId)
-              .map((s) => {
-                const rate = isProduct ? (s.product_commission_rate ?? s.commission_rate) : s.commission_rate;
-                const type = isProduct ? (s.product_commission_type ?? s.commission_type ?? "percent") : (s.commission_type ?? "percent");
-                const label = type === "fixed" ? `${settings.currency_symbol}${rate} Flat` : `${rate}%`;
-                return (
-                  <option
-                    key={s.id}
-                    value={s.id}
-                    disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
-                  >
-                    {s.name} ({s.role}) - {label}{s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
-                  </option>
-                );
-              })}
-          </select>
         </div>
 
-        {/* SPLIT RATIO PRESETS AND SLIDER (WHEN SECONDARY IS SELECTED) */}
-        {secondaryStaffId && (
-          <div className="space-y-3 p-3.5 rounded-xl bg-zinc-950/90 border border-zinc-800/90 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between text-xs font-semibold text-zinc-300">
-              <span>Split Percentage Ratio</span>
-              <div className="font-mono text-purple-300 font-bold">
-                {primaryRatio}% : {secondaryRatio}%
-              </div>
-            </div>
+        {/* N-STAFF ROWS LIST */}
+        <div className="space-y-2.5 max-h-[48vh] overflow-y-auto pr-1">
+          {splitRows.map((row, idx) => {
+            const stylist = staff.find((s) => s.id === row.staff_id);
+            const numAmount = Number(row.amount) || 0;
+            const pct = itemTotal > 0 ? ((numAmount / itemTotal) * 100).toFixed(1) : "0";
+            const rowIncentive = calculateRowIncentive(row.staff_id, row.amount);
 
-            {/* PRESET CHIPS */}
-            <div className="grid grid-cols-4 gap-1.5">
-              {[
-                { p: 50, s: 50, label: "50 / 50" },
-                { p: 60, s: 40, label: "60 / 40" },
-                { p: 70, s: 30, label: "70 / 30" },
-                { p: 80, s: 20, label: "80 / 20" },
-              ].map((preset) => {
-                const isActive = primaryRatio === preset.p && secondaryRatio === preset.s;
-                return (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    onClick={() => handlePresetClick(preset.p, preset.s)}
-                    className={`py-1 text-xs font-semibold rounded-lg border transition-all ${
-                      isActive
-                        ? "bg-purple-600 border-purple-500 text-white shadow-sm"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
+            return (
+              <div
+                key={idx}
+                className="p-3 rounded-2xl bg-zinc-950/90 border border-zinc-800/90 hover:border-purple-500/40 transition-all space-y-2"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  {/* STYLIST SELECTOR */}
+                  <div className="flex items-center gap-2.5 flex-1 min-w-[220px]">
+                    <div
+                      className="h-8 w-8 rounded-xl flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-md"
+                      style={{ backgroundColor: stylist?.color || "#8b5cf6" }}
+                    >
+                      {idx + 1}
+                    </div>
 
-            {/* CUSTOM SLIDER */}
-            <div className="pt-1">
-              <input
-                type="range"
-                min="10"
-                max="90"
-                step="5"
-                value={primaryRatio}
-                onChange={(e) => handleRatioChange(Number(e.target.value))}
-                className="w-full accent-purple-500 cursor-pointer h-2 bg-zinc-800 rounded-lg"
-              />
-              <div className="flex justify-between text-[10px] text-zinc-500 font-mono mt-1">
-                <span>Primary ({primaryRatio}%)</span>
-                <span>Secondary ({secondaryRatio}%)</span>
-              </div>
-            </div>
-          </div>
-        )}
+                    <div className="flex-1">
+                      <select
+                        value={row.staff_id}
+                        onChange={(e) => handleStaffChange(idx, e.target.value)}
+                        className="w-full h-9 px-2.5 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white font-medium focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      >
+                        <option value="">-- Select Stylist #{idx + 1} * --</option>
+                        {staff.map((s) => (
+                          <option
+                            key={s.id}
+                            value={s.id}
+                            disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
+                          >
+                            {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
-        {/* INCENTIVE PREVIEW CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-          {/* PRIMARY BREAKDOWN */}
-          <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-800/30">
-            <div className="text-[10px] uppercase tracking-wider text-purple-400 font-bold">
-              Primary: {primaryStaff ? primaryStaff.name : "Not Selected"}
-            </div>
-            <div className="flex items-baseline justify-between mt-1">
-              <span className="text-xs text-zinc-400">Share ({primaryRatio}%)</span>
-              <span className="text-xs font-semibold text-zinc-200 font-mono">
-                {formatCurrency(primarySalesVolume, settings.currency_symbol)}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-purple-900/30">
-              <span className="text-xs text-purple-300 font-medium">Incentive ({primaryRateLabel || "0%"})</span>
-              <span className="text-xs font-bold text-emerald-400 font-mono">
-                {formatCurrency(primaryCommission, settings.currency_symbol)}
-              </span>
-            </div>
-          </div>
+                  {/* AMOUNT INPUT & PERCENTAGE */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] font-semibold text-zinc-400">Amount:</span>
+                      <div className="relative w-28">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-emerald-400">
+                          ₹
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="10"
+                          placeholder="0"
+                          value={row.amount === "" ? "" : row.amount}
+                          onChange={(e) => handleAmountChange(idx, e.target.value)}
+                          className="w-full h-9 pl-6 pr-2 text-xs font-mono font-bold text-emerald-400 bg-zinc-900 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
 
-          {/* SECONDARY BREAKDOWN */}
-          {secondaryStaffId ? (
-            <div className="p-3 rounded-xl bg-pink-950/20 border border-pink-800/30">
-              <div className="text-[10px] uppercase tracking-wider text-pink-400 font-bold">
-                Secondary: {secondaryStaff ? secondaryStaff.name : "Not Selected"}
+                    {/* PERCENTAGE PILL */}
+                    <div className="px-2 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] font-mono font-bold text-purple-300 min-w-[50px] text-center">
+                      {pct}%
+                    </div>
+
+                    {/* AUTO FILL BUTTON IF REMAINING */}
+                    {remainingAmount !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleAutoFillRemaining(idx)}
+                        className="px-2 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[10px] text-amber-400 font-bold hover:text-amber-300 transition-colors"
+                        title="Auto-fill remaining balance into this stylist"
+                      >
+                        Auto-fill
+                      </button>
+                    )}
+
+                    {/* REMOVE BUTTON */}
+                    {splitRows.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveStylist(idx)}
+                        className="h-9 w-9 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
+                        title="Remove stylist from split"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* INCENTIVE CALCULATION SUMMARY BAR FOR THIS ROW */}
+                {stylist && (
+                  <div className="flex items-center justify-between text-[11px] bg-purple-950/20 border border-purple-900/30 px-3 py-1.5 rounded-xl text-purple-200">
+                    <span className="text-zinc-400">
+                      Tier: <span className="text-purple-300 font-semibold">{rowIncentive.label || "0%"}</span>
+                    </span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      Earned Commission: {formatCurrency(rowIncentive.commission, settings.currency_symbol)}
+                    </span>
+                  </div>
+                )}
               </div>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-xs text-zinc-400">Share ({secondaryRatio}%)</span>
-                <span className="text-xs font-semibold text-zinc-200 font-mono">
-                  {formatCurrency(secondarySalesVolume, settings.currency_symbol)}
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-pink-900/30">
-                <span className="text-xs text-pink-300 font-medium">Incentive ({secondaryRateLabel || "0%"})</span>
-                <span className="text-xs font-bold text-emerald-400 font-mono">
-                  {formatCurrency(secondaryCommission, settings.currency_symbol)}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-center text-center text-zinc-500 text-xs">
-              Single stylist assigned (100% volume)
-            </div>
-          )}
+            );
+          })}
         </div>
+
+        {/* ADD ANOTHER STYLIST BUTTON */}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleAddStylist}
+          className="w-full h-9 border-dashed border-zinc-700 bg-zinc-950/40 hover:bg-zinc-900 text-purple-300 hover:text-white text-xs gap-1.5 font-bold"
+        >
+          <Plus className="h-4 w-4" />
+          <span>+ Add Another Stylist to Split</span>
+        </Button>
       </div>
 
-      <DialogFooter>
-        <Button variant="secondary" onClick={() => onOpenChange(false)}>
+      <DialogFooter className="mt-4 border-t border-zinc-800/80 pt-3">
+        <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
           Cancel
         </Button>
-        <Button variant="accent" onClick={handleConfirm}>
-          Save & Apply Split
+        <Button variant="glow" type="button" onClick={handleConfirm} className="gap-1.5 font-bold">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>Apply Split Amount</span>
         </Button>
       </DialogFooter>
     </Dialog>

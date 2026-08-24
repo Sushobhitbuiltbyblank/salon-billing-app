@@ -723,11 +723,11 @@ export function EditInvoiceModal() {
                               setIsSplitModalOpen(true);
                             }}
                             className={`p-1.5 rounded-lg border text-[10px] shrink-0 transition-all ${
-                              item.secondary_staff_id
-                                ? "bg-pink-950/60 border-pink-700 text-pink-300"
+                              (item.staff_splits && item.staff_splits.length > 1) || item.secondary_staff_id
+                                ? "bg-purple-950/70 border-purple-600/80 text-purple-300 shadow-sm"
                                 : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white"
                             }`}
-                            title="Split staff commission"
+                            title="Split staff commission by amount"
                           >
                             <Users className="h-3 w-3" />
                           </button>

@@ -476,55 +476,80 @@ export function CartItemList() {
               /* REGULAR SERVICE / PRODUCT STYLIST & SPLIT ROW */
               <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-zinc-900/60 flex-wrap">
                 {/* STYLIST SELECTOR & SPLIT BUTTON */}
-                <div className="flex items-center gap-1.5 flex-1 min-w-[220px]">
-                  <User
-                    className={`h-3.5 w-3.5 shrink-0 ${
-                      isStylistMissing ? "text-amber-400" : "text-purple-400"
-                    }`}
-                  />
-                  <select
-                    value={item.primary_staff_id || ""}
-                    onChange={(e) =>
-                      updateDraftItem(item.id, { primary_staff_id: e.target.value || undefined })
-                    }
-                    className={`h-7 px-2 text-xs rounded-lg font-medium flex-1 max-w-[200px] transition-all focus:outline-none focus:ring-1 ${
-                      isStylistMissing
-                        ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
-                        : "bg-zinc-900 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
-                    }`}
-                  >
-                    <option value="">
-                      {isService ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
-                    </option>
-                    {staff.map((s) => (
-                      <option
-                        key={s.id}
-                        value={s.id}
-                        disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
+                <div className="flex items-center gap-1.5 flex-1 min-w-[220px] flex-wrap">
+                  {item.staff_splits && item.staff_splits.length > 1 ? (
+                    /* MULTI-STAFF SPLIT DISPLAY */
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSplit(item)}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold bg-purple-950/70 border-purple-600/80 text-purple-200 shadow-sm hover:bg-purple-900/70 transition-all cursor-pointer"
+                      title="Click to modify staff split amounts"
+                    >
+                      <Users className="h-3.5 w-3.5 text-purple-400" />
+                      <span className="font-bold">
+                        Split ({item.staff_splits.length} Staff):
+                      </span>
+                      <span className="font-mono text-zinc-300">
+                        {item.staff_splits
+                          .map((s) => {
+                            const st = staff.find((staffMember) => staffMember.id === s.staff_id);
+                            return `${st?.name || "Staff"} (₹${s.amount})`;
+                          })
+                          .join(" + ")}
+                      </span>
+                    </button>
+                  ) : (
+                    /* SINGLE STYLIST DROPDOWN */
+                    <>
+                      <User
+                        className={`h-3.5 w-3.5 shrink-0 ${
+                          isStylistMissing ? "text-amber-400" : "text-purple-400"
+                        }`}
+                      />
+                      <select
+                        value={item.primary_staff_id || ""}
+                        onChange={(e) => {
+                          const newStaffId = e.target.value || undefined;
+                          const currentTotal = item.total_price || (item.unit_price * item.quantity);
+                          updateDraftItem(item.id, {
+                            primary_staff_id: newStaffId,
+                            staff_splits: newStaffId
+                              ? [{ staff_id: newStaffId, amount: currentTotal, ratio: 100 }]
+                              : undefined,
+                          });
+                        }}
+                        className={`h-7 px-2 text-xs rounded-lg font-medium flex-1 max-w-[200px] transition-all focus:outline-none focus:ring-1 ${
+                          isStylistMissing
+                            ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
+                            : "bg-zinc-900 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
+                        }`}
                       >
-                        {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
-                      </option>
-                    ))}
-                  </select>
+                        <option value="">
+                          {isService ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
+                        </option>
+                        {staff.map((s) => (
+                          <option
+                            key={s.id}
+                            value={s.id}
+                            disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
+                          >
+                            {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
+                          </option>
+                        ))}
+                      </select>
 
-                  {/* SPLIT COMMISSION TRIGGER */}
-                  <button
-                    type="button"
-                    onClick={() => handleOpenSplit(item)}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-medium transition-all ${
-                      item.secondary_staff_id
-                        ? "bg-pink-950/60 border-pink-700/60 text-pink-300 shadow-sm"
-                        : "bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                    title="Split commission between 2 stylists"
-                  >
-                    <Users className="h-3 w-3" />
-                    <span>
-                      {item.secondary_staff_id
-                        ? `Split (${item.primary_split_ratio}% / ${item.secondary_split_ratio}%)`
-                        : "Split (2 Staff)"}
-                    </span>
-                  </button>
+                      {/* SPLIT COMMISSION TRIGGER */}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSplit(item)}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-medium transition-all bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-purple-300 hover:text-white cursor-pointer"
+                        title="Split commission between multiple staff by amount"
+                      >
+                        <Users className="h-3 w-3" />
+                        <span>Split Staff</span>
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 {/* REMOVE BUTTON */}

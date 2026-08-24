@@ -48,13 +48,21 @@ export function calculateInvoiceTotals(params: {
   };
 }
 
+export interface IndividualStaffCommission {
+  staffId: string;
+  staffName?: string;
+  salesVolume: number;
+  commission: number;
+  ratio: number;
+}
+
 export interface LineItemCommission {
+  splits: IndividualStaffCommission[];
   primaryStaffId?: string;
   primaryStaffName?: string;
   primaryCommission: number;
   primarySplitRatio: number;
   primarySalesVolume: number;
-  
   secondaryStaffId?: string;
   secondaryStaffName?: string;
   secondaryCommission: number;
@@ -66,65 +74,110 @@ export function calculateItemStaffCommissions(
   item: InvoiceItem,
   staffList: Staff[]
 ): LineItemCommission {
-  const primaryStaff = staffList.find((s) => s.id === item.primary_staff_id);
-  const secondaryStaff = staffList.find((s) => s.id === item.secondary_staff_id);
-
-  const primaryRatio = item.primary_split_ratio || 100;
-  const secondaryRatio = item.secondary_split_ratio || 0;
   const isProduct = item.item_type === "product";
+  const itemTotal = item.total_price || (item.unit_price * item.quantity);
+  const splits: IndividualStaffCommission[] = [];
 
-  // Sales Volume allocated to each staff member
-  const primarySalesVolume = (item.total_price * primaryRatio) / 100;
-  const secondarySalesVolume = (item.total_price * secondaryRatio) / 100;
+  if (item.staff_splits && item.staff_splits.length > 0) {
+    // Process N-Staff Split Assignments with explicit ₹ amounts
+    item.staff_splits.forEach((split) => {
+      const staffMember = staffList.find((s) => s.id === split.staff_id);
+      const allocatedAmount = Number(split.amount) || 0;
+      const ratio = itemTotal > 0 ? (allocatedAmount / itemTotal) * 100 : 0;
 
-  // Primary Staff incentive calculation
-  let primaryCommission = 0;
-  if (primaryStaff) {
-    const rate = isProduct
-      ? (primaryStaff.product_commission_rate ?? primaryStaff.commission_rate)
-      : primaryStaff.commission_rate;
-    const type = isProduct
-      ? (primaryStaff.product_commission_type ?? primaryStaff.commission_type ?? "percent")
-      : (primaryStaff.commission_type ?? "percent");
+      let commission = 0;
+      if (staffMember) {
+        const rate = isProduct
+          ? (staffMember.product_commission_rate ?? staffMember.commission_rate)
+          : staffMember.commission_rate;
+        const type = isProduct
+          ? (staffMember.product_commission_type ?? staffMember.commission_type ?? "percent")
+          : (staffMember.commission_type ?? "percent");
 
-    if (type === "fixed") {
-      // Fixed incentive amount per item multiplied by quantity and split ratio
-      primaryCommission = (rate * item.quantity * primaryRatio) / 100;
-    } else {
-      // Percentage of allocated sales volume
-      primaryCommission = (primarySalesVolume * rate) / 100;
+        if (type === "fixed") {
+          commission = itemTotal > 0 ? (rate * item.quantity * allocatedAmount) / itemTotal : rate * item.quantity;
+        } else {
+          commission = (allocatedAmount * rate) / 100;
+        }
+      }
+
+      splits.push({
+        staffId: split.staff_id,
+        staffName: staffMember?.name || split.staff_name,
+        salesVolume: allocatedAmount,
+        commission,
+        ratio,
+      });
+    });
+  } else {
+    // Backwards compatibility with primary and secondary staff
+    const primaryStaff = staffList.find((s) => s.id === item.primary_staff_id);
+    const secondaryStaff = staffList.find((s) => s.id === item.secondary_staff_id);
+    const primaryRatio = item.primary_split_ratio ?? 100;
+    const secondaryRatio = item.secondary_split_ratio ?? 0;
+
+    if (primaryStaff) {
+      const primarySalesVolume = (itemTotal * primaryRatio) / 100;
+      const rate = isProduct
+        ? (primaryStaff.product_commission_rate ?? primaryStaff.commission_rate)
+        : primaryStaff.commission_rate;
+      const type = isProduct
+        ? (primaryStaff.product_commission_type ?? primaryStaff.commission_type ?? "percent")
+        : (primaryStaff.commission_type ?? "percent");
+
+      const primaryCommission =
+        type === "fixed"
+          ? (rate * item.quantity * primaryRatio) / 100
+          : (primarySalesVolume * rate) / 100;
+
+      splits.push({
+        staffId: primaryStaff.id,
+        staffName: primaryStaff.name,
+        salesVolume: primarySalesVolume,
+        commission: primaryCommission,
+        ratio: primaryRatio,
+      });
+    }
+
+    if (secondaryStaff) {
+      const secondarySalesVolume = (itemTotal * secondaryRatio) / 100;
+      const rate = isProduct
+        ? (secondaryStaff.product_commission_rate ?? secondaryStaff.commission_rate)
+        : secondaryStaff.commission_rate;
+      const type = isProduct
+        ? (secondaryStaff.product_commission_type ?? secondaryStaff.commission_type ?? "percent")
+        : (secondaryStaff.commission_type ?? "percent");
+
+      const secondaryCommission =
+        type === "fixed"
+          ? (rate * item.quantity * secondaryRatio) / 100
+          : (secondarySalesVolume * rate) / 100;
+
+      splits.push({
+        staffId: secondaryStaff.id,
+        staffName: secondaryStaff.name,
+        salesVolume: secondarySalesVolume,
+        commission: secondaryCommission,
+        ratio: secondaryRatio,
+      });
     }
   }
 
-  // Secondary Staff incentive calculation
-  let secondaryCommission = 0;
-  if (secondaryStaff) {
-    const rate = isProduct
-      ? (secondaryStaff.product_commission_rate ?? secondaryStaff.commission_rate)
-      : secondaryStaff.commission_rate;
-    const type = isProduct
-      ? (secondaryStaff.product_commission_type ?? secondaryStaff.commission_type ?? "percent")
-      : (secondaryStaff.commission_type ?? "percent");
-
-    if (type === "fixed") {
-      secondaryCommission = (rate * item.quantity * secondaryRatio) / 100;
-    } else {
-      secondaryCommission = (secondarySalesVolume * rate) / 100;
-    }
-  }
+  const primary = splits[0];
+  const secondary = splits[1];
 
   return {
-    primaryStaffId: primaryStaff?.id,
-    primaryStaffName: primaryStaff?.name,
-    primaryCommission,
-    primarySplitRatio: primaryRatio,
-    primarySalesVolume,
-    
-    secondaryStaffId: secondaryStaff?.id,
-    secondaryStaffName: secondaryStaff?.name,
-    secondaryCommission,
-    secondarySplitRatio: secondaryRatio,
-    secondarySalesVolume,
+    splits,
+    primaryStaffId: primary?.staffId,
+    primaryStaffName: primary?.staffName,
+    primaryCommission: primary?.commission || 0,
+    primarySplitRatio: primary?.ratio || 100,
+    primarySalesVolume: primary?.salesVolume || 0,
+    secondaryStaffId: secondary?.staffId,
+    secondaryStaffName: secondary?.staffName,
+    secondaryCommission: secondary?.commission || 0,
+    secondarySplitRatio: secondary?.ratio || 0,
+    secondarySalesVolume: secondary?.salesVolume || 0,
   };
 }
 
@@ -161,7 +214,29 @@ export function calculateStaffPerformance(
           item.package_services.length > 0
         ) {
           item.package_services.forEach((pkgSvc) => {
-            if (pkgSvc.primary_staff_id && summaryMap.has(pkgSvc.primary_staff_id)) {
+            if (pkgSvc.staff_splits && pkgSvc.staff_splits.length > 0) {
+              pkgSvc.staff_splits.forEach((split) => {
+                if (summaryMap.has(split.staff_id)) {
+                  const staffMember = staffList.find((s) => s.id === split.staff_id);
+                  const entry = summaryMap.get(split.staff_id)!;
+                  const svcSales = Number(split.amount) || 0;
+                  const totalPkgSvcPrice = (Number(pkgSvc.price) || 0) * (item.quantity || 1);
+                  let svcCommission = 0;
+                  if (staffMember) {
+                    const rate = staffMember.commission_rate;
+                    const type = staffMember.commission_type ?? "percent";
+                    svcCommission =
+                      type === "fixed"
+                        ? totalPkgSvcPrice > 0 ? (rate * item.quantity * svcSales) / totalPkgSvcPrice : rate * item.quantity
+                        : (svcSales * rate) / 100;
+                  }
+                  entry.services_count += item.quantity;
+                  entry.total_sales_generated += svcSales;
+                  entry.total_commission_earned += svcCommission;
+                  staffInvoices.get(split.staff_id)?.add(invoice.id);
+                }
+              });
+            } else if (pkgSvc.primary_staff_id && summaryMap.has(pkgSvc.primary_staff_id)) {
               const staffMember = staffList.find((s) => s.id === pkgSvc.primary_staff_id);
               const entry = summaryMap.get(pkgSvc.primary_staff_id)!;
               const svcSales = (Number(pkgSvc.price) || 0) * (item.quantity || 1);
@@ -183,32 +258,21 @@ export function calculateStaffPerformance(
           return;
         }
 
-        // REGULAR SERVICE / PRODUCT COMMISSIONS
+        // REGULAR SERVICE / PRODUCT COMMISSIONS (N-STAFF SUPPORT)
         const comm = calculateItemStaffCommissions(item, staffList);
-
-        if (comm.primaryStaffId && summaryMap.has(comm.primaryStaffId)) {
-          const entry = summaryMap.get(comm.primaryStaffId)!;
-          if (item.item_type === "service" || item.item_type === "package") {
-            entry.services_count += item.quantity;
-          } else {
-            entry.products_count += item.quantity;
+        comm.splits.forEach((split) => {
+          if (split.staffId && summaryMap.has(split.staffId)) {
+            const entry = summaryMap.get(split.staffId)!;
+            if (item.item_type === "service" || item.item_type === "package") {
+              entry.services_count += item.quantity;
+            } else {
+              entry.products_count += item.quantity;
+            }
+            entry.total_sales_generated += split.salesVolume;
+            entry.total_commission_earned += split.commission;
+            staffInvoices.get(split.staffId)?.add(invoice.id);
           }
-          entry.total_sales_generated += comm.primarySalesVolume;
-          entry.total_commission_earned += comm.primaryCommission;
-          staffInvoices.get(comm.primaryStaffId)?.add(invoice.id);
-        }
-
-        if (comm.secondaryStaffId && summaryMap.has(comm.secondaryStaffId)) {
-          const entry = summaryMap.get(comm.secondaryStaffId)!;
-          if (item.item_type === "service" || item.item_type === "package") {
-            entry.services_count += item.quantity;
-          } else {
-            entry.products_count += item.quantity;
-          }
-          entry.total_sales_generated += comm.secondarySalesVolume;
-          entry.total_commission_earned += comm.secondaryCommission;
-          staffInvoices.get(comm.secondaryStaffId)?.add(invoice.id);
-        }
+        });
       });
     });
 
