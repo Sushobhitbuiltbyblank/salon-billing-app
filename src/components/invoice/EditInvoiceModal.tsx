@@ -277,31 +277,67 @@ export function EditInvoiceModal() {
     if (!catItem) return;
 
     let packageServices = undefined;
-    if (catItem.type === "package" && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
-      const totalRegular = catItem.package_regular_price || catItem.price || 1;
-      const includedServices = catItem.package_service_ids
-        .map((sId) => catalog.find((c) => c.id === sId))
-        .filter(Boolean);
+    let unitPrice = catItem.price;
+    let discount = 0;
+    let totalPrice = catItem.price;
 
-      let allocatedSum = 0;
-      packageServices = includedServices.map((svc, idx) => {
-        let servicePrice = Math.round((svc!.price / totalRegular) * catItem.price);
-        if (idx === includedServices.length - 1) {
-          servicePrice = Math.max(0, catItem.price - allocatedSum);
-        } else {
-          allocatedSum += servicePrice;
-        }
-        return {
-          service_id: svc!.id,
-          service_name: svc!.name,
-          price: servicePrice,
-          regular_price: svc!.price,
-          duration_mins: svc!.duration_mins || 30,
+    if (catItem.type === "package") {
+      let includedServices: CatalogItem[] = [];
+
+      if (catItem.package_service_ids && catItem.package_service_ids.length > 0) {
+        includedServices = catItem.package_service_ids
+          .map((sId) =>
+            catalog.find(
+              (c) =>
+                c.id === sId ||
+                c.id.replace(/-/g, "").endsWith(sId) ||
+                c.id.replace(/-/g, "").startsWith(sId) ||
+                c.name.toLowerCase().trim() === sId.toLowerCase().trim()
+            )
+          )
+          .filter(Boolean) as CatalogItem[];
+      }
+
+      if (includedServices.length === 0 && catItem.name.includes("+")) {
+        const parts = catItem.name.split("+").map((p) => p.trim().toLowerCase());
+        includedServices = parts
+          .map((p) =>
+            catalog.find(
+              (c) =>
+                c.type !== "package" &&
+                (c.name.toLowerCase().trim() === p ||
+                  c.name.toLowerCase().includes(p) ||
+                  p.includes(c.name.toLowerCase()))
+            )
+          )
+          .filter(Boolean) as CatalogItem[];
+      }
+
+      if (includedServices.length > 0) {
+        packageServices = includedServices.map((svc) => ({
+          service_id: svc.id,
+          service_name: svc.name,
+          price: svc.price, // Billed value same as service actual value
+          regular_price: svc.price,
+          duration_mins: svc.duration_mins || 30,
           primary_staff_id: undefined,
           primary_split_ratio: 100,
           secondary_split_ratio: 0,
-        };
-      });
+        }));
+
+        const sumOfServices = includedServices.reduce((sum, s) => sum + s.price, 0);
+        const packagePrice = catItem.price;
+
+        if (packagePrice < sumOfServices) {
+          unitPrice = sumOfServices;
+          discount = sumOfServices - packagePrice;
+          totalPrice = packagePrice;
+        } else {
+          unitPrice = sumOfServices > 0 ? sumOfServices : packagePrice;
+          discount = 0;
+          totalPrice = unitPrice;
+        }
+      }
     }
 
     const newItem: InvoiceItem = {
@@ -310,11 +346,11 @@ export function EditInvoiceModal() {
       item_name: catItem.name,
       item_type: catItem.type,
       quantity: 1,
-      unit_price: catItem.price,
-      discount: 0,
-      total_price: catItem.price,
+      unit_price: unitPrice,
+      discount: discount,
+      total_price: totalPrice,
       package_service_ids: catItem.package_service_ids,
-      package_regular_price: catItem.package_regular_price,
+      package_regular_price: catItem.package_regular_price || unitPrice,
       package_services: packageServices,
       primary_staff_id: undefined,
       primary_split_ratio: 100,
@@ -763,15 +799,9 @@ export function EditInvoiceModal() {
                                   : "bg-zinc-900/80 border-zinc-800/80"
                               }`}
                             >
-                              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                 <span className="font-bold text-zinc-200 truncate text-[11px]">
                                   • {svc.service_name}
-                                </span>
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/90 border border-zinc-700/80 text-[10px] font-mono text-zinc-200">
-                                  <span className="text-zinc-400 font-medium">Actual:</span>
-                                  <span className="font-bold text-amber-300">
-                                    {formatCurrency(actualValue, settings.currency_symbol)}
-                                  </span>
                                 </span>
                               </div>
 

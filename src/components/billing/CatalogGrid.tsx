@@ -31,9 +31,44 @@ export function CatalogGrid() {
     const map = new Map<string, CatalogItem>();
     catalog.forEach((item) => {
       map.set(item.id, item);
+      const shortId = item.id.replace(/-/g, "").slice(-8);
+      map.set(shortId, item);
+      map.set(item.name.toLowerCase().trim(), item);
     });
     return map;
   }, [catalog]);
+
+  // Helper to extract clean service names included in a package
+  const getPackageServicesList = (item: CatalogItem): string[] => {
+    const names: string[] = [];
+    if (item.package_service_ids && item.package_service_ids.length > 0) {
+      item.package_service_ids.forEach((id) => {
+        const found =
+          serviceItemMap.get(id) ||
+          catalog.find(
+            (c) =>
+              c.id === id ||
+              c.id.replace(/-/g, "").endsWith(id) ||
+              c.id.replace(/-/g, "").startsWith(id)
+          );
+        if (found) {
+          names.push(found.name);
+        } else if (id && !id.includes("-") && id.length > 2) {
+          names.push(id);
+        }
+      });
+    }
+
+    // Fallback: If no service IDs matched, split the package name if it contains "+"
+    if (names.length === 0 && item.name.includes("+")) {
+      const parts = item.name.split("+").map((p) => p.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        return parts;
+      }
+    }
+
+    return names;
+  };
 
   const filteredItems = useMemo(() => {
     return catalog.filter((item) => {
@@ -215,11 +250,7 @@ export function CatalogGrid() {
               const qtyInCart = getItemCountInCart(item.id);
               const isService = item.type === "service";
               const isPackage = item.type === "package";
-
-              const savings =
-                isPackage && item.package_regular_price && item.package_regular_price > item.price
-                  ? item.package_regular_price - item.price
-                  : 0;
+              const packageServicesList = isPackage ? getPackageServicesList(item) : [];
 
               return (
                 <div
@@ -254,41 +285,33 @@ export function CatalogGrid() {
                               Retail Product
                             </span>
                           )}
-
-                          {savings > 0 && (
-                            <span className="text-[9px] font-extrabold text-emerald-300 bg-emerald-950/80 border border-emerald-700/50 px-1.5 py-0.2 rounded-md">
-                              Save {formatCurrency(savings, settings.currency_symbol)}
-                            </span>
-                          )}
                         </div>
 
                         <h4 className="text-xs font-bold text-zinc-100 group-hover:text-purple-300 transition-colors line-clamp-2 leading-tight">
                           {item.name}
                         </h4>
 
-                        {/* INCLUDED SERVICES IN PACKAGE WITH ACTUAL VALUES */}
-                        {isPackage && item.package_service_ids && item.package_service_ids.length > 0 && (
-                          <div className="mt-1.5 space-y-1">
-                            <div className="flex items-center gap-1 text-[10px] font-semibold text-pink-300">
+                        {/* INCLUDED SERVICES IN PACKAGE */}
+                        {isPackage && (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-pink-300">
                               <Layers className="h-3 w-3 text-pink-400 shrink-0" />
-                              <span>Includes {item.package_service_ids.length} Services:</span>
+                              <span>Includes Services:</span>
                             </div>
                             <div className="flex flex-wrap gap-1">
-                              {item.package_service_ids.map((id) => {
-                                const svc = serviceItemMap.get(id);
-                                if (!svc) return null;
-                                return (
+                              {packageServicesList.length > 0 ? (
+                                packageServicesList.map((svcName, sIdx) => (
                                   <span
-                                    key={id}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-300"
+                                    key={sIdx}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-950/60 border border-purple-800/50 text-[10px] font-semibold text-purple-200"
                                   >
-                                    <span className="truncate max-w-[110px]">{svc.name}</span>
-                                    <span className="font-mono text-emerald-400 font-bold">
-                                      {formatCurrency(svc.price, settings.currency_symbol)}
-                                    </span>
+                                    <span className="h-1 w-1 rounded-full bg-pink-400 shrink-0" />
+                                    <span className="truncate max-w-[140px]">{svcName}</span>
                                   </span>
-                                );
-                              })}
+                                ))
+                              ) : (
+                                <span className="text-[10px] text-zinc-400 italic">Combo package</span>
+                              )}
                             </div>
                           </div>
                         )}
@@ -310,11 +333,6 @@ export function CatalogGrid() {
                       <span className="text-xs font-extrabold text-emerald-400 font-mono">
                         {formatCurrency(item.price, settings.currency_symbol)}
                       </span>
-                      {isPackage && item.package_regular_price && item.package_regular_price > item.price && (
-                        <span className="text-[10px] text-zinc-500 line-through font-mono">
-                          {formatCurrency(item.package_regular_price, settings.currency_symbol)}
-                        </span>
-                      )}
                       {(isService || isPackage) && item.duration_mins && (
                         <span className="text-[10px] text-zinc-400 flex items-center gap-0.5 ml-1">
                           <Clock className="h-2.5 w-2.5 text-zinc-400" />

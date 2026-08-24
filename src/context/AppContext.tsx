@@ -584,35 +584,70 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Build package_services breakdown if this is a package combo
         let packageServices: PackageServiceItem[] | undefined = undefined;
-        if (item.type === "package" && item.package_service_ids && item.package_service_ids.length > 0) {
-          const totalRegular = item.package_regular_price || item.price || 1;
-          const includedServices = item.package_service_ids
-            .map((sId) => catalog.find((c) => c.id === sId))
-            .filter(Boolean) as CatalogItem[];
+        let unitPrice = item.price;
+        let discount = 0;
+        let totalPrice = item.price;
+
+        if (item.type === "package") {
+          let includedServices: CatalogItem[] = [];
+
+          if (item.package_service_ids && item.package_service_ids.length > 0) {
+            includedServices = item.package_service_ids
+              .map((sId) =>
+                catalog.find(
+                  (c) =>
+                    c.id === sId ||
+                    c.id.replace(/-/g, "").endsWith(sId) ||
+                    c.id.replace(/-/g, "").startsWith(sId) ||
+                    c.name.toLowerCase().trim() === sId.toLowerCase().trim()
+                )
+              )
+              .filter(Boolean) as CatalogItem[];
+          }
+
+          // Fallback if IDs were not matched and name has "+"
+          if (includedServices.length === 0 && item.name.includes("+")) {
+            const parts = item.name.split("+").map((p) => p.trim().toLowerCase());
+            includedServices = parts
+              .map((p) =>
+                catalog.find(
+                  (c) =>
+                    c.type !== "package" &&
+                    (c.name.toLowerCase().trim() === p ||
+                      c.name.toLowerCase().includes(p) ||
+                      p.includes(c.name.toLowerCase()))
+                )
+              )
+              .filter(Boolean) as CatalogItem[];
+          }
 
           if (includedServices.length > 0) {
-            let allocatedSum = 0;
-            packageServices = includedServices.map((svc, idx) => {
-              // Proportional discount allocation for starting price
-              let servicePrice = Math.round((svc.price / totalRegular) * item.price);
-              if (idx === includedServices.length - 1) {
-                // Ensure sum matches exactly item.price
-                servicePrice = Math.max(0, item.price - allocatedSum);
-              } else {
-                allocatedSum += servicePrice;
-              }
+            // Keep billed value same as service actual value
+            packageServices = includedServices.map((svc) => ({
+              service_id: svc.id,
+              service_name: svc.name,
+              price: svc.price, // Billed value same as service actual value
+              regular_price: svc.price,
+              duration_mins: svc.duration_mins || 30,
+              primary_staff_id: primaryStaffId,
+              primary_split_ratio: 100,
+              secondary_split_ratio: 0,
+            }));
 
-              return {
-                service_id: svc.id,
-                service_name: svc.name,
-                price: servicePrice,
-                regular_price: svc.price,
-                duration_mins: svc.duration_mins || 30,
-                primary_staff_id: primaryStaffId,
-                primary_split_ratio: 100,
-                secondary_split_ratio: 0,
-              };
-            });
+            const sumOfServices = includedServices.reduce((sum, s) => sum + s.price, 0);
+            const packagePrice = item.price;
+
+            if (packagePrice < sumOfServices) {
+              // If package price is less than sum of service values, show difference on discount
+              unitPrice = sumOfServices;
+              discount = sumOfServices - packagePrice;
+              totalPrice = packagePrice;
+            } else {
+              // If total value equal to sum of services actual value
+              unitPrice = sumOfServices > 0 ? sumOfServices : packagePrice;
+              discount = 0;
+              totalPrice = unitPrice;
+            }
           }
         }
 
@@ -622,11 +657,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           item_name: item.name,
           item_type: item.type,
           quantity: 1,
-          unit_price: item.price,
-          discount: 0,
-          total_price: item.price,
+          unit_price: unitPrice,
+          discount: discount,
+          total_price: totalPrice,
           package_service_ids: item.package_service_ids,
-          package_regular_price: item.package_regular_price,
+          package_regular_price: item.package_regular_price || unitPrice,
           package_services: packageServices,
           primary_staff_id: primaryStaffId,
           primary_split_ratio: 100,

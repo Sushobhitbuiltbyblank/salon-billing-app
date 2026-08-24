@@ -1138,19 +1138,24 @@ export function AdminPortal() {
                         {/* INCLUDED SERVICES PILLS */}
                         {item.package_service_ids && item.package_service_ids.length > 0 && (
                           <div className="bg-zinc-950/60 p-2 rounded-xl border border-purple-900/30 space-y-1">
-                            <span className="text-[10px] text-zinc-400 font-semibold flex items-center gap-1">
+                            <span className="text-[10px] text-pink-300 font-semibold flex items-center gap-1">
                               <Layers className="h-3 w-3 text-pink-400" />
                               Included Services ({item.package_service_ids.length}):
                             </span>
                             <div className="flex flex-wrap gap-1 pt-0.5">
                               {item.package_service_ids.map((id) => {
-                                const svc = catalog.find((c) => c.id === id);
+                                const svc = catalog.find(
+                                  (c) =>
+                                    c.id === id ||
+                                    c.id.replace(/-/g, "").endsWith(id) ||
+                                    c.id.replace(/-/g, "").startsWith(id)
+                                );
                                 return (
                                   <span
                                     key={id}
-                                    className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium"
+                                    className="text-[10px] px-2 py-0.5 rounded-md bg-purple-950/50 border border-purple-800/40 text-purple-200 font-medium"
                                   >
-                                    {svc ? `${svc.name} (₹${svc.price})` : id}
+                                    {svc ? svc.name : id}
                                   </span>
                                 );
                               })}
@@ -1165,11 +1170,6 @@ export function AdminPortal() {
                               <span className="font-mono font-extrabold text-emerald-400">
                                 {formatCurrency(item.price, settings.currency_symbol)}
                               </span>
-                              {item.package_regular_price && item.package_regular_price > item.price && (
-                                <span className="text-[10px] text-zinc-500 line-through font-mono">
-                                  {formatCurrency(item.package_regular_price, settings.currency_symbol)}
-                                </span>
-                              )}
                             </div>
                           </div>
                           <div>
@@ -1180,15 +1180,6 @@ export function AdminPortal() {
                             </span>
                           </div>
                         </div>
-
-                        {savings > 0 && (
-                          <div className="flex items-center justify-between text-[11px] bg-emerald-950/30 border border-emerald-800/40 px-2.5 py-1.5 rounded-lg text-emerald-300">
-                            <span className="font-medium">Client Discount:</span>
-                            <span className="font-mono font-extrabold">
-                              Save {formatCurrency(savings, settings.currency_symbol)} ({(((savings) / (item.package_regular_price || 1)) * 100).toFixed(0)}% OFF)
-                            </span>
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <div className="grid grid-cols-2 gap-2 text-xs bg-zinc-950/60 p-2 rounded-xl border border-zinc-800/60 mb-3">

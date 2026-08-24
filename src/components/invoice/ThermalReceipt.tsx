@@ -141,7 +141,7 @@ export function ThermalReceipt({
                           const sName = getStaffName(ps.primary_staff_id) || primary;
                           return (
                             <div key={pIdx}>
-                              • {ps.service_name} {sName ? `(${sName})` : ""}: ₹{ps.price}
+                              • {ps.service_name} {sName ? `(${sName})` : ""}
                             </div>
                           );
                         })}

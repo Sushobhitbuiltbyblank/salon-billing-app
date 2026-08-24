@@ -339,11 +339,6 @@ export function CartItemList() {
                       <Layers className="h-3.5 w-3.5 text-pink-400" />
                       Included Services ({packageServices.length || 0}):
                     </span>
-                    {item.package_regular_price && item.package_regular_price > item.unit_price && (
-                      <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded">
-                        Total Actual Value: {formatCurrency(item.package_regular_price, settings.currency_symbol)} (Save {formatCurrency(item.package_regular_price - item.unit_price, settings.currency_symbol)})
-                      </span>
-                    )}
                   </div>
 
                   {/* QUICK ASSIGN ALL TO ONE STYLIST */}
@@ -378,10 +373,6 @@ export function CartItemList() {
                   {packageServices.map((svc, sIdx) => {
                     const isSvcUnassigned = !svc.primary_staff_id;
                     const assignedStaff = staff.find((s) => s.id === svc.primary_staff_id);
-                    const actualValue =
-                      svc.regular_price ||
-                      catalog.find((c) => c.id === svc.service_id)?.price ||
-                      svc.price;
 
                     return (
                       <div
@@ -392,17 +383,11 @@ export function CartItemList() {
                             : "bg-zinc-900/80 border-zinc-800/80"
                         }`}
                       >
-                        {/* SERVICE TITLE & ACTUAL VALUE / REGULAR MRP */}
-                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                        {/* SERVICE TITLE */}
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
                           <Scissors className="h-3 w-3 text-pink-400 shrink-0" />
                           <span className="text-xs font-bold text-zinc-100 truncate">
                             {svc.service_name}
-                          </span>
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/90 border border-zinc-700/80 text-[10px] font-mono text-zinc-200">
-                            <span className="text-zinc-400 font-medium">Actual:</span>
-                            <span className="font-bold text-amber-300">
-                              {formatCurrency(actualValue, settings.currency_symbol)}
-                            </span>
                           </span>
                         </div>
 
