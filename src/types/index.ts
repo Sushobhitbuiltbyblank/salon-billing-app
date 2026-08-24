@@ -1,4 +1,19 @@
-export type StaffStatus = 'active' | 'on_leave' | 'inactive';
+export type AttendanceStatus = 'present' | 'half_day' | 'on_leave' | 'weekly_off' | 'absent';
+export type StaffStatus = 'active' | 'half_day' | 'on_leave' | 'weekly_off' | 'inactive';
+
+export interface AttendanceRecord {
+  id: string;
+  staff_id: string;
+  staff_name?: string;
+  date: string; // YYYY-MM-DD
+  status: AttendanceStatus;
+  check_in?: string;
+  check_out?: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export type ItemType = 'service' | 'product' | 'package';
 export type PaymentMode = 'cash' | 'card' | 'upi' | 'split';
 export type InvoiceStatus = 'paid' | 'pending' | 'void';

@@ -14,6 +14,9 @@ import {
   PackageServiceItem,
   SalonSettings,
   Staff,
+  StaffStatus,
+  AttendanceRecord,
+  AttendanceStatus,
 } from "@/types";
 import { Storage, initStorage, DEFAULT_SETTINGS, DEFAULT_USERS } from "@/lib/storage";
 import { SupabaseSync } from "@/lib/supabaseSync";
@@ -36,12 +39,15 @@ interface AppContextType {
   settings: SalonSettings;
   updateSettings: (newSettings: SalonSettings) => void;
   
-  // STAFF CRUD
+  // STAFF CRUD & ATTENDANCE
   staff: Staff[];
   addStaff: (staffMember: Staff) => Staff;
   updateStaff: (staffMember: Staff) => void;
   deleteStaff: (staffId: string) => void;
   toggleStaffStatus: (staffId: string) => void;
+  setStaffDailyStatus: (staffId: string, status: StaffStatus) => void;
+  attendance: AttendanceRecord[];
+  markStaffAttendance: (staffId: string, date: string, status: AttendanceStatus, notes?: string) => AttendanceRecord;
   
   // CATEGORIES CRUD
   categories: Category[];
@@ -120,6 +126,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   
   const [activeTab, setActiveTab] = useState<AppTab>("pos");
 
@@ -159,6 +166,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCustomers(Storage.getCustomers());
       setInvoices(Storage.getInvoices());
       setExpenses(Storage.getExpenses());
+      setAttendance(Storage.getAttendance());
     }
 
     // 2. If Supabase configured, sync from remote PostgreSQL in background
@@ -364,16 +372,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const markStaffAttendance = (
+    staffId: string,
+    date: string,
+    status: AttendanceStatus,
+    notes?: string
+  ): AttendanceRecord => {
+    const staffMember = staff.find((s) => s.id === staffId);
+    const rec = Storage.markAttendance(staffId, date, status, notes, staffMember?.name);
+    setAttendance(Storage.getAttendance());
+    setStaff(Storage.getStaff());
+    return rec;
+  };
+
+  const setStaffDailyStatus = (staffId: string, status: StaffStatus) => {
+    const list = [...staff];
+    const target = list.find((s) => s.id === staffId);
+    if (target) {
+      target.status = status;
+      Storage.saveStaff(list);
+      setStaff([...list]);
+
+      // Automatically log today's attendance entry
+      const today = new Date().toISOString().slice(0, 10);
+      const attStatus: AttendanceStatus =
+        status === "active"
+          ? "present"
+          : status === "half_day"
+          ? "half_day"
+          : status === "on_leave"
+          ? "on_leave"
+          : status === "weekly_off"
+          ? "weekly_off"
+          : "on_leave";
+
+      Storage.markAttendance(staffId, today, attStatus, undefined, target.name);
+      setAttendance(Storage.getAttendance());
+
+      if (isSupabaseConfigured()) {
+        SupabaseSync.saveStaff(target);
+      }
+    }
+  };
+
   const toggleStaffStatus = (staffId: string) => {
     const list = [...staff];
     const target = list.find((s) => s.id === staffId);
     if (target) {
-      target.status = target.status === "active" ? "on_leave" : "active";
-      Storage.saveStaff(list);
-      setStaff([...list]);
-      if (isSupabaseConfigured()) {
-        SupabaseSync.saveStaff(target);
-      }
+      // Cycle: active -> half_day -> on_leave -> active
+      const nextStatus: StaffStatus =
+        target.status === "active"
+          ? "half_day"
+          : target.status === "half_day"
+          ? "on_leave"
+          : "active";
+      setStaffDailyStatus(staffId, nextStatus);
     }
   };
 
@@ -727,6 +780,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateStaff,
         deleteStaff,
         toggleStaffStatus,
+        setStaffDailyStatus,
+        attendance,
+        markStaffAttendance,
         categories,
         addCategory,
         saveCategory,

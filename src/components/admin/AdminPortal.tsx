@@ -11,6 +11,8 @@ import {
   SalonSettings,
   Staff,
   StaffStatus,
+  AttendanceRecord,
+  AttendanceStatus,
 } from "@/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +56,13 @@ import {
   ShoppingCart,
   BarChart3,
   Receipt,
+  Calendar,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  UserX,
+  AlertCircle,
+  FileText,
 } from "lucide-react";
 
 export function AdminPortal() {
@@ -67,6 +76,9 @@ export function AdminPortal() {
     updateStaff,
     deleteStaff,
     toggleStaffStatus,
+    setStaffDailyStatus,
+    attendance,
+    markStaffAttendance,
     catalog,
     addCatalogItem,
     saveCatalogItem,
@@ -88,6 +100,141 @@ export function AdminPortal() {
   const [activeAdminTab, setActiveAdminTab] = useState<
     "analytics" | "invoices" | "customers" | "staff" | "catalog" | "categories" | "users" | "settings"
   >("analytics");
+
+  // ATTENDANCE & ROSTER STATE
+  const [selectedAttendanceDate, setSelectedAttendanceDate] = useState<string>(
+    () => new Date().toISOString().slice(0, 10)
+  );
+  const [isAttendanceLogModalOpen, setIsAttendanceLogModalOpen] = useState<boolean>(false);
+  const [attendanceMonth, setAttendanceMonth] = useState<string>(
+    () => new Date().toISOString().slice(0, 7) // YYYY-MM
+  );
+  const [leaveNotesModal, setLeaveNotesModal] = useState<{
+    isOpen: boolean;
+    staffId: string;
+    staffName: string;
+    date: string;
+    status: AttendanceStatus;
+    notes: string;
+  } | null>(null);
+
+  // Mapped attendance for selected date
+  const dateAttendanceMap = useMemo(() => {
+    const map = new Map<string, AttendanceRecord>();
+    attendance
+      .filter((r) => r.date === selectedAttendanceDate)
+      .forEach((r) => map.set(r.staff_id, r));
+    return map;
+  }, [attendance, selectedAttendanceDate]);
+
+  // Daily roster summary statistics
+  const dailyAttendanceStats = useMemo(() => {
+    const isToday = selectedAttendanceDate === new Date().toISOString().slice(0, 10);
+    let presentCount = 0;
+    let halfDayCount = 0;
+    let leaveCount = 0;
+    let offCount = 0;
+
+    staff.forEach((s) => {
+      const record = dateAttendanceMap.get(s.id);
+      const effectiveStatus: AttendanceStatus = record
+        ? record.status
+        : isToday
+        ? s.status === "active"
+          ? "present"
+          : s.status === "half_day"
+          ? "half_day"
+          : s.status === "on_leave"
+          ? "on_leave"
+          : s.status === "weekly_off"
+          ? "weekly_off"
+          : "present"
+        : "present";
+
+      if (effectiveStatus === "present") presentCount++;
+      else if (effectiveStatus === "half_day") halfDayCount++;
+      else if (effectiveStatus === "on_leave") leaveCount++;
+      else if (effectiveStatus === "weekly_off") offCount++;
+    });
+
+    return {
+      presentCount,
+      halfDayCount,
+      leaveCount,
+      offCount,
+      total: staff.length,
+    };
+  }, [staff, dateAttendanceMap, selectedAttendanceDate]);
+
+  // Monthly summary stats per stylist
+  const monthlyStaffAttendanceStats = useMemo(() => {
+    const statsMap = new Map<
+      string,
+      { present: number; halfDay: number; leave: number; off: number; totalPayableDays: number }
+    >();
+
+    staff.forEach((s) => {
+      const staffRecords = attendance.filter(
+        (r) => r.staff_id === s.id && r.date.startsWith(attendanceMonth)
+      );
+
+      let present = 0;
+      let halfDay = 0;
+      let leave = 0;
+      let off = 0;
+
+      staffRecords.forEach((r) => {
+        if (r.status === "present") present++;
+        else if (r.status === "half_day") halfDay++;
+        else if (r.status === "on_leave") leave++;
+        else if (r.status === "weekly_off") off++;
+      });
+
+      statsMap.set(s.id, {
+        present,
+        halfDay,
+        leave,
+        off,
+        totalPayableDays: present + halfDay * 0.5,
+      });
+    });
+
+    return statsMap;
+  }, [staff, attendance, attendanceMonth]);
+
+  const handleMarkStaffAttendance = (staffId: string, status: AttendanceStatus, notes?: string) => {
+    const isToday = selectedAttendanceDate === new Date().toISOString().slice(0, 10);
+    markStaffAttendance(staffId, selectedAttendanceDate, status, notes);
+    if (isToday) {
+      const staffStatus: StaffStatus =
+        status === "present"
+          ? "active"
+          : status === "half_day"
+          ? "half_day"
+          : status === "on_leave"
+          ? "on_leave"
+          : status === "weekly_off"
+          ? "weekly_off"
+          : "active";
+      setStaffDailyStatus(staffId, staffStatus);
+    }
+  };
+
+  const handlePrevDay = () => {
+    const d = new Date(selectedAttendanceDate);
+    d.setDate(d.getDate() - 1);
+    setSelectedAttendanceDate(d.toISOString().slice(0, 10));
+  };
+
+  const handleNextDay = () => {
+    const d = new Date(selectedAttendanceDate);
+    d.setDate(d.getDate() + 1);
+    setSelectedAttendanceDate(d.toISOString().slice(0, 10));
+  };
+
+  const handleToday = () => {
+    setSelectedAttendanceDate(new Date().toISOString().slice(0, 10));
+  };
 
   // CUSTOMER CRM STATE
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -851,31 +998,146 @@ export function AdminPortal() {
           ========================================================================= */}
       {activeAdminTab === "staff" && (
         <div className="space-y-4 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between">
+          {/* HEADER WITH ATTENDANCE LOG TRIGGER */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b border-zinc-800/80">
             <div>
-              <h3 className="text-base font-bold text-white">Stylists & Staff Team</h3>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>Stylists, Attendance & Commission</span>
+                <Badge variant="purple" className="text-[10px] font-mono">
+                  {staff.length} Stylists
+                </Badge>
+              </h3>
               <p className="text-xs text-zinc-400">
-                Configure commission split rates, active availability, and roles.
+                Track daily attendance, manage half-days / leaves, and configure split commission tiers.
               </p>
             </div>
 
-            <Button variant="glow" size="sm" onClick={handleOpenAddStaff} className="gap-1.5 text-xs font-bold">
-              <Plus className="h-4 w-4" />
-              <span>Add New Stylist</span>
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAttendanceLogModalOpen(true)}
+                className="gap-1.5 text-xs font-semibold bg-zinc-900 border-zinc-700 hover:bg-zinc-800 text-purple-300 hover:text-white"
+              >
+                <CalendarDays className="h-4 w-4 text-purple-400" />
+                <span>Monthly Attendance Register</span>
+              </Button>
+
+              <Button variant="glow" size="sm" onClick={handleOpenAddStaff} className="gap-1.5 text-xs font-bold">
+                <Plus className="h-4 w-4" />
+                <span>Add New Stylist</span>
+              </Button>
+            </div>
           </div>
 
-          {/* STAFF CARDS GRID */}
+          {/* DAILY ATTENDANCE ROSTER BAR */}
+          <div className="p-3 sm:p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800 backdrop-blur-xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-3">
+            {/* DATE PICKER & NAV */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center bg-zinc-950 rounded-xl border border-zinc-800 p-0.5">
+                <button
+                  type="button"
+                  onClick={handlePrevDay}
+                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800/80 rounded-lg transition-colors"
+                  title="Previous Day"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <input
+                  type="date"
+                  value={selectedAttendanceDate}
+                  onChange={(e) => e.target.value && setSelectedAttendanceDate(e.target.value)}
+                  className="h-8 px-2 text-xs font-bold text-white bg-transparent border-none focus:outline-none cursor-pointer"
+                />
+                <button
+                  type="button"
+                  onClick={handleNextDay}
+                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800/80 rounded-lg transition-colors"
+                  title="Next Day"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleToday}
+                className={`text-xs font-bold px-2.5 py-1.5 rounded-xl border transition-colors cursor-pointer ${
+                  selectedAttendanceDate === new Date().toISOString().slice(0, 10)
+                    ? "bg-purple-600/30 text-purple-300 border-purple-500/50"
+                    : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white hover:bg-zinc-800"
+                }`}
+              >
+                Today
+              </button>
+            </div>
+
+            {/* LIVE ATTENDANCE SUMMARY COUNTERS */}
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-xs">
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-950/40 border border-emerald-800/50 text-emerald-300 font-bold">
+                <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+                <span>{dailyAttendanceStats.presentCount} Present</span>
+              </div>
+
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-950/40 border border-amber-800/50 text-amber-300 font-bold">
+                <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span>{dailyAttendanceStats.halfDayCount} Half Day</span>
+              </div>
+
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-rose-950/40 border border-rose-800/50 text-rose-300 font-bold">
+                <span className="h-2 w-2 rounded-full bg-rose-400"></span>
+                <span>{dailyAttendanceStats.leaveCount} On Leave</span>
+              </div>
+
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 font-bold">
+                <span className="h-2 w-2 rounded-full bg-zinc-500"></span>
+                <span>{dailyAttendanceStats.offCount} Off</span>
+              </div>
+            </div>
+          </div>
+
+          {/* STAFF CARDS GRID WITH 1-CLICK ATTENDANCE CONTROLS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {staff.map((st) => {
-              const isActive = st.status === "active";
+              const isToday = selectedAttendanceDate === new Date().toISOString().slice(0, 10);
+              const record = dateAttendanceMap.get(st.id);
+              const currentStatus: AttendanceStatus = record
+                ? record.status
+                : isToday
+                ? st.status === "active"
+                  ? "present"
+                  : st.status === "half_day"
+                  ? "half_day"
+                  : st.status === "on_leave"
+                  ? "on_leave"
+                  : st.status === "weekly_off"
+                  ? "weekly_off"
+                  : "present"
+                : "present";
+
+              const monthly = monthlyStaffAttendanceStats.get(st.id) || {
+                present: 0,
+                halfDay: 0,
+                leave: 0,
+                off: 0,
+                totalPayableDays: 0,
+              };
 
               return (
                 <div
                   key={st.id}
-                  className="rounded-2xl border border-zinc-800/90 bg-zinc-900/70 p-4 backdrop-blur-xl shadow-lg flex flex-col justify-between hover:border-purple-500/40 transition-all"
+                  className={`rounded-2xl border bg-zinc-900/70 p-4 backdrop-blur-xl shadow-lg flex flex-col justify-between transition-all ${
+                    currentStatus === "present"
+                      ? "border-emerald-900/40 hover:border-emerald-500/40"
+                      : currentStatus === "half_day"
+                      ? "border-amber-900/50 hover:border-amber-500/50 bg-amber-950/10"
+                      : currentStatus === "on_leave"
+                      ? "border-rose-900/50 hover:border-rose-500/50 bg-rose-950/10 opacity-90"
+                      : "border-zinc-800/90 hover:border-zinc-700"
+                  }`}
                 >
                   <div>
+                    {/* STYLIST HEADER & CURRENT STATUS BADGE */}
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <div className="flex items-center gap-3">
                         <div
@@ -890,19 +1152,97 @@ export function AdminPortal() {
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => toggleStaffStatus(st.id)}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer ${
-                          isActive
-                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                            : "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                        }`}
-                        title="Click to toggle status"
-                      >
-                        {isActive ? "● Active" : "○ On Leave"}
-                      </button>
+                      {/* CURRENT STATUS PILL */}
+                      <div>
+                        {currentStatus === "present" && (
+                          <Badge variant="success" className="text-[10px] py-0.5 px-2 font-bold shadow-sm">
+                            🟢 Present
+                          </Badge>
+                        )}
+                        {currentStatus === "half_day" && (
+                          <Badge variant="warning" className="text-[10px] py-0.5 px-2 font-bold shadow-sm bg-amber-950 text-amber-300 border-amber-600">
+                            🟡 Half Day
+                          </Badge>
+                        )}
+                        {currentStatus === "on_leave" && (
+                          <Badge variant="destructive" className="text-[10px] py-0.5 px-2 font-bold shadow-sm bg-rose-950 text-rose-300 border-rose-600">
+                            🔴 On Leave
+                          </Badge>
+                        )}
+                        {currentStatus === "weekly_off" && (
+                          <Badge variant="outline" className="text-[10px] py-0.5 px-2 font-bold text-zinc-400 border-zinc-700">
+                            ⚪ Weekly Off
+                          </Badge>
+                        )}
+                        {currentStatus === "absent" && (
+                          <Badge variant="destructive" className="text-[10px] py-0.5 px-2 font-bold bg-rose-950 text-rose-300">
+                            ✕ Absent
+                          </Badge>
+                        )}
+                      </div>
                     </div>
 
+                    {/* ATTENDANCE 4-WAY SEGMENTED ACTION BUTTONS */}
+                    <div className="mb-3">
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-zinc-400 mb-1 flex items-center justify-between">
+                        <span>Mark for {selectedAttendanceDate === new Date().toISOString().slice(0, 10) ? "Today" : selectedAttendanceDate}</span>
+                        {record?.notes && (
+                          <span className="text-amber-400 font-normal italic truncate max-w-[120px]" title={record.notes}>
+                            Note: {record.notes}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-4 gap-1 p-1 bg-zinc-950/90 rounded-xl border border-zinc-800">
+                        {[
+                          { id: "present", label: "Present", icon: "🟢", bg: "bg-emerald-600 text-white font-bold" },
+                          { id: "half_day", label: "Half Day", icon: "🟡", bg: "bg-amber-600 text-white font-bold" },
+                          { id: "on_leave", label: "Leave", icon: "🔴", bg: "bg-rose-600 text-white font-bold" },
+                          { id: "weekly_off", label: "Off", icon: "⚪", bg: "bg-zinc-700 text-white font-bold" },
+                        ].map((btn) => {
+                          const isSelected = currentStatus === btn.id;
+                          return (
+                            <button
+                              key={btn.id}
+                              type="button"
+                              onClick={() => handleMarkStaffAttendance(st.id, btn.id as AttendanceStatus)}
+                              className={`py-1 px-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 ${
+                                isSelected
+                                  ? `${btn.bg} shadow-sm font-black`
+                                  : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                              }`}
+                              title={`Mark ${st.name} as ${btn.label}`}
+                            >
+                              <span className="text-[10px]">{btn.icon}</span>
+                              <span className="text-[10px]">{btn.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* MONTHLY ATTENDANCE STATS TALLY */}
+                    <div className="flex items-center justify-between text-[11px] bg-purple-950/20 border border-purple-800/30 px-2.5 py-1.5 rounded-xl text-purple-200 mb-3 font-medium">
+                      <span>This Month:</span>
+                      <div className="flex items-center gap-2 font-mono text-[10px]">
+                        <span className="text-emerald-400 font-bold" title="Present days">
+                          {monthly.present}P
+                        </span>
+                        <span>•</span>
+                        <span className="text-amber-400 font-bold" title="Half days">
+                          {monthly.halfDay}HD
+                        </span>
+                        <span>•</span>
+                        <span className="text-rose-400 font-bold" title="Leaves taken">
+                          {monthly.leave}L
+                        </span>
+                        <span>•</span>
+                        <span className="text-white font-bold" title="Total payable days">
+                          = {monthly.totalPayableDays} Days
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* INCENTIVE & COMMISSION DETAILS */}
                     <div className="space-y-1.5 text-xs bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800/60 mb-3">
                       <div className="flex justify-between items-center text-zinc-400">
                         <span>Service Incentive:</span>
@@ -943,13 +1283,13 @@ export function AdminPortal() {
                       className="flex-1 text-xs h-8 gap-1"
                     >
                       <Edit2 className="h-3.5 w-3.5 text-purple-400" />
-                      <span>Edit</span>
+                      <span>Edit Profile</span>
                     </Button>
                     <button
                       type="button"
                       onClick={() => handleDeleteStaff(st)}
-                      className="h-8 w-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors"
-                      title="Delete staff"
+                      className="h-8 w-8 flex items-center justify-center rounded-xl bg-zinc-900 hover:bg-rose-950/40 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
+                      title="Delete staff member"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -1706,14 +2046,30 @@ export function AdminPortal() {
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-zinc-400 mb-1 block">Avatar Color</label>
-              <input
-                type="color"
-                value={staffFormData.color || "#8b5cf6"}
-                onChange={(e) => setStaffFormData({ ...staffFormData, color: e.target.value })}
-                className="w-full h-9 px-1 bg-zinc-950 border border-zinc-800 rounded-xl cursor-pointer"
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium text-zinc-400 mb-1 block">Default Floor Status</label>
+                <select
+                  value={staffFormData.status || "active"}
+                  onChange={(e) => setStaffFormData({ ...staffFormData, status: e.target.value as StaffStatus })}
+                  className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-medium"
+                >
+                  <option value="active">🟢 Active (Present)</option>
+                  <option value="half_day">🟡 Half Day</option>
+                  <option value="on_leave">🔴 On Leave</option>
+                  <option value="weekly_off">⚪ Weekly Off</option>
+                  <option value="inactive">⚫ Inactive</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-zinc-400 mb-1 block">Avatar Color</label>
+                <input
+                  type="color"
+                  value={staffFormData.color || "#8b5cf6"}
+                  onChange={(e) => setStaffFormData({ ...staffFormData, color: e.target.value })}
+                  className="w-full h-9 px-1 bg-zinc-950 border border-zinc-800 rounded-xl cursor-pointer"
+                />
+              </div>
             </div>
           </div>
 
@@ -2280,6 +2636,232 @@ export function AdminPortal() {
             </Button>
           </DialogFooter>
         </form>
+      </Dialog>
+
+      {/* =========================================================================
+          MODALS: MONTHLY ATTENDANCE REGISTER & MATRIX MODAL
+          ========================================================================= */}
+      <Dialog
+        open={isAttendanceLogModalOpen}
+        onOpenChange={setIsAttendanceLogModalOpen}
+        maxWidth="4xl"
+      >
+        <DialogHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="h-10 w-10 rounded-2xl bg-purple-600/30 text-purple-400 flex items-center justify-center border border-purple-500/30 shadow-lg">
+                <CalendarDays className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle>Staff Monthly Attendance Register</DialogTitle>
+                <DialogDescription>
+                  Full month roster matrix. Click any day cell to change a stylist's attendance status.
+                </DialogDescription>
+              </div>
+            </div>
+
+            {/* MONTH PICKER */}
+            <div className="flex items-center gap-2">
+              <input
+                type="month"
+                value={attendanceMonth}
+                onChange={(e) => e.target.value && setAttendanceMonth(e.target.value)}
+                className="h-9 px-3 text-xs font-bold text-white bg-zinc-950 border border-zinc-800 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer"
+              />
+            </div>
+          </div>
+        </DialogHeader>
+
+        {/* MONTHLY SUMMARY METRICS */}
+        {(() => {
+          const [year, month] = attendanceMonth.split("-").map(Number);
+          const daysInMonth = new Date(year, month, 0).getDate();
+          const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+          return (
+            <div className="space-y-4 py-2">
+              {/* ATTENDANCE MATRIX TABLE */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 overflow-hidden shadow-inner">
+                <div className="overflow-x-auto max-h-[55vh]">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-zinc-900/90 text-[10px] text-zinc-400 sticky top-0 z-10 border-b border-zinc-800">
+                      <tr>
+                        <th className="py-2.5 px-3 font-bold text-white min-w-[140px] sticky left-0 bg-zinc-900/95 z-20">
+                          Stylist Name
+                        </th>
+                        {daysArray.map((day) => {
+                          const dateStr = `${attendanceMonth}-${String(day).padStart(2, "0")}`;
+                          const d = new Date(year, month - 1, day);
+                          const dayOfWeek = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][d.getDay()];
+                          const isWeekend = d.getDay() === 0;
+                          const isCurrentDay = dateStr === new Date().toISOString().slice(0, 10);
+
+                          return (
+                            <th
+                              key={day}
+                              className={`py-2 px-1 text-center font-mono min-w-[28px] border-l border-zinc-800/40 ${
+                                isCurrentDay
+                                  ? "bg-purple-950/60 text-purple-300 font-black"
+                                  : isWeekend
+                                  ? "bg-zinc-950/60 text-zinc-500"
+                                  : ""
+                              }`}
+                            >
+                              <div className="text-[10px] font-bold">{day}</div>
+                              <div className="text-[8px] uppercase">{dayOfWeek}</div>
+                            </th>
+                          );
+                        })}
+                        <th className="py-2 px-2 text-center text-emerald-400 border-l border-zinc-800 font-bold min-w-[35px]">
+                          P
+                        </th>
+                        <th className="py-2 px-2 text-center text-amber-400 border-l border-zinc-800 font-bold min-w-[35px]">
+                          HD
+                        </th>
+                        <th className="py-2 px-2 text-center text-rose-400 border-l border-zinc-800 font-bold min-w-[35px]">
+                          L
+                        </th>
+                        <th className="py-2 px-2 text-center text-white border-l border-zinc-800 font-black min-w-[50px] bg-zinc-900">
+                          Payable
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/50 text-[11px]">
+                      {staff.map((st) => {
+                        const monthly = monthlyStaffAttendanceStats.get(st.id) || {
+                          present: 0,
+                          halfDay: 0,
+                          leave: 0,
+                          off: 0,
+                          totalPayableDays: 0,
+                        };
+
+                        return (
+                          <tr key={st.id} className="hover:bg-zinc-900/40 transition-colors">
+                            {/* STYLIST NAME */}
+                            <td className="py-2 px-3 font-semibold text-white sticky left-0 bg-zinc-950/95 z-10 border-r border-zinc-800/60 flex items-center gap-2">
+                              <div
+                                className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                                style={{ backgroundColor: st.color || "#8b5cf6" }}
+                              >
+                                {st.name.charAt(0)}
+                              </div>
+                              <span className="truncate max-w-[100px]">{st.name}</span>
+                            </td>
+
+                            {/* DAY CELLS */}
+                            {daysArray.map((day) => {
+                              const dateStr = `${attendanceMonth}-${String(day).padStart(2, "0")}`;
+                              const record = attendance.find(
+                                (r) => r.staff_id === st.id && r.date === dateStr
+                              );
+                              const isToday = dateStr === new Date().toISOString().slice(0, 10);
+                              const cellStatus: AttendanceStatus = record
+                                ? record.status
+                                : isToday
+                                ? st.status === "active"
+                                  ? "present"
+                                  : st.status === "half_day"
+                                  ? "half_day"
+                                  : st.status === "on_leave"
+                                  ? "on_leave"
+                                  : st.status === "weekly_off"
+                                  ? "weekly_off"
+                                  : "present"
+                                : "present";
+
+                              const nextCycle: AttendanceStatus =
+                                cellStatus === "present"
+                                  ? "half_day"
+                                  : cellStatus === "half_day"
+                                  ? "on_leave"
+                                  : cellStatus === "on_leave"
+                                  ? "weekly_off"
+                                  : "present";
+
+                              return (
+                                <td
+                                  key={day}
+                                  className="p-0.5 text-center border-l border-zinc-800/40"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkStaffAttendance(st.id, nextCycle)}
+                                    className={`h-6 w-6 mx-auto rounded-md text-[9px] font-bold flex items-center justify-center transition-all cursor-pointer ${
+                                      cellStatus === "present"
+                                        ? "bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 hover:bg-emerald-900"
+                                        : cellStatus === "half_day"
+                                        ? "bg-amber-950/80 text-amber-300 border border-amber-700/60 hover:bg-amber-900"
+                                        : cellStatus === "on_leave"
+                                        ? "bg-rose-950/80 text-rose-300 border border-rose-700/60 hover:bg-rose-900"
+                                        : "bg-zinc-900 text-zinc-500 border border-zinc-800 hover:bg-zinc-800"
+                                    }`}
+                                    title={`${st.name} on ${dateStr}: ${cellStatus} (Click to cycle)`}
+                                  >
+                                    {cellStatus === "present"
+                                      ? "P"
+                                      : cellStatus === "half_day"
+                                      ? "HD"
+                                      : cellStatus === "on_leave"
+                                      ? "L"
+                                      : "OFF"}
+                                  </button>
+                                </td>
+                              );
+                            })}
+
+                            {/* TOTALS */}
+                            <td className="py-2 px-1 text-center font-mono font-bold text-emerald-400 border-l border-zinc-800">
+                              {monthly.present}
+                            </td>
+                            <td className="py-2 px-1 text-center font-mono font-bold text-amber-400 border-l border-zinc-800">
+                              {monthly.halfDay}
+                            </td>
+                            <td className="py-2 px-1 text-center font-mono font-bold text-rose-400 border-l border-zinc-800">
+                              {monthly.leave}
+                            </td>
+                            <td className="py-2 px-2 text-center font-mono font-black text-white bg-zinc-900/60 border-l border-zinc-800">
+                              {monthly.totalPayableDays}d
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* LEGEND */}
+              <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-2 border-t border-zinc-800 flex-wrap gap-2">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="font-semibold text-zinc-300">Legend:</span>
+                  <span className="flex items-center gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-bold">P</span> = Full Present (1.0)
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 text-[10px] font-bold">HD</span> = Half Day (0.5)
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 text-[10px] font-bold">L</span> = Leave (0.0)
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 text-[10px] font-bold">OFF</span> = Weekly Off
+                  </span>
+                </div>
+
+                <div className="text-[10px] text-purple-300 italic">
+                  Tip: Click any matrix cell to cycle attendance for that date.
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        <DialogFooter>
+          <Button variant="outline" type="button" onClick={() => setIsAttendanceLogModalOpen(false)}>
+            Close Register
+          </Button>
+        </DialogFooter>
       </Dialog>
 
       {/* CUSTOMER CREATE / EDIT MODAL */}

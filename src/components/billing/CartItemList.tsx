@@ -358,10 +358,10 @@ export function CartItemList() {
                         ⚡ Choose Stylist
                       </option>
                       {staff
-                        .filter((s) => s.status === "active")
+                        .filter((s) => s.status === "active" || s.status === "half_day")
                         .map((s) => (
                           <option key={s.id} value={s.id}>
-                            {s.name} ({s.role})
+                            {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : ""}
                           </option>
                         ))}
                     </select>
@@ -438,8 +438,12 @@ export function CartItemList() {
                             >
                               <option value="">-- Select Stylist * --</option>
                               {staff.map((s) => (
-                                <option key={s.id} value={s.id} disabled={s.status !== "active"}>
-                                  {s.name} ({s.role}) {s.status === "on_leave" ? "[Leave]" : ""}
+                                <option
+                                  key={s.id}
+                                  value={s.id}
+                                  disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
+                                >
+                                  {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
                                 </option>
                               ))}
                             </select>
@@ -493,8 +497,12 @@ export function CartItemList() {
                       {isService ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
                     </option>
                     {staff.map((s) => (
-                      <option key={s.id} value={s.id} disabled={s.status !== "active"}>
-                        {s.name} ({s.role}) {s.status === "on_leave" ? "[Leave]" : ""}
+                      <option
+                        key={s.id}
+                        value={s.id}
+                        disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
+                      >
+                        {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
                       </option>
                     ))}
                   </select>

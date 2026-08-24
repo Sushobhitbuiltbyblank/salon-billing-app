@@ -170,8 +170,12 @@ export function SplitStaffModal({
               const type = isProduct ? (s.product_commission_type ?? s.commission_type ?? "percent") : (s.commission_type ?? "percent");
               const label = type === "fixed" ? `${settings.currency_symbol}${rate} Flat` : `${rate}%`;
               return (
-                <option key={s.id} value={s.id} disabled={s.status !== "active"}>
-                  {s.name} ({s.role}) - {label} {s.status === "on_leave" ? " [On Leave]" : ""}
+                <option
+                  key={s.id}
+                  value={s.id}
+                  disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
+                >
+                  {s.name} ({s.role}) - {label}{s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
                 </option>
               );
             })}
@@ -215,8 +219,12 @@ export function SplitStaffModal({
                 const type = isProduct ? (s.product_commission_type ?? s.commission_type ?? "percent") : (s.commission_type ?? "percent");
                 const label = type === "fixed" ? `${settings.currency_symbol}${rate} Flat` : `${rate}%`;
                 return (
-                  <option key={s.id} value={s.id} disabled={s.status !== "active"}>
-                    {s.name} ({s.role}) - {label} {s.status === "on_leave" ? " [On Leave]" : ""}
+                  <option
+                    key={s.id}
+                    value={s.id}
+                    disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
+                  >
+                    {s.name} ({s.role}) - {label}{s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
                   </option>
                 );
               })}

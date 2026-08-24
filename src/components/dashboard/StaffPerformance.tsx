@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { Staff } from "@/types";
 import { calculateStaffPerformance } from "@/lib/calculations";
@@ -22,13 +22,16 @@ import {
   Plus,
   Phone,
   Percent,
+  Calendar,
 } from "lucide-react";
 
 export function StaffPerformance() {
-  const { staff, invoices, toggleStaffStatus, updateStaff, settings } = useApp();
+  const { staff, invoices, toggleStaffStatus, updateStaff, settings, attendance } = useApp();
 
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
 
   // Calculate real-time commission and volume for all staff
   const staffSummaries = calculateStaffPerformance(invoices, staff);
@@ -41,6 +44,11 @@ export function StaffPerformance() {
     (sum, s) => sum + s.total_sales_generated,
     0
   );
+
+  const activeFloorCount = staff.filter((s) => s.status === "active").length;
+  const halfDayCount = staff.filter((s) => s.status === "half_day").length;
+  const onLeaveCount = staff.filter((s) => s.status === "on_leave").length;
+  const weeklyOffCount = staff.filter((s) => s.status === "weekly_off").length;
 
   const handleEditClick = (s: Staff) => {
     setEditingStaff({ ...s });
@@ -91,12 +99,17 @@ export function StaffPerformance() {
       {/* TOP METRIC STATS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="bg-zinc-900/80">
-          <div className="text-xs text-zinc-400 font-semibold">Active Stylists</div>
+          <div className="text-xs text-zinc-400 font-semibold">Floor Attendance Today</div>
           <div className="text-2xl font-black text-white mt-1">
-            {staff.filter((s) => s.status === "active").length} / {staff.length}
+            <span className="text-emerald-400">{activeFloorCount} Present</span>
+            {halfDayCount > 0 && <span className="text-amber-400 text-lg ml-2 font-bold">({halfDayCount} Half Day)</span>}
           </div>
-          <div className="text-[11px] text-zinc-500 mt-1">
-            {staff.filter((s) => s.status === "on_leave").length} currently on leave
+          <div className="text-[11px] text-zinc-500 mt-1 flex items-center gap-2">
+            <span>{onLeaveCount} on leave</span>
+            <span>•</span>
+            <span>{weeklyOffCount} off duty</span>
+            <span>•</span>
+            <span className="font-bold text-zinc-400">{staff.length} Total</span>
           </div>
         </Card>
 
@@ -138,7 +151,7 @@ export function StaffPerformance() {
             <thead className="border-b border-zinc-800 bg-zinc-950/40 text-[11px] uppercase tracking-wider text-zinc-400">
               <tr>
                 <th className="py-3 px-4">Rank / Stylist</th>
-                <th className="py-3 px-4">Role & Status</th>
+                <th className="py-3 px-4">Role & Attendance</th>
                 <th className="py-3 px-4 text-center">Comm. %</th>
                 <th className="py-3 px-4 text-center">Services</th>
                 <th className="py-3 px-4 text-center">Retail</th>
@@ -150,7 +163,15 @@ export function StaffPerformance() {
             <tbody className="divide-y divide-zinc-800/60 text-zinc-200">
               {staffSummaries.map((summary, idx) => {
                 const s = summary.staff;
-                const isActive = s.status === "active";
+                const status = s.status || "active";
+
+                // Monthly attendance records for this stylist
+                const monthlyRecords = attendance.filter(
+                  (r) => r.staff_id === s.id && r.date.startsWith(currentMonthStr)
+                );
+                const pCount = monthlyRecords.filter((r) => r.status === "present").length;
+                const hdCount = monthlyRecords.filter((r) => r.status === "half_day").length;
+                const lCount = monthlyRecords.filter((r) => r.status === "on_leave").length;
 
                 return (
                   <tr
@@ -186,18 +207,38 @@ export function StaffPerformance() {
                     {/* ROLE & STATUS BADGE */}
                     <td className="py-3.5 px-4">
                       <div className="text-zinc-300 font-medium">{s.role}</div>
-                      <button
-                        onClick={() => toggleStaffStatus(s.id)}
-                        className="mt-1 inline-flex items-center gap-1 cursor-pointer"
-                        title="Click to toggle status"
-                      >
-                        <Badge
-                          variant={isActive ? "success" : "warning"}
-                          className="text-[10px] py-0 px-2 cursor-pointer hover:opacity-80"
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <button
+                          onClick={() => toggleStaffStatus(s.id)}
+                          className="cursor-pointer transition-opacity hover:opacity-80"
+                          title="Click to cycle status: Active -> Half Day -> On Leave"
                         >
-                          {isActive ? "● Active on floor" : "⏸ On Leave"}
-                        </Badge>
-                      </button>
+                          {status === "active" && (
+                            <Badge variant="success" className="text-[10px] py-0 px-2 font-bold">
+                              🟢 Present
+                            </Badge>
+                          )}
+                          {status === "half_day" && (
+                            <Badge variant="warning" className="text-[10px] py-0 px-2 font-bold bg-amber-950 text-amber-300 border-amber-600">
+                              🟡 Half Day
+                            </Badge>
+                          )}
+                          {status === "on_leave" && (
+                            <Badge variant="destructive" className="text-[10px] py-0 px-2 font-bold bg-rose-950 text-rose-300 border-rose-600">
+                              🔴 On Leave
+                            </Badge>
+                          )}
+                          {status === "weekly_off" && (
+                            <Badge variant="outline" className="text-[10px] py-0 px-2 font-bold text-zinc-400 border-zinc-700">
+                              ⚪ Weekly Off
+                            </Badge>
+                          )}
+                        </button>
+
+                        <span className="text-[10px] text-zinc-500 font-mono hidden xl:inline" title="Monthly attendance">
+                          ({pCount}P • {hdCount}HD • {lCount}L)
+                        </span>
+                      </div>
                     </td>
 
                     {/* COMMISSION TIER */}

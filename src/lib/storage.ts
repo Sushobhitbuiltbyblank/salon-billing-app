@@ -7,6 +7,8 @@ import {
   Invoice,
   SalonSettings,
   Staff,
+  AttendanceRecord,
+  AttendanceStatus,
 } from "@/types";
 import { generateUUID } from "./utils";
 import {
@@ -23,6 +25,7 @@ const KEYS = {
   CURRENT_USER: `${STORAGE_PREFIX}current_user`,
   SETTINGS: `${STORAGE_PREFIX}settings`,
   STAFF: `${STORAGE_PREFIX}staff`,
+  ATTENDANCE: `${STORAGE_PREFIX}attendance`,
   CATEGORIES: `${STORAGE_PREFIX}categories`,
   CATALOG: `${STORAGE_PREFIX}catalog`,
   CUSTOMERS: `${STORAGE_PREFIX}customers`,
@@ -494,6 +497,84 @@ export const Storage = {
   deleteStaffMember(staffId: string): void {
     const list = this.getStaff().filter((s) => s.id !== staffId);
     this.saveStaff(list);
+  },
+
+  // STAFF ATTENDANCE
+  getAttendance(): AttendanceRecord[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(KEYS.ATTENDANCE);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  },
+  saveAttendance(records: AttendanceRecord[]): void {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(KEYS.ATTENDANCE, JSON.stringify(records));
+    } catch (e) {
+      console.error(e);
+    }
+  },
+  markAttendance(
+    staffId: string,
+    date: string, // YYYY-MM-DD
+    status: AttendanceStatus,
+    notes?: string,
+    staffName?: string
+  ): AttendanceRecord {
+    const records = this.getAttendance();
+    const existingIndex = records.findIndex(
+      (r) => r.staff_id === staffId && r.date === date
+    );
+
+    const now = new Date().toISOString();
+    let updatedRecord: AttendanceRecord;
+
+    if (existingIndex >= 0) {
+      updatedRecord = {
+        ...records[existingIndex],
+        status,
+        notes: notes !== undefined ? notes : records[existingIndex].notes,
+        staff_name: staffName || records[existingIndex].staff_name,
+        updated_at: now,
+      };
+      records[existingIndex] = updatedRecord;
+    } else {
+      updatedRecord = {
+        id: generateUUID(),
+        staff_id: staffId,
+        staff_name: staffName,
+        date,
+        status,
+        notes,
+        created_at: now,
+        updated_at: now,
+      };
+      records.push(updatedRecord);
+    }
+
+    this.saveAttendance(records);
+
+    // If marking for today's date, also sync the staff status on the floor
+    const today = new Date().toISOString().slice(0, 10);
+    if (date === today) {
+      const staffList = this.getStaff();
+      const st = staffList.find((s) => s.id === staffId);
+      if (st) {
+        if (status === "present") st.status = "active";
+        else if (status === "half_day") st.status = "half_day";
+        else if (status === "on_leave") st.status = "on_leave";
+        else if (status === "weekly_off") st.status = "weekly_off";
+        else if (status === "absent") st.status = "on_leave";
+        this.saveStaff(staffList);
+      }
+    }
+
+    return updatedRecord;
   },
 
   // CATEGORIES
