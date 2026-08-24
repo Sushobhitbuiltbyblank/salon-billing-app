@@ -705,6 +705,12 @@ export const Storage = {
         if ((!existing.phone || existing.phone.length < 10) && cleanPhone) {
           existing.phone = cleanPhone;
         }
+        if (invoice.customer_name && !isAnon && invoice.customer_name.trim() !== existing.name.trim()) {
+          existing.name = invoice.customer_name.trim();
+        }
+        if (invoice.customer_email && !existing.email) {
+          existing.email = invoice.customer_email;
+        }
         this.saveCustomers(customers);
       } else if (!isAnon && invoice.customer_name) {
         this.saveCustomer({

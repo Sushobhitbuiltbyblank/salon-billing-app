@@ -17,6 +17,7 @@ import {
   Plus,
   CheckCircle2,
   FileEdit,
+  AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, generateUUID } from "@/lib/utils";
@@ -117,7 +118,42 @@ export function CustomerSelector() {
     if (field === "phone") {
       // Allow only numbers and maximum 10 digits
       cleanValue = value.replace(/\D/g, "").slice(0, 10);
+
+      // AUTO-PREFILL IF PHONE NUMBER ALREADY EXISTS IN CRM
+      if (cleanValue.length === 10 || cleanValue.length >= 7) {
+        const existing = allAvailableCustomers.find(
+          (c: Customer) => normalizePhoneNumber(c.phone) === cleanValue
+        );
+
+        if (existing) {
+          const currentName = draftCustomer?.name?.trim() || "";
+          const isCurrentAnon = isAnonymousCustomerName(currentName);
+          const nameToSet =
+            !currentName || isCurrentAnon
+              ? existing.name
+              : draftCustomer?.name || existing.name;
+
+          setDraftCustomer({
+            ...(draftCustomer || {}),
+            id: existing.id || draftCustomer?.id,
+            phone: cleanValue,
+            name: nameToSet,
+            gender:
+              existing.gender && existing.gender !== "unspecified"
+                ? existing.gender
+                : draftCustomer?.gender || "female",
+            email: existing.email || draftCustomer?.email || "",
+            birthday: existing.birthday || draftCustomer?.birthday || "",
+            notes: existing.notes || draftCustomer?.notes || "",
+            total_visits: existing.total_visits,
+            total_spent: existing.total_spent,
+          });
+          setIsAddingDetails(true);
+          return;
+        }
+      }
     }
+
     setIsAddingDetails(true);
     if (!draftCustomer) {
       setDraftCustomer({ [field]: cleanValue });
@@ -132,6 +168,33 @@ export function CustomerSelector() {
     setShowAdvanced(false);
     setSearchQuery("");
   };
+
+  // Specific customer record matched by the entered phone number
+  const matchedCustomerByPhone = useMemo(() => {
+    if (!draftCustomer?.phone) return null;
+    const cleanPhone = normalizePhoneNumber(draftCustomer.phone);
+    if (cleanPhone.length < 7) return null;
+
+    return (
+      allAvailableCustomers.find(
+        (c: Customer) => normalizePhoneNumber(c.phone) === cleanPhone
+      ) || null
+    );
+  }, [draftCustomer?.phone, allAvailableCustomers]);
+
+  // Detect if user has modified the registered name of this existing customer
+  const isExistingNameEdited = useMemo(() => {
+    if (!matchedCustomerByPhone || !matchedCustomerByPhone.name) return false;
+    if (isAnonymousCustomerName(matchedCustomerByPhone.name)) return false;
+
+    const currentDraftName = draftCustomer?.name?.trim() || "";
+    if (!currentDraftName || isAnonymousCustomerName(currentDraftName)) return false;
+
+    return (
+      normalizeCustomerName(currentDraftName) !==
+      normalizeCustomerName(matchedCustomerByPhone.name)
+    );
+  }, [matchedCustomerByPhone, draftCustomer?.name]);
 
   const matchedCustomer = useMemo(() => {
     if (!draftCustomer) return null;
@@ -339,9 +402,16 @@ export function CustomerSelector() {
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
           {/* CUSTOMER NAME (5 COLS) */}
           <div className="sm:col-span-5">
-            <label className="text-xs sm:text-[11px] font-medium text-zinc-400 mb-1 block">
-              Customer Name <span className="text-rose-400 font-bold">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs sm:text-[11px] font-medium text-zinc-400">
+                Customer Name <span className="text-rose-400 font-bold">*</span>
+              </label>
+              {isExistingNameEdited && matchedCustomerByPhone && (
+                <span className="text-[9px] text-amber-400 font-bold bg-amber-950/90 border border-amber-700/60 px-1.5 py-0.2 rounded-md">
+                  Edited (Original: {matchedCustomerByPhone.name})
+                </span>
+              )}
+            </div>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-3.5 sm:w-3.5 text-zinc-500" />
               <input
@@ -350,7 +420,11 @@ export function CustomerSelector() {
                 value={draftCustomer?.name || ""}
                 autoComplete="name"
                 onChange={(e) => handleFieldChange("name", e.target.value)}
-                className="w-full h-10 sm:h-9 pl-9 pr-3 text-sm sm:text-xs bg-zinc-950/90 border border-zinc-800 rounded-xl text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 font-medium"
+                className={`w-full h-10 sm:h-9 pl-9 pr-3 text-sm sm:text-xs bg-zinc-950/90 border rounded-xl text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 font-medium transition-colors ${
+                  isExistingNameEdited
+                    ? "border-amber-500/80 focus:ring-amber-500 focus:border-amber-500"
+                    : "border-zinc-800 focus:ring-purple-500 focus:border-purple-500"
+                }`}
               />
             </div>
           </div>
@@ -430,8 +504,34 @@ export function CustomerSelector() {
           </div>
         </div>
 
+        {/* WARNING WHEN EDITING EXISTING USER'S NAME */}
+        {isExistingNameEdited && matchedCustomerByPhone && (
+          <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/70 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-md animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-start gap-2 min-w-0">
+              <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-bold text-xs text-amber-300 flex items-center gap-1.5">
+                  <span>⚠️ Renaming Existing Customer Profile</span>
+                </div>
+                <p className="text-[11px] text-amber-200/90 leading-tight mt-1">
+                  Mobile number <span className="font-mono font-bold text-white">{draftCustomer?.phone}</span> is registered to <span className="font-bold underline text-white">"{matchedCustomerByPhone.name}"</span>.
+                  Renaming to <span className="font-bold text-white">"{draftCustomer?.name}"</span> will update their customer profile in the CRM upon billing/saving.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleFieldChange("name", matchedCustomerByPhone.name)}
+              className="text-[10px] px-2.5 py-1 rounded-lg bg-amber-900/80 hover:bg-amber-800 text-amber-100 border border-amber-600/70 font-bold shrink-0 cursor-pointer transition-all shadow-sm flex items-center gap-1 self-end sm:self-center"
+              title="Revert back to original customer name"
+            >
+              ↩ Revert to "{matchedCustomerByPhone.name}"
+            </button>
+          </div>
+        )}
+
         {/* REPEAT CLIENT STATS SUMMARY BANNER */}
-        {matchedCustomer && (
+        {matchedCustomer && !isExistingNameEdited && (
           <div className="p-2.5 rounded-xl bg-purple-950/30 border border-purple-800/30 flex items-center justify-between text-xs sm:text-[11px]">
             <div className="flex items-center gap-1.5 text-purple-300">
               <UserCheck className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-purple-400 shrink-0" />
