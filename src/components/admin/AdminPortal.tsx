@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import {
   AppUser,
@@ -94,6 +94,10 @@ export function AdminPortal() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
   const [customerGenderFilter, setCustomerGenderFilter] = useState<string>("all");
+
+  const unifiedCustomers = useMemo(() => {
+    return unifyCustomerList(customers, invoices);
+  }, [customers, invoices]);
 
   const [visiblePins, setVisiblePins] = useState<Record<string, boolean>>({});
 
@@ -537,7 +541,7 @@ export function AdminPortal() {
             icon: Receipt,
             count: invoices.length,
           },
-          { id: "customers", label: "Clients & CRM", icon: UserCheck, count: customers.length },
+          { id: "customers", label: "Clients & CRM", icon: UserCheck, count: unifiedCustomers.length },
           { id: "staff", label: "Staff & Commissions", icon: Users, count: staff.length },
           { id: "catalog", label: "Services & Products", icon: Package, count: catalog.length },
           { id: "categories", label: "Categories", icon: Layers, count: categories.length },
@@ -600,7 +604,7 @@ export function AdminPortal() {
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <span>Customer Directory & CRM</span>
                 <Badge variant="purple" className="text-[10px] font-mono">
-                  {customers.length} Registered
+                  {unifiedCustomers.length} Total Clients
                 </Badge>
               </h3>
               <p className="text-xs text-zinc-400">
@@ -668,9 +672,7 @@ export function AdminPortal() {
 
           {/* CUSTOMERS LIST / TABLE */}
           {(() => {
-            const allUnified = unifyCustomerList(customers, invoices);
-
-            const filteredCustomers = allUnified.filter((c) => {
+            const filteredCustomers = unifiedCustomers.filter((c) => {
               const q = customerSearchQuery.toLowerCase().trim();
               const matchSearch =
                 !q ||
