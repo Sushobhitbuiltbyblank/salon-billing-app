@@ -10,13 +10,10 @@ import {
   Gift,
   ChevronDown,
   ChevronUp,
-  Search,
   Sparkles,
   UserCheck,
   X,
-  Plus,
   CheckCircle2,
-  FileEdit,
   AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -31,87 +28,13 @@ import {
 export function CustomerSelector() {
   const { customers, invoices, draftCustomer, setDraftCustomer, settings, saveCustomer } = useApp();
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isOpenDropdown, setIsOpenDropdown] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isAddingDetails, setIsAddingDetails] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // UNIFY REGISTERED CUSTOMERS + INVOICE CUSTOMER RECORDS
   const allAvailableCustomers = useMemo(() => {
     return unifyCustomerList(customers, invoices);
   }, [customers, invoices]);
-
-  // Filter customers by name or phone number across all sources
-  const filteredCustomers = useMemo(() => {
-    const rawQ = searchQuery.trim().toLowerCase();
-    if (!rawQ) return [];
-    const digitsOnly = normalizePhoneNumber(rawQ);
-
-    return allAvailableCustomers.filter((c: Customer) => {
-      const custName = normalizeCustomerName(c.name);
-      const custPhone = normalizePhoneNumber(c.phone);
-
-      // 1. Name Match: partial substring, starts-with, or word match
-      const nameMatch =
-        custName.length > 0 &&
-        (custName.includes(rawQ) ||
-          custName.split(/\s+/).some((part) => part.startsWith(rawQ)));
-
-      // 2. Phone Match: digits match or raw match
-      const phoneMatch = Boolean(
-        digitsOnly.length > 0 &&
-          (custPhone.includes(digitsOnly) || (c.phone && c.phone.includes(digitsOnly)))
-      ) || (c.phone && c.phone.toLowerCase().includes(rawQ));
-
-      // 3. Email Match
-      const emailMatch = Boolean(c.email && c.email.toLowerCase().includes(rawQ));
-
-      return nameMatch || phoneMatch || emailMatch;
-    });
-  }, [allAvailableCustomers, searchQuery]);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpenDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSelectCustomer = (customer: Customer) => {
-    setDraftCustomer({
-      id: customer.id,
-      name: customer.name,
-      phone: customer.phone,
-      gender: customer.gender && customer.gender !== "unspecified" ? customer.gender : "female",
-      email: customer.email,
-      birthday: customer.birthday,
-      notes: customer.notes,
-      total_visits: customer.total_visits,
-      total_spent: customer.total_spent,
-    });
-    setIsAddingDetails(true);
-    setSearchQuery("");
-    setIsOpenDropdown(false);
-  };
-
-  const handleCreateNewCustomer = () => {
-    const isPhone = /^\d+$/.test(searchQuery.trim());
-    const digitsOnly = searchQuery.replace(/\D/g, "").slice(0, 10);
-    const newCust: Partial<Customer> = {
-      name: isPhone ? "" : searchQuery.trim(),
-      phone: isPhone ? digitsOnly : "",
-      gender: "female",
-    };
-    setDraftCustomer(newCust);
-    setIsAddingDetails(true);
-    setSearchQuery("");
-    setIsOpenDropdown(false);
-  };
 
   const handleFieldChange = (field: keyof Customer, value: string) => {
     let cleanValue = value;
@@ -166,7 +89,6 @@ export function CustomerSelector() {
     setDraftCustomer(null);
     setIsAddingDetails(false);
     setShowAdvanced(false);
-    setSearchQuery("");
   };
 
   // Specific customer record matched by the entered phone number
@@ -272,7 +194,7 @@ export function CustomerSelector() {
               <span className="text-[10px] text-zinc-400 block">
                 {matchedCustomer
                   ? `Returning guest (${matchedCustomer.total_visits} visits • ${formatCurrency(matchedCustomer.total_spent, settings.currency_symbol)})`
-                  : "Enter client name, phone & gender (or search existing client)"}
+                  : "Enter mobile number to auto-fill returning client or add new"}
               </span>
             </div>
           </div>
@@ -298,104 +220,6 @@ export function CustomerSelector() {
               </button>
             )}
           </div>
-        </div>
-
-        {/* QUICK CLIENT SEARCH & AUTOCOMPLETE */}
-        <div className="relative" ref={dropdownRef}>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-            <input
-              type="text"
-              placeholder="Search by client Name (e.g. Sriya) or 10-digit Phone..."
-              value={searchQuery}
-              autoComplete="off"
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setIsOpenDropdown(true);
-              }}
-              onFocus={() => setIsOpenDropdown(true)}
-              className="w-full h-10 sm:h-9 pl-9 pr-8 text-sm sm:text-xs bg-zinc-950/90 border border-zinc-800 rounded-xl text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500 font-medium"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  setIsOpenDropdown(false);
-                }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white p-1 cursor-pointer"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* DROPDOWN RESULTS */}
-          {isOpenDropdown && searchQuery.trim().length > 0 && (
-            <div className="absolute z-50 left-0 right-0 top-11 rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl p-1.5 max-h-60 overflow-y-auto">
-              {filteredCustomers.length > 0 ? (
-                filteredCustomers.map((cust: Customer) => {
-                  const isMatchByName = (cust.name || "").toLowerCase().includes(searchQuery.toLowerCase().trim());
-                  const isMatchByPhone = (cust.phone || "").includes(searchQuery.replace(/\D/g, ""));
-
-                  return (
-                    <div
-                      key={cust.id}
-                      onClick={() => handleSelectCustomer(cust)}
-                      className="flex items-center justify-between p-2.5 rounded-lg hover:bg-zinc-800/90 cursor-pointer transition-colors active:bg-purple-950/40"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-full bg-purple-600/30 text-purple-300 flex items-center justify-center font-bold text-xs shrink-0">
-                          {cust.name.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                            <span>{cust.name}</span>
-                            {cust.gender && (
-                              <span className="text-[10px] text-zinc-400 capitalize">
-                                ({cust.gender})
-                              </span>
-                            )}
-                            {isMatchByName && !isMatchByPhone && (
-                              <span className="text-[9px] bg-purple-950/80 text-purple-300 border border-purple-800/60 px-1.5 py-0.2 rounded">
-                                Name
-                              </span>
-                            )}
-                            {isMatchByPhone && (
-                              <span className="text-[9px] bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.2 rounded">
-                                Phone
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-zinc-400 flex items-center gap-1 font-mono">
-                            <Phone className="h-2.5 w-2.5" />
-                            {cust.phone || "No phone"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <div className="text-xs font-bold text-emerald-400">
-                          {formatCurrency(cust.total_spent, settings.currency_symbol)}
-                        </div>
-                        <div className="text-[10px] text-zinc-400">
-                          {cust.total_visits} visits
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div
-                  onClick={handleCreateNewCustomer}
-                  className="p-3 text-center text-xs text-purple-300 hover:bg-zinc-800/80 rounded-lg cursor-pointer flex items-center justify-center gap-2 font-medium"
-                >
-                  <Plus className="h-4 w-4 text-purple-400" />
-                  <span>Add new client with "{searchQuery}"</span>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* ALWAYS-EXPANDED CORE FIELDS: NAME, MOBILE, AND MANDATORY GENDER */}
