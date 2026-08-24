@@ -30,20 +30,54 @@ export function StaffPerformance() {
 
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [timeframe, setTimeframe] = useState<"today" | "month" | "all">("today");
 
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayLocaleStr = useMemo(() => new Date().toLocaleDateString("en-CA"), []);
   const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
 
-  // Calculate real-time commission and volume for all staff
-  const staffSummaries = calculateStaffPerformance(invoices, staff);
+  // Filter active invoices based on chosen timeframe (defaults to "today")
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((inv) => {
+      if ((inv.status as string) === "void" || (inv.status as string) === "cancelled") return false;
+      const invDateStr = (inv.created_at || "").slice(0, 10);
+      const isDateToday =
+        invDateStr === todayStr ||
+        invDateStr === todayLocaleStr ||
+        new Date(inv.created_at || "").toDateString() === new Date().toDateString();
 
-  const totalIncentives = staffSummaries.reduce(
-    (sum, s) => sum + s.total_commission_earned,
-    0
-  );
-  const totalVolume = staffSummaries.reduce(
-    (sum, s) => sum + s.total_sales_generated,
-    0
-  );
+      if (timeframe === "today") {
+        return isDateToday;
+      }
+      if (timeframe === "month") {
+        return invDateStr.startsWith(currentMonthStr);
+      }
+      return true;
+    });
+  }, [invoices, timeframe, todayStr, todayLocaleStr, currentMonthStr]);
+
+  // Calculate real-time commission and volume for all staff for the active timeframe
+  const staffSummaries = useMemo(() => {
+    return calculateStaffPerformance(filteredInvoices, staff);
+  }, [filteredInvoices, staff]);
+
+  // All-time volume for reference/subtitle
+  const allTimeSummaries = useMemo(() => {
+    const activeInvs = invoices.filter((inv) => (inv.status as string) !== "void" && (inv.status as string) !== "cancelled");
+    return calculateStaffPerformance(activeInvs, staff);
+  }, [invoices, staff]);
+
+  const allTimeVolume = useMemo(() => {
+    return allTimeSummaries.reduce((sum, s) => sum + s.total_sales_generated, 0);
+  }, [allTimeSummaries]);
+
+  const currentVolume = useMemo(() => {
+    return staffSummaries.reduce((sum, s) => sum + s.total_sales_generated, 0);
+  }, [staffSummaries]);
+
+  const currentIncentives = useMemo(() => {
+    return staffSummaries.reduce((sum, s) => sum + s.total_commission_earned, 0);
+  }, [staffSummaries]);
 
   const activeFloorCount = staff.filter((s) => s.status === "active").length;
   const halfDayCount = staff.filter((s) => s.status === "half_day").length;
@@ -78,7 +112,7 @@ export function StaffPerformance() {
 
   return (
     <div className="space-y-6">
-      {/* HEADER & SUMMARY */}
+      {/* HEADER & TIMEFRAME SELECTOR */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-2 border-b border-zinc-800">
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
@@ -90,10 +124,34 @@ export function StaffPerformance() {
           </p>
         </div>
 
-        <Button variant="accent" onClick={handleAddNewStylist} className="gap-1.5 text-xs">
-          <Plus className="h-4 w-4" />
-          Add New Stylist
-        </Button>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* TIMEFRAME SWITCHER */}
+          <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+            {[
+              { id: "today", label: "⚡ Today" },
+              { id: "month", label: "📅 This Month" },
+              { id: "all", label: "🌐 All-Time" },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTimeframe(t.id as any)}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  timeframe === t.id
+                    ? "bg-purple-600 text-white shadow-sm"
+                    : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <Button variant="accent" onClick={handleAddNewStylist} className="gap-1.5 text-xs font-bold">
+            <Plus className="h-4 w-4" />
+            Add New Stylist
+          </Button>
+        </div>
       </div>
 
       {/* TOP METRIC STATS */}
@@ -113,23 +171,39 @@ export function StaffPerformance() {
           </div>
         </Card>
 
-        <Card className="bg-zinc-900/80">
-          <div className="text-xs text-purple-300 font-semibold">Total Staff Sales Volume</div>
+        <Card className="bg-zinc-900/80 border-purple-500/20">
+          <div className="text-xs text-purple-300 font-semibold flex items-center justify-between">
+            <span>{timeframe === "today" ? "Today's Staff Sales Volume" : timeframe === "month" ? "This Month's Sales Volume" : "Total Staff Sales Volume"}</span>
+            <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800/60">
+              {timeframe}
+            </span>
+          </div>
           <div className="text-2xl font-black text-purple-300 font-mono mt-1">
-            {formatCurrency(totalVolume, settings.currency_symbol)}
+            {formatCurrency(currentVolume, settings.currency_symbol)}
           </div>
           <div className="text-[11px] text-zinc-400 mt-1">
-            Attributed through single & split line items
+            {timeframe === "today" ? (
+              <span>From {filteredInvoices.length} invoices generated today</span>
+            ) : timeframe === "month" ? (
+              <span>From {filteredInvoices.length} invoices this month</span>
+            ) : (
+              <span>Attributed through single & split line items</span>
+            )}
           </div>
         </Card>
 
         <Card className="bg-zinc-900/80 border-emerald-500/30">
-          <div className="text-xs text-emerald-400 font-semibold">Total Calculated Incentives</div>
+          <div className="text-xs text-emerald-400 font-semibold flex items-center justify-between">
+            <span>{timeframe === "today" ? "Today's Calculated Incentives" : timeframe === "month" ? "This Month's Incentives" : "Total Calculated Incentives"}</span>
+            <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">
+              {timeframe}
+            </span>
+          </div>
           <div className="text-2xl font-black text-emerald-400 font-mono mt-1">
-            {formatCurrency(totalIncentives, settings.currency_symbol)}
+            {formatCurrency(currentIncentives, settings.currency_symbol)}
           </div>
           <div className="text-[11px] text-zinc-400 mt-1">
-            Payable commission based on individual tiers
+            Payable commission across stylists for {timeframe === "today" ? "today" : timeframe === "month" ? "this month" : "all time"}
           </div>
         </Card>
       </div>
@@ -139,10 +213,13 @@ export function StaffPerformance() {
         <div className="p-4 border-b border-zinc-800 bg-zinc-950/60 flex items-center justify-between">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Award className="h-4 w-4 text-amber-400" />
-            Stylist Leaderboard & Incentive Tally
+            <span>Stylist Leaderboard & Incentive Tally</span>
+            <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300">
+              {timeframe === "today" ? "Today's Data" : timeframe === "month" ? "This Month" : "All Time"}
+            </span>
           </h3>
-          <span className="text-xs text-zinc-400">
-            Ordered by total sales volume
+          <span className="text-xs text-zinc-400 font-mono">
+            {filteredInvoices.length} transactions analyzed
           </span>
         </div>
 
@@ -155,8 +232,8 @@ export function StaffPerformance() {
                 <th className="py-3 px-4 text-center">Comm. %</th>
                 <th className="py-3 px-4 text-center">Services</th>
                 <th className="py-3 px-4 text-center">Retail</th>
-                <th className="py-3 px-4 text-right">Sales Generated</th>
-                <th className="py-3 px-4 text-right">Earned Incentive</th>
+                <th className="py-3 px-4 text-right">{timeframe === "today" ? "Today's Sales" : timeframe === "month" ? "Month Sales" : "Sales Generated"}</th>
+                <th className="py-3 px-4 text-right">{timeframe === "today" ? "Today's Incentive" : timeframe === "month" ? "Month Incentive" : "Earned Incentive"}</th>
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
             </thead>
