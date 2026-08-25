@@ -251,8 +251,8 @@ export function ExpenseManager() {
               <input
                 type="number"
                 min="0"
-                value={newExpense.amount || ""}
-                onChange={(e) => setNewExpense({ ...newExpense, amount: Number(e.target.value) })}
+                value={newExpense.amount === 0 ? "" : (newExpense.amount || "")}
+                onChange={(e) => setNewExpense({ ...newExpense, amount: e.target.value === "" ? 0 : Number(e.target.value) || 0 })}
                 placeholder="0"
                 className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-mono font-bold focus:outline-none focus:ring-1 focus:ring-purple-500"
               />

@@ -187,8 +187,9 @@ export function SalonSettingsView() {
               type="number"
               min="0"
               step="0.5"
-              value={formData.tax_rate}
-              onChange={(e) => setFormData({ ...formData, tax_rate: Number(e.target.value) || 0 })}
+              value={formData.tax_rate === 0 ? "" : formData.tax_rate}
+              onChange={(e) => setFormData({ ...formData, tax_rate: e.target.value === "" ? 0 : Number(e.target.value) || 0 })}
+              placeholder="0"
               className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-mono focus:outline-none focus:ring-1 focus:ring-purple-500"
             />
           </div>

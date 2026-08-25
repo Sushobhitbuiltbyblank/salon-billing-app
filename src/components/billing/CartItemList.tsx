@@ -316,9 +316,9 @@ export function CartItemList() {
                   <input
                     type="number"
                     min="0"
-                    value={item.discount}
+                    value={item.discount === 0 ? "" : item.discount}
                     onChange={(e) =>
-                      updateDraftItem(item.id, { discount: Number(e.target.value) || 0 })
+                      updateDraftItem(item.id, { discount: e.target.value === "" ? 0 : Number(e.target.value) || 0 })
                     }
                     placeholder="0"
                     className="w-full h-7 pl-5 pr-1.5 text-xs bg-zinc-900 border border-zinc-800 rounded-lg text-rose-300 font-mono placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-purple-500"

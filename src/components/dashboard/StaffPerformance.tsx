@@ -135,7 +135,11 @@ export function StaffPerformance() {
 
   const handleSaveStaff = () => {
     if (!editingStaff || !editingStaff.name.trim()) return;
-    updateStaff(editingStaff);
+    updateStaff({
+      ...editingStaff,
+      commission_rate: Number(editingStaff.commission_rate) || 0,
+      product_commission_rate: Number(editingStaff.product_commission_rate) || 0,
+    });
     setIsModalOpen(false);
     setEditingStaff(null);
   };
@@ -525,9 +529,9 @@ export function StaffPerformance() {
                     type="number"
                     min="0"
                     placeholder={editingStaff.commission_type === "fixed" ? "e.g. 150 (₹ flat per service)" : "e.g. 15 (% rate)"}
-                    value={editingStaff.commission_rate}
+                    value={editingStaff.commission_rate === 0 ? "" : (editingStaff.commission_rate ?? "")}
                     onChange={(e) =>
-                      setEditingStaff({ ...editingStaff, commission_rate: Number(e.target.value) || 0 })
+                      setEditingStaff({ ...editingStaff, commission_rate: e.target.value as any })
                     }
                     className="w-full h-9 px-3 pr-16 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-emerald-400 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-purple-500"
                   />
@@ -572,9 +576,9 @@ export function StaffPerformance() {
                     type="number"
                     min="0"
                     placeholder={editingStaff.product_commission_type === "fixed" ? "e.g. 100 (₹ flat per product)" : "e.g. 10 (% rate)"}
-                    value={editingStaff.product_commission_rate ?? 10}
+                    value={editingStaff.product_commission_rate === 0 ? "" : (editingStaff.product_commission_rate ?? "")}
                     onChange={(e) =>
-                      setEditingStaff({ ...editingStaff, product_commission_rate: Number(e.target.value) || 0 })
+                      setEditingStaff({ ...editingStaff, product_commission_rate: e.target.value as any })
                     }
                     className="w-full h-9 px-3 pr-16 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-purple-400 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-purple-500"
                   />

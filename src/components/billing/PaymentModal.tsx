@@ -308,8 +308,8 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
                   <input
                     type="number"
                     min="0"
-                    value={draftDiscountValue || ""}
-                    onChange={(e) => setDraftDiscountValue(Number(e.target.value) || 0)}
+                    value={draftDiscountValue === 0 ? "" : draftDiscountValue}
+                    onChange={(e) => setDraftDiscountValue(e.target.value === "" ? 0 : Number(e.target.value) || 0)}
                     placeholder="0"
                     className="w-16 h-6 px-1.5 text-xs text-right bg-zinc-900 border border-zinc-800 rounded text-rose-300 font-mono focus:outline-none focus:ring-1 focus:ring-purple-500"
                   />
@@ -499,9 +499,9 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
                   <label className="text-[10px] text-zinc-400 block mb-1">Cash</label>
                   <input
                     type="number"
-                    value={splitBreakdown.cash || ""}
+                    value={splitBreakdown.cash === 0 ? "" : splitBreakdown.cash}
                     onChange={(e) =>
-                      setSplitBreakdown({ ...splitBreakdown, cash: Number(e.target.value) || 0 })
+                      setSplitBreakdown({ ...splitBreakdown, cash: e.target.value === "" ? 0 : Number(e.target.value) || 0 })
                     }
                     placeholder="0"
                     className="w-full h-7 px-2 text-xs bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 font-mono"
@@ -512,9 +512,9 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
                   <label className="text-[10px] text-zinc-400 block mb-1">UPI</label>
                   <input
                     type="number"
-                    value={splitBreakdown.upi || ""}
+                    value={splitBreakdown.upi === 0 ? "" : splitBreakdown.upi}
                     onChange={(e) =>
-                      setSplitBreakdown({ ...splitBreakdown, upi: Number(e.target.value) || 0 })
+                      setSplitBreakdown({ ...splitBreakdown, upi: e.target.value === "" ? 0 : Number(e.target.value) || 0 })
                     }
                     placeholder="0"
                     className="w-full h-7 px-2 text-xs bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 font-mono"
@@ -525,9 +525,9 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
                   <label className="text-[10px] text-zinc-400 block mb-1">Card</label>
                   <input
                     type="number"
-                    value={splitBreakdown.card || ""}
+                    value={splitBreakdown.card === 0 ? "" : splitBreakdown.card}
                     onChange={(e) =>
-                      setSplitBreakdown({ ...splitBreakdown, card: Number(e.target.value) || 0 })
+                      setSplitBreakdown({ ...splitBreakdown, card: e.target.value === "" ? 0 : Number(e.target.value) || 0 })
                     }
                     placeholder="0"
                     className="w-full h-7 px-2 text-xs bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-200 font-mono"

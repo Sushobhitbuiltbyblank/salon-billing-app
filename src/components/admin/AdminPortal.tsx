@@ -13,6 +13,7 @@ import {
   StaffStatus,
   AttendanceRecord,
   AttendanceStatus,
+  IncentiveType,
 } from "@/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -255,7 +256,18 @@ export function AdminPortal() {
   // STAFF MODAL STATES
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
-  const [staffFormData, setStaffFormData] = useState<Partial<Staff>>({
+  const [staffFormData, setStaffFormData] = useState<{
+    name?: string;
+    role?: string;
+    phone?: string;
+    commission_rate?: number | string;
+    commission_type?: IncentiveType;
+    product_commission_rate?: number | string;
+    product_commission_type?: IncentiveType;
+    status?: StaffStatus;
+    color?: string;
+    notes?: string;
+  }>({
     name: "",
     role: "Stylist",
     phone: "",
@@ -271,13 +283,22 @@ export function AdminPortal() {
   // CATALOG MODAL STATES
   const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
   const [editingCatalogItem, setEditingCatalogItem] = useState<CatalogItem | null>(null);
-  const [catalogFormData, setCatalogFormData] = useState<Partial<CatalogItem>>({
+  const [catalogFormData, setCatalogFormData] = useState<{
+    name?: string;
+    type?: ItemType;
+    category_id?: string;
+    price?: number | string;
+    duration_mins?: number | string;
+    cost_price?: number | string;
+    sku?: string;
+    is_active?: boolean;
+  }>({
     name: "",
     type: "service",
     category_id: categories[0]?.id || "",
-    price: 1000,
+    price: "",
     duration_mins: 45,
-    cost_price: 150,
+    cost_price: "",
     sku: "",
     is_active: true,
   });
@@ -289,14 +310,14 @@ export function AdminPortal() {
     name: string;
     category_id: string;
     package_service_ids: string[];
-    price: number;
+    price: number | string;
     package_regular_price: number;
-    duration_mins: number;
+    duration_mins: number | string;
   }>({
     name: "",
     category_id: "",
     package_service_ids: [],
-    price: 0,
+    price: "",
     package_regular_price: 0,
     duration_mins: 30,
   });
@@ -411,9 +432,9 @@ export function AdminPortal() {
       name: "",
       type,
       category_id: categories.find((c) => c.type === type)?.id || categories[0]?.id || "",
-      price: type === "service" ? 1200 : 1500,
+      price: "",
       duration_mins: type === "service" ? 45 : undefined,
-      cost_price: 200,
+      cost_price: "",
       sku: type === "product" ? `SKU-${Date.now().toString().slice(-4)}` : "",
       is_active: true,
     });
@@ -427,7 +448,7 @@ export function AdminPortal() {
       name: "",
       category_id: pkgCategory?.id || "",
       package_service_ids: [],
-      price: 0,
+      price: "",
       package_regular_price: 0,
       duration_mins: 30,
     });
@@ -461,10 +482,11 @@ export function AdminPortal() {
       const durationSum = selectedServices.reduce((sum, s) => sum + (s.duration_mins || 30), 0);
 
       // Auto-suggest discounted price if not previously set
+      const numPrevPrice = Number(prev.price) || 0;
       const autoPrice =
-        prev.price === 0 || prev.price === prev.package_regular_price
+        numPrevPrice === 0 || numPrevPrice === prev.package_regular_price
           ? Math.round((regularSum * 0.85) / 10) * 10
-          : prev.price;
+          : numPrevPrice;
 
       return {
         ...prev,
@@ -2062,8 +2084,8 @@ export function AdminPortal() {
                     required
                     min="0"
                     placeholder={staffFormData.commission_type === "fixed" ? "e.g. 150 (₹ flat per service)" : "e.g. 15 (% rate)"}
-                    value={staffFormData.commission_rate ?? 15}
-                    onChange={(e) => setStaffFormData({ ...staffFormData, commission_rate: Number(e.target.value) })}
+                    value={staffFormData.commission_rate ?? ""}
+                    onChange={(e) => setStaffFormData({ ...staffFormData, commission_rate: e.target.value })}
                     className="w-full h-9 px-3 pr-16 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-emerald-400 font-mono font-bold focus:ring-1 focus:ring-purple-500"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-zinc-400">
@@ -2108,8 +2130,8 @@ export function AdminPortal() {
                     required
                     min="0"
                     placeholder={staffFormData.product_commission_type === "fixed" ? "e.g. 100 (₹ flat per product)" : "e.g. 10 (% rate)"}
-                    value={staffFormData.product_commission_rate ?? 10}
-                    onChange={(e) => setStaffFormData({ ...staffFormData, product_commission_rate: Number(e.target.value) })}
+                    value={staffFormData.product_commission_rate ?? ""}
+                    onChange={(e) => setStaffFormData({ ...staffFormData, product_commission_rate: e.target.value })}
                     className="w-full h-9 px-3 pr-16 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-purple-400 font-mono font-bold focus:ring-1 focus:ring-purple-500"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-zinc-400">
@@ -2221,13 +2243,14 @@ export function AdminPortal() {
                     <input
                       type="number"
                       min="0"
-                      value={catalogFormData.cost_price ?? 0}
+                      value={catalogFormData.cost_price ?? ""}
                       onChange={(e) => {
-                        const cost = Number(e.target.value);
+                        const val = e.target.value;
+                        const cost = val === "" ? "" : Number(val);
                         setCatalogFormData({
                           ...catalogFormData,
-                          cost_price: cost,
-                          price: cost * 4, // 4x default sale price
+                          cost_price: val,
+                          price: val === "" ? "" : (typeof cost === "number" && !isNaN(cost) ? cost * 4 : ""),
                         });
                       }}
                       placeholder="e.g. 790"
@@ -2242,7 +2265,7 @@ export function AdminPortal() {
                         type="button"
                         onClick={() => {
                           const cost = Number(catalogFormData.cost_price) || 0;
-                          setCatalogFormData({ ...catalogFormData, price: cost * 4 });
+                          setCatalogFormData({ ...catalogFormData, price: cost > 0 ? cost * 4 : "" });
                         }}
                         className="text-[10px] text-purple-400 hover:text-purple-300 font-bold"
                       >
@@ -2253,8 +2276,9 @@ export function AdminPortal() {
                       type="number"
                       required
                       min="0"
-                      value={catalogFormData.price ?? 0}
-                      onChange={(e) => setCatalogFormData({ ...catalogFormData, price: Number(e.target.value) })}
+                      value={catalogFormData.price ?? ""}
+                      onChange={(e) => setCatalogFormData({ ...catalogFormData, price: e.target.value })}
+                      placeholder="e.g. 3160"
                       className="w-full h-9 px-3 text-xs bg-zinc-900 border border-emerald-900/60 rounded-xl text-emerald-400 font-mono font-extrabold focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
@@ -2265,14 +2289,14 @@ export function AdminPortal() {
                   <div>
                     <span className="text-[10px] text-emerald-500 block">Unit Profit</span>
                     <span className="font-mono font-bold">
-                      +{formatCurrency(Math.max(0, (catalogFormData.price || 0) - (catalogFormData.cost_price || 0)), settings.currency_symbol)}
+                      +{formatCurrency(Math.max(0, (Number(catalogFormData.price) || 0) - (Number(catalogFormData.cost_price) || 0)), settings.currency_symbol)}
                     </span>
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] text-emerald-500 block">Profit Margin</span>
                     <span className="font-mono font-bold">
-                      {(catalogFormData.price || 0) > 0
-                        ? `${((((catalogFormData.price || 0) - (catalogFormData.cost_price || 0)) / (catalogFormData.price || 1)) * 100).toFixed(0)}%`
+                      {(Number(catalogFormData.price) || 0) > 0
+                        ? `${((((Number(catalogFormData.price) || 0) - (Number(catalogFormData.cost_price) || 0)) / (Number(catalogFormData.price) || 1)) * 100).toFixed(0)}%`
                         : "0%"}
                     </span>
                   </div>
@@ -2297,8 +2321,9 @@ export function AdminPortal() {
                     type="number"
                     required
                     min="0"
-                    value={catalogFormData.price ?? 0}
-                    onChange={(e) => setCatalogFormData({ ...catalogFormData, price: Number(e.target.value) })}
+                    value={catalogFormData.price ?? ""}
+                    onChange={(e) => setCatalogFormData({ ...catalogFormData, price: e.target.value })}
+                    placeholder="e.g. 1200"
                     className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-emerald-400 font-mono font-bold focus:ring-1 focus:ring-purple-500"
                   />
                 </div>
@@ -2308,8 +2333,9 @@ export function AdminPortal() {
                     type="number"
                     min="5"
                     step="5"
-                    value={catalogFormData.duration_mins ?? 30}
-                    onChange={(e) => setCatalogFormData({ ...catalogFormData, duration_mins: Number(e.target.value) })}
+                    value={catalogFormData.duration_mins ?? ""}
+                    onChange={(e) => setCatalogFormData({ ...catalogFormData, duration_mins: e.target.value })}
+                    placeholder="e.g. 45"
                     className="w-full h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white font-mono focus:ring-1 focus:ring-purple-500"
                   />
                 </div>
@@ -2522,11 +2548,11 @@ export function AdminPortal() {
                     type="number"
                     required
                     min="1"
-                    value={packageFormData.price || ""}
+                    value={packageFormData.price ?? ""}
                     onChange={(e) =>
                       setPackageFormData({
                         ...packageFormData,
-                        price: e.target.value === "" ? 0 : Number(e.target.value) || 0,
+                        price: e.target.value,
                       })
                     }
                     placeholder="e.g. 800"
@@ -2537,11 +2563,11 @@ export function AdminPortal() {
                 {/* SAVINGS BADGE BANNER */}
                 <div>
                   <span className="text-[10px] text-zinc-400 block mb-1 font-semibold">Client Savings:</span>
-                  {packageFormData.package_regular_price > (packageFormData.price || 0) && (packageFormData.price || 0) > 0 ? (
+                  {packageFormData.package_regular_price > (Number(packageFormData.price) || 0) && (Number(packageFormData.price) || 0) > 0 ? (
                     <div className="p-2 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-xs font-bold flex items-center justify-between">
-                      <span>Save {formatCurrency(packageFormData.package_regular_price - (packageFormData.price || 0), settings.currency_symbol)}</span>
+                      <span>Save {formatCurrency(packageFormData.package_regular_price - (Number(packageFormData.price) || 0), settings.currency_symbol)}</span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-900/80 text-emerald-200">
-                        {(((packageFormData.package_regular_price - (packageFormData.price || 0)) / (packageFormData.package_regular_price || 1)) * 100).toFixed(0)}% OFF
+                        {(((packageFormData.package_regular_price - (Number(packageFormData.price) || 0)) / (packageFormData.package_regular_price || 1)) * 100).toFixed(0)}% OFF
                       </span>
                     </div>
                   ) : (

@@ -694,8 +694,9 @@ export function EditInvoiceModal() {
                       <input
                         type="number"
                         min="0"
-                        value={item.unit_price}
-                        onChange={(e) => handleItemPriceChange(item.id, Number(e.target.value) || 0)}
+                        value={item.unit_price === 0 ? "" : item.unit_price}
+                        onChange={(e) => handleItemPriceChange(item.id, e.target.value === "" ? 0 : Number(e.target.value) || 0)}
+                        placeholder="0"
                         className="w-full h-7 px-2 text-xs bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono focus:outline-none focus:ring-1 focus:ring-purple-500"
                       />
                     </div>
@@ -706,8 +707,9 @@ export function EditInvoiceModal() {
                       <input
                         type="number"
                         min="0"
-                        value={item.discount}
-                        onChange={(e) => handleItemDiscountChange(item.id, Number(e.target.value) || 0)}
+                        value={item.discount === 0 ? "" : item.discount}
+                        onChange={(e) => handleItemDiscountChange(item.id, e.target.value === "" ? 0 : Number(e.target.value) || 0)}
+                        placeholder="0"
                         className="w-full h-7 px-2 text-xs bg-zinc-950 border border-zinc-800 rounded-lg text-rose-300 font-mono focus:outline-none focus:ring-1 focus:ring-purple-500"
                       />
                     </div>
@@ -937,8 +939,8 @@ export function EditInvoiceModal() {
                 <input
                   type="number"
                   min="0"
-                  value={discountValue}
-                  onChange={(e) => setDiscountValue(Number(e.target.value) || 0)}
+                  value={discountValue === 0 ? "" : discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value === "" ? 0 : Number(e.target.value) || 0)}
                   placeholder="0"
                   className="w-full h-8 pl-8 pr-2.5 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-rose-300 font-mono focus:outline-none focus:ring-1 focus:ring-purple-500"
                 />
@@ -972,8 +974,9 @@ export function EditInvoiceModal() {
                     <span className="text-[10px] text-zinc-400 block">Cash:</span>
                     <input
                       type="number"
-                      value={splitCash}
-                      onChange={(e) => setSplitCash(Number(e.target.value) || 0)}
+                      value={splitCash === 0 ? "" : splitCash}
+                      onChange={(e) => setSplitCash(e.target.value === "" ? 0 : Number(e.target.value) || 0)}
+                      placeholder="0"
                       className="w-full h-7 px-2 text-xs bg-zinc-900 border border-zinc-800 rounded-lg text-emerald-400 font-mono"
                     />
                   </div>
@@ -981,8 +984,9 @@ export function EditInvoiceModal() {
                     <span className="text-[10px] text-zinc-400 block">UPI:</span>
                     <input
                       type="number"
-                      value={splitUpi}
-                      onChange={(e) => setSplitUpi(Number(e.target.value) || 0)}
+                      value={splitUpi === 0 ? "" : splitUpi}
+                      onChange={(e) => setSplitUpi(e.target.value === "" ? 0 : Number(e.target.value) || 0)}
+                      placeholder="0"
                       className="w-full h-7 px-2 text-xs bg-zinc-900 border border-zinc-800 rounded-lg text-purple-400 font-mono"
                     />
                   </div>
@@ -990,8 +994,9 @@ export function EditInvoiceModal() {
                     <span className="text-[10px] text-zinc-400 block">Card:</span>
                     <input
                       type="number"
-                      value={splitCard}
-                      onChange={(e) => setSplitCard(Number(e.target.value) || 0)}
+                      value={splitCard === 0 ? "" : splitCard}
+                      onChange={(e) => setSplitCard(e.target.value === "" ? 0 : Number(e.target.value) || 0)}
+                      placeholder="0"
                       className="w-full h-7 px-2 text-xs bg-zinc-900 border border-zinc-800 rounded-lg text-blue-400 font-mono"
                     />
                   </div>
