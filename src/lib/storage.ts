@@ -7,6 +7,7 @@ import {
   Invoice,
   SalonSettings,
   Staff,
+  StaffStatus,
   AttendanceRecord,
   AttendanceStatus,
 } from "@/types";
@@ -32,6 +33,7 @@ const KEYS = {
   INVOICES: `${STORAGE_PREFIX}invoices`,
   EXPENSES: `${STORAGE_PREFIX}expenses`,
   DELETED_CATALOG_IDS: `${STORAGE_PREFIX}deleted_catalog_ids`,
+  STAFF_STATUS_DATE: `${STORAGE_PREFIX}staff_status_date`,
   INITIALIZED: `${STORAGE_PREFIX}full_catalog_v5`,
 };
 
@@ -497,6 +499,67 @@ export const Storage = {
   deleteStaffMember(staffId: string): void {
     const list = this.getStaff().filter((s) => s.id !== staffId);
     this.saveStaff(list);
+  },
+
+  // DAILY AUTOMATIC STAFF RESET TO ACTIVE (PRESENT) ON DATE ROLLOVER
+  checkAndResetDailyStaffStatus(): { didReset: boolean; staff: Staff[]; attendance: AttendanceRecord[] } {
+    if (typeof window === "undefined") {
+      return { didReset: false, staff: [], attendance: [] };
+    }
+    try {
+      const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+      const lastResetDate = localStorage.getItem(KEYS.STAFF_STATUS_DATE);
+
+      if (lastResetDate === today) {
+        return { didReset: false, staff: this.getStaff(), attendance: this.getAttendance() };
+      }
+
+      // New day detected: Reset all non-inactive staff to active (present) unless an attendance record exists for today
+      const staffList = this.getStaff();
+      const attendanceRecords = this.getAttendance();
+      let changed = false;
+
+      const updatedStaff = staffList.map((member) => {
+        if (member.status === "inactive") {
+          return member;
+        }
+
+        // Check if there is already a specific attendance record logged for today
+        const todayRecord = attendanceRecords.find(
+          (r) => r.staff_id === member.id && (r.date === today || r.date === new Date().toISOString().slice(0, 10))
+        );
+
+        if (todayRecord) {
+          let syncedStatus: StaffStatus = "active";
+          if (todayRecord.status === "half_day") syncedStatus = "half_day";
+          else if (todayRecord.status === "on_leave" || todayRecord.status === "absent") syncedStatus = "on_leave";
+          else if (todayRecord.status === "weekly_off") syncedStatus = "weekly_off";
+          else syncedStatus = "active";
+
+          if (member.status !== syncedStatus) {
+            changed = true;
+            return { ...member, status: syncedStatus };
+          }
+          return member;
+        }
+
+        // Reset to active (present) on new day
+        if (member.status !== "active") {
+          changed = true;
+        }
+        return { ...member, status: "active" as StaffStatus };
+      });
+
+      if (changed || !lastResetDate) {
+        this.saveStaff(updatedStaff);
+      }
+
+      localStorage.setItem(KEYS.STAFF_STATUS_DATE, today);
+      return { didReset: true, staff: updatedStaff, attendance: attendanceRecords };
+    } catch (e) {
+      console.error("checkAndResetDailyStaffStatus error:", e);
+      return { didReset: false, staff: this.getStaff(), attendance: this.getAttendance() };
+    }
   },
 
   // STAFF ATTENDANCE

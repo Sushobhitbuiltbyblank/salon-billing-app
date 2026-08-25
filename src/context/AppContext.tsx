@@ -151,6 +151,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!initialLoadedRef.current) {
       initialLoadedRef.current = true;
       initStorage();
+      const resetResult = Storage.checkAndResetDailyStaffStatus();
 
       const cachedUsers = Storage.getUsers();
       const cachedCurrent = Storage.getCurrentUser();
@@ -160,13 +161,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setIsAuthModalOpen(true);
       }
       setSettings(Storage.getSettings());
-      setStaff(Storage.getStaff());
+      setStaff(resetResult.staff);
       setCategories(Storage.getCategories());
       setCatalog(Storage.getCatalog());
       setCustomers(Storage.getCustomers());
       setInvoices(Storage.getInvoices());
       setExpenses(Storage.getExpenses());
       setAttendance(Storage.getAttendance());
+
+      if (resetResult.didReset && isSupabaseConfigured()) {
+        resetResult.staff.forEach((st) => SupabaseSync.saveStaff(st));
+      }
+    } else {
+      // Check if day rolled over while app was running or tab was idle
+      const resetResult = Storage.checkAndResetDailyStaffStatus();
+      if (resetResult.didReset) {
+        setStaff(resetResult.staff);
+        if (isSupabaseConfigured()) {
+          resetResult.staff.forEach((st) => SupabaseSync.saveStaff(st));
+        }
+      }
     }
 
     // 2. If Supabase configured, sync from remote PostgreSQL in background
