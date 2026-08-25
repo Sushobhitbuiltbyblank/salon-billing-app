@@ -43,6 +43,7 @@ export function EditInvoiceModal() {
     categories,
     staff,
     settings,
+    invoices,
   } = useApp();
 
   // Local form state
@@ -61,6 +62,29 @@ export function EditInvoiceModal() {
 
   // Catalog item adder
   const [selectedCatalogId, setSelectedCatalogId] = useState("");
+
+  // Sorted catalog with most sold items on top
+  const sortedCatalog = useMemo(() => {
+    const countMap = new Map<string, number>();
+    invoices.forEach((inv) => {
+      if (inv.status === "void") return;
+      inv.items.forEach((it) => {
+        const qty = it.quantity || 1;
+        if (it.item_id) countMap.set(it.item_id, (countMap.get(it.item_id) || 0) + qty);
+        if (it.item_name) {
+          const norm = it.item_name.toLowerCase().trim();
+          countMap.set(norm, (countMap.get(norm) || 0) + qty);
+        }
+      });
+    });
+
+    return [...catalog].sort((a, b) => {
+      const salesA = countMap.get(a.id) || countMap.get(a.name.toLowerCase().trim()) || 0;
+      const salesB = countMap.get(b.id) || countMap.get(b.name.toLowerCase().trim()) || 0;
+      if (salesB !== salesA) return salesB - salesA;
+      return a.name.localeCompare(b.name);
+    });
+  }, [catalog, invoices]);
 
   // Split Staff Modal
   const [activeSplitItem, setActiveSplitItem] = useState<InvoiceItem | null>(null);
@@ -578,7 +602,7 @@ export function EditInvoiceModal() {
                 className="h-8 px-2.5 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500 max-w-[220px]"
               >
                 <option value="">+ Add Service / Product...</option>
-                {catalog.map((cat) => (
+                {sortedCatalog.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name} ({formatCurrency(cat.price, settings.currency_symbol)})
                   </option>

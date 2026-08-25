@@ -644,18 +644,71 @@ export function AdminPortal() {
     setTimeout(() => setSettingsSaved(false), 3000);
   };
 
-  // Filtered Catalog
-  const filteredCatalog = catalog.filter((item) => {
-    if (catalogTypeFilter !== "all" && item.type !== catalogTypeFilter) return false;
-    if (catalogSearch.trim()) {
-      const q = catalogSearch.toLowerCase().trim();
-      return (
-        item.name.toLowerCase().includes(q) ||
-        (item.sku && item.sku.toLowerCase().includes(q))
-      );
-    }
-    return true;
-  });
+  // Item Sales Stats Map from non-void invoices
+  const itemSalesStats = useMemo(() => {
+    const countMap = new Map<string, number>();
+    const revenueMap = new Map<string, number>();
+
+    invoices.forEach((inv) => {
+      if (inv.status === "void") return;
+      inv.items.forEach((item) => {
+        const qty = item.quantity || 1;
+        const rev = item.total_price || (item.unit_price ? item.unit_price * qty : 0);
+
+        if (item.item_id) {
+          countMap.set(item.item_id, (countMap.get(item.item_id) || 0) + qty);
+          revenueMap.set(item.item_id, (revenueMap.get(item.item_id) || 0) + rev);
+        }
+        if (item.item_name) {
+          const norm = item.item_name.toLowerCase().trim();
+          countMap.set(norm, (countMap.get(norm) || 0) + qty);
+          revenueMap.set(norm, (revenueMap.get(norm) || 0) + rev);
+        }
+      });
+    });
+
+    return { countMap, revenueMap };
+  }, [invoices]);
+
+  // Filtered and Sorted Catalog (Most Sold Items on Top)
+  const filteredCatalog = useMemo(() => {
+    const items = catalog.filter((item) => {
+      if (catalogTypeFilter !== "all" && item.type !== catalogTypeFilter) return false;
+      if (catalogSearch.trim()) {
+        const q = catalogSearch.toLowerCase().trim();
+        return (
+          item.name.toLowerCase().includes(q) ||
+          (item.sku && item.sku.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+
+    return items.sort((a, b) => {
+      const salesA =
+        itemSalesStats.countMap.get(a.id) ||
+        itemSalesStats.countMap.get(a.name.toLowerCase().trim()) ||
+        0;
+      const salesB =
+        itemSalesStats.countMap.get(b.id) ||
+        itemSalesStats.countMap.get(b.name.toLowerCase().trim()) ||
+        0;
+
+      if (salesB !== salesA) {
+        return salesB - salesA;
+      }
+
+      if (catalogSearch.trim()) {
+        const q = catalogSearch.toLowerCase().trim();
+        const aStarts = a.name.toLowerCase().startsWith(q);
+        const bStarts = b.name.toLowerCase().startsWith(q);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+      }
+
+      return a.name.localeCompare(b.name);
+    });
+  }, [catalog, catalogTypeFilter, catalogSearch, itemSalesStats]);
 
   return (
     <div className="space-y-5 max-w-[1500px] mx-auto pb-16">
@@ -1408,6 +1461,10 @@ export function AdminPortal() {
               const isPackage = item.type === "package";
               const isProduct = item.type === "product";
               const category = categories.find((c) => c.id === item.category_id);
+              const itemSalesCount =
+                itemSalesStats.countMap.get(item.id) ||
+                itemSalesStats.countMap.get(item.name.toLowerCase().trim()) ||
+                0;
 
               const savings =
                 isPackage && item.package_regular_price && item.package_regular_price > item.price
@@ -1424,18 +1481,28 @@ export function AdminPortal() {
                   }`}
                 >
                   <div>
-                    <div className="flex items-start justify-between gap-1.5 mb-1.5">
-                      <span
-                        className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
-                          isPackage
-                            ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm"
-                            : isService
-                            ? "bg-purple-500/15 text-purple-300"
-                            : "bg-amber-500/15 text-amber-300"
-                        }`}
-                      >
-                        {isPackage ? "Package Combo" : isService ? "Service" : "Retail Product"}
-                      </span>
+                    <div className="flex items-start justify-between gap-1.5 mb-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+                            isPackage
+                              ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm"
+                              : isService
+                              ? "bg-purple-500/15 text-purple-300"
+                              : "bg-amber-500/15 text-amber-300"
+                          }`}
+                        >
+                          {isPackage ? "Package Combo" : isService ? "Service" : "Retail Product"}
+                        </span>
+                        {itemSalesCount > 0 && (
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                            title={`${itemSalesCount} units billed`}
+                          >
+                            🔥 {itemSalesCount} sold
+                          </span>
+                        )}
+                      </div>
                       {category && (
                         <span className="text-[10px] text-zinc-400 font-medium">
                           {category.name}

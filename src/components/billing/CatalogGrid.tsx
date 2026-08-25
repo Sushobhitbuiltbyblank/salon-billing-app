@@ -20,11 +20,46 @@ import {
 import { formatCurrency } from "@/lib/utils";
 
 export function CatalogGrid() {
-  const { catalog, categories, addDraftItem, draftItems, settings } = useApp();
+  const { catalog, categories, addDraftItem, draftItems, settings, invoices } = useApp();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<"all" | "service" | "package" | "product">("all");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
+
+  // Pre-calculate sales count (total quantity sold) and revenue for each catalog item from non-void invoices
+  const itemSalesStats = useMemo(() => {
+    const countMap = new Map<string, number>();
+    const revenueMap = new Map<string, number>();
+
+    invoices.forEach((inv) => {
+      if (inv.status === "void") return; // exclude void invoices
+      inv.items.forEach((item) => {
+        const qty = item.quantity || 1;
+        const rev = item.total_price || (item.unit_price ? item.unit_price * qty : 0);
+
+        if (item.item_id) {
+          countMap.set(item.item_id, (countMap.get(item.item_id) || 0) + qty);
+          revenueMap.set(item.item_id, (revenueMap.get(item.item_id) || 0) + rev);
+        }
+        if (item.item_name) {
+          const norm = item.item_name.toLowerCase().trim();
+          countMap.set(norm, (countMap.get(norm) || 0) + qty);
+          revenueMap.set(norm, (revenueMap.get(norm) || 0) + rev);
+        }
+      });
+    });
+
+    return { countMap, revenueMap };
+  }, [invoices]);
+
+  // Helper to get sales count for a catalog item
+  const getItemSalesCount = (item: CatalogItem): number => {
+    return (
+      itemSalesStats.countMap.get(item.id) ||
+      itemSalesStats.countMap.get(item.name.toLowerCase().trim()) ||
+      0
+    );
+  };
 
   // Map of service id -> full catalog item for quick lookup on package cards
   const serviceItemMap = useMemo(() => {
@@ -71,7 +106,7 @@ export function CatalogGrid() {
   };
 
   const filteredItems = useMemo(() => {
-    return catalog.filter((item) => {
+    const items = catalog.filter((item) => {
       // Type filter: When 'service' is selected, include both services AND packages
       if (selectedType === "service") {
         if (item.type !== "service" && item.type !== "package") return false;
@@ -95,7 +130,36 @@ export function CatalogGrid() {
       }
       return true;
     });
-  }, [catalog, selectedType, selectedCategoryId, searchQuery]);
+
+    // SORT: Keep most sold items on top!
+    return items.sort((a, b) => {
+      const salesA =
+        itemSalesStats.countMap.get(a.id) ||
+        itemSalesStats.countMap.get(a.name.toLowerCase().trim()) ||
+        0;
+      const salesB =
+        itemSalesStats.countMap.get(b.id) ||
+        itemSalesStats.countMap.get(b.name.toLowerCase().trim()) ||
+        0;
+
+      // 1. Prioritize items by total sales count descending
+      if (salesB !== salesA) {
+        return salesB - salesA;
+      }
+
+      // 2. If search query exists, prioritize items where name starts with query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const aStarts = a.name.toLowerCase().startsWith(q);
+        const bStarts = b.name.toLowerCase().startsWith(q);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+      }
+
+      // 3. Fallback: Alphabetical order
+      return a.name.localeCompare(b.name);
+    });
+  }, [catalog, selectedType, selectedCategoryId, searchQuery, itemSalesStats]);
 
   // Map icons
   const getCategoryIcon = (iconName?: string) => {
@@ -283,6 +347,14 @@ export function CatalogGrid() {
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300">
                               Retail Product
+                            </span>
+                          )}
+                          {getItemSalesCount(item) > 0 && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                              title={`${getItemSalesCount(item)} total units billed`}
+                            >
+                              🔥 {getItemSalesCount(item)} sold
                             </span>
                           )}
                         </div>
