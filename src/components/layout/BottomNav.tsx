@@ -24,10 +24,10 @@ export function BottomNav() {
     badge?: number | null;
   }> = [
     { id: "pos", label: "POS", icon: Receipt, badge: draftItems.length > 0 ? draftItems.length : null },
-    { id: "staff", label: "Staff", icon: Users },
-    { id: "customers", label: "Clients", icon: UserCheck },
     { id: "history", label: "Invoices", icon: History },
-    { id: "dashboard", label: "Reports", icon: LayoutDashboard },
+    { id: "staff", label: "Staff", icon: Users },
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "customers", label: "Clients", icon: UserCheck },
     { id: "expenses", label: "Expenses", icon: Wallet },
     { id: "admin", label: "Admin", icon: Package },
   ];

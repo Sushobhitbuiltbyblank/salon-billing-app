@@ -86,16 +86,16 @@ export function Navbar() {
       badge: draftItems.length > 0 ? draftItems.length : null,
     },
     {
+      id: "history",
+      label: "Invoices Log",
+      description: "Recent Bills, Void & Receipts",
+      icon: History,
+    },
+    {
       id: "staff",
       label: "Staff & Incentives",
       description: "Stylist Performance, Splits & Roster",
       icon: Users,
-    },
-    {
-      id: "customers",
-      label: "Clients CRM",
-      description: "Customer Directory & History",
-      icon: UserCheck,
     },
     {
       id: "dashboard",
@@ -104,16 +104,16 @@ export function Navbar() {
       icon: LayoutDashboard,
     },
     {
+      id: "customers",
+      label: "Clients CRM",
+      description: "Customer Directory & History",
+      icon: UserCheck,
+    },
+    {
       id: "expenses",
       label: "Expenses",
       description: "Salon Expense Tracker",
       icon: Wallet,
-    },
-    {
-      id: "history",
-      label: "Invoices Log",
-      description: "Recent Bills, Void & Receipts",
-      icon: History,
     },
     {
       id: "admin",
