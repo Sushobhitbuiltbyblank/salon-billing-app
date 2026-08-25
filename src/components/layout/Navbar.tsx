@@ -20,7 +20,10 @@ import {
   Lock,
   LogOut,
   ChevronDown,
+  ChevronRight,
   Package,
+  Menu,
+  X,
 } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
@@ -39,6 +42,7 @@ export function Navbar() {
   const [time, setTime] = useState<string>("");
   const [dateStr, setDateStr] = useState<string>("");
   const [hasSupabase, setHasSupabase] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   useEffect(() => {
     setHasSupabase(isSupabaseConfigured());
@@ -70,17 +74,59 @@ export function Navbar() {
   const navItems: Array<{
     id: AppTab;
     label: string;
+    description: string;
     icon: any;
     badge?: number | null;
   }> = [
-    { id: "pos", label: "Billing POS", icon: Receipt, badge: draftItems.length > 0 ? draftItems.length : null },
-    { id: "customers", label: "Clients CRM", icon: UserCheck },
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "staff", label: "Staff & Incentives", icon: Users },
-    { id: "expenses", label: "Expenses", icon: Wallet },
-    { id: "history", label: "Invoices Log", icon: History },
-    { id: "admin", label: "Catalog & Admin", icon: Package },
+    {
+      id: "pos",
+      label: "Billing POS",
+      description: "Quick Billing, Cart & Payments",
+      icon: Receipt,
+      badge: draftItems.length > 0 ? draftItems.length : null,
+    },
+    {
+      id: "staff",
+      label: "Staff & Incentives",
+      description: "Stylist Performance, Splits & Roster",
+      icon: Users,
+    },
+    {
+      id: "customers",
+      label: "Clients CRM",
+      description: "Customer Directory & History",
+      icon: UserCheck,
+    },
+    {
+      id: "dashboard",
+      label: "Dashboard",
+      description: "Sales Overview & Analytics",
+      icon: LayoutDashboard,
+    },
+    {
+      id: "expenses",
+      label: "Expenses",
+      description: "Salon Expense Tracker",
+      icon: Wallet,
+    },
+    {
+      id: "history",
+      label: "Invoices Log",
+      description: "Recent Bills, Void & Receipts",
+      icon: History,
+    },
+    {
+      id: "admin",
+      label: "Catalog & Admin",
+      description: "Services, Products & Settings",
+      icon: Package,
+    },
   ];
+
+  const handleSelectTab = (tabId: AppTab) => {
+    setActiveTab(tabId);
+    setIsMobileMenuOpen(false);
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-xl">
@@ -92,14 +138,14 @@ export function Navbar() {
               <Scissors className="h-4 w-4 sm:h-5 sm:w-5 text-purple-400 transform -rotate-45" />
             </div>
           </div>
-          <div className="hidden sm:block">
-            <div className="flex items-center gap-1.5">
-              <h1 className="font-bold tracking-tight text-white text-sm sm:text-base flex items-center gap-1.5 whitespace-nowrap">
+          <div className="block">
+            <div className="flex items-center gap-1">
+              <h1 className="font-bold tracking-tight text-white text-xs sm:text-base flex items-center gap-1 whitespace-nowrap truncate max-w-[140px] sm:max-w-none">
                 {settings.salon_name}
-                <Sparkles className="h-3.5 w-3.5 text-amber-400 inline" />
+                <Sparkles className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-400 inline shrink-0" />
               </h1>
             </div>
-            <p className="text-[11px] text-zinc-400 truncate max-w-[150px] 2xl:max-w-none">
+            <p className="text-[10px] sm:text-[11px] text-zinc-400 truncate max-w-[140px] sm:max-w-[150px] 2xl:max-w-none hidden xs:block">
               {settings.tagline}
             </p>
           </div>
@@ -132,13 +178,13 @@ export function Navbar() {
           })}
         </nav>
 
-        {/* RIGHT ACTIONS: LOGGED-IN USER PROFILE, CLOCK */}
+        {/* RIGHT ACTIONS: LOGGED-IN USER PROFILE, CLOCK & MOBILE MENU TOGGLE */}
         <div className="flex items-center gap-2 shrink-0">
           {/* USER PROFILE CHIP (CLICK TO SWITCH PROFILE / LOGOUT) */}
           {currentUser ? (
             <button
               onClick={() => setIsAuthModalOpen(true)}
-              className="flex items-center gap-2 p-1.5 pr-2.5 rounded-2xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 transition-all cursor-pointer shadow-sm group shrink-0"
+              className="flex items-center gap-2 p-1.5 pr-2 sm:pr-2.5 rounded-2xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 transition-all cursor-pointer shadow-sm group shrink-0"
               title="Click to Switch User / Unlock PIN"
             >
               <div
@@ -156,7 +202,7 @@ export function Navbar() {
                   {currentUser.role === "admin" ? "Super Admin" : "Receptionist"}
                 </div>
               </div>
-              <ChevronDown className="h-3 w-3 text-zinc-400 group-hover:text-white" />
+              <ChevronDown className="h-3 w-3 text-zinc-400 group-hover:text-white hidden md:block" />
             </button>
           ) : (
             <button
@@ -164,7 +210,7 @@ export function Navbar() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all cursor-pointer shrink-0"
             >
               <Lock className="h-3.5 w-3.5" />
-              <span>Sign In</span>
+              <span className="hidden xs:inline">Sign In</span>
             </button>
           )}
 
@@ -176,8 +222,100 @@ export function Navbar() {
             </div>
             <span className="text-[10px] text-zinc-400 font-medium" suppressHydrationWarning>{dateStr}</span>
           </div>
+
+          {/* MOBILE MENU TOGGLE BUTTON (VISIBLE ON MOBILE / TABLET) */}
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="lg:hidden flex items-center justify-center h-9 w-9 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
+            aria-label="Toggle Navigation Menu"
+          >
+            {isMobileMenuOpen ? <X className="h-5 w-5 text-purple-400" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
       </div>
+
+      {/* MOBILE FULL NAVIGATION DRAWER */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden fixed inset-x-0 top-16 bottom-0 z-50 bg-zinc-950/95 backdrop-blur-2xl border-b border-zinc-800/80 flex flex-col justify-between overflow-y-auto p-4 animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="space-y-2">
+            <div className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              Navigation Menu
+            </div>
+            <div className="grid grid-cols-1 gap-1.5">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelectTab(item.id)}
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all duration-200 cursor-pointer ${
+                      isActive
+                        ? "bg-purple-600 text-white shadow-lg shadow-purple-600/25 font-bold"
+                        : "bg-zinc-900/70 hover:bg-zinc-800/80 text-zinc-200 border border-zinc-800/60"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div
+                        className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          isActive ? "bg-purple-700/60 text-white" : "bg-zinc-800 text-purple-400"
+                        }`}
+                      >
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="text-left">
+                        <div className="text-sm font-bold flex items-center gap-2">
+                          {item.label}
+                          {item.badge && (
+                            <span className="flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-pink-500 text-[10px] font-extrabold text-white">
+                              {item.badge}
+                            </span>
+                          )}
+                        </div>
+                        <div className={`text-[11px] mt-0.5 ${isActive ? "text-purple-200" : "text-zinc-400"}`}>
+                          {item.description}
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronRight className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-zinc-500"}`} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* DRAWER FOOTER / USER & TIME */}
+          <div className="mt-4 pt-4 border-t border-zinc-800/80 space-y-3 pb-6">
+            <div className="flex items-center justify-between bg-zinc-900/80 p-3 rounded-xl border border-zinc-800/80">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="h-8 w-8 rounded-xl flex items-center justify-center text-xs font-extrabold text-white shadow-inner"
+                  style={{ backgroundColor: currentUser?.avatar_color || "#8b5cf6" }}
+                >
+                  {currentUser?.name ? currentUser.name.charAt(0) : "U"}
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-1">
+                    {currentUser?.name || "Guest Receptionist"}
+                    {isAdmin && <span className="text-[10px]">👑</span>}
+                  </div>
+                  <div className="text-[10px] text-zinc-400 font-mono">{time || "Live POS Mode"}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsAuthModalOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-purple-300 transition-colors"
+              >
+                Switch User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
+

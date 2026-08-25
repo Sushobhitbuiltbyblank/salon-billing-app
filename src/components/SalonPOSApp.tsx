@@ -21,7 +21,7 @@ function MainContent() {
   const { activeTab } = useApp();
 
   return (
-    <main className="flex-1 px-3 sm:px-5 py-3 sm:py-4 overflow-y-auto overflow-x-hidden max-w-[1700px] mx-auto w-full no-print print:hidden">
+    <main className="flex-1 px-3 sm:px-5 py-3 sm:py-4 pb-24 lg:pb-6 overflow-y-auto overflow-x-hidden max-w-[1700px] mx-auto w-full no-print print:hidden">
       {activeTab === "pos" && <BillingPos />}
       {activeTab === "customers" && <CustomerDirectory />}
       {activeTab === "dashboard" && <SalesOverview />}
