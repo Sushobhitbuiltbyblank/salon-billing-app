@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
-import { Staff } from "@/types";
+import { Staff, StaffStatus } from "@/types";
 import { calculateStaffPerformance } from "@/lib/calculations";
 import { formatCurrency } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
@@ -35,6 +35,35 @@ export function StaffPerformance() {
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const todayLocaleStr = useMemo(() => new Date().toLocaleDateString("en-CA"), []);
   const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const currentMonthLocaleStr = useMemo(() => new Date().toLocaleDateString("en-CA").slice(0, 7), []);
+
+  const normalizeStaffStatus = (st?: string): StaffStatus => {
+    if (!st) return "active";
+    if (st === "present") return "active";
+    if (st === "absent") return "on_leave";
+    if (st === "active" || st === "half_day" || st === "on_leave" || st === "weekly_off" || st === "inactive") {
+      return st as StaffStatus;
+    }
+    return "active";
+  };
+
+  // Compute live effective daily status for each staff member
+  const staffWithTodayStatus = useMemo(() => {
+    return staff.map((s) => {
+      const todayAtt = attendance.find(
+        (r) => r.staff_id === s.id && (r.date === todayStr || r.date === todayLocaleStr)
+      );
+      let currentStatus: StaffStatus = normalizeStaffStatus(s.status);
+      if (todayAtt) {
+        if (todayAtt.status === "present") currentStatus = "active";
+        else if (todayAtt.status === "half_day") currentStatus = "half_day";
+        else if (todayAtt.status === "on_leave") currentStatus = "on_leave";
+        else if (todayAtt.status === "weekly_off") currentStatus = "weekly_off";
+        else if (todayAtt.status === "absent") currentStatus = "on_leave";
+      }
+      return { ...s, effectiveStatus: currentStatus };
+    });
+  }, [staff, attendance, todayStr, todayLocaleStr]);
 
   // Filter active invoices based on chosen timeframe (defaults to "today")
   const filteredInvoices = useMemo(() => {
@@ -79,10 +108,11 @@ export function StaffPerformance() {
     return staffSummaries.reduce((sum, s) => sum + s.total_commission_earned, 0);
   }, [staffSummaries]);
 
-  const activeFloorCount = staff.filter((s) => s.status === "active").length;
-  const halfDayCount = staff.filter((s) => s.status === "half_day").length;
-  const onLeaveCount = staff.filter((s) => s.status === "on_leave").length;
-  const weeklyOffCount = staff.filter((s) => s.status === "weekly_off").length;
+  const activeFloorCount = staffWithTodayStatus.filter((s) => s.effectiveStatus === "active").length;
+  const halfDayCount = staffWithTodayStatus.filter((s) => s.effectiveStatus === "half_day").length;
+  const onLeaveCount = staffWithTodayStatus.filter((s) => s.effectiveStatus === "on_leave").length;
+  const weeklyOffCount = staffWithTodayStatus.filter((s) => s.effectiveStatus === "weekly_off").length;
+  const inactiveCount = staffWithTodayStatus.filter((s) => s.effectiveStatus === "inactive").length;
 
   const handleEditClick = (s: Staff) => {
     setEditingStaff({ ...s });
@@ -158,14 +188,20 @@ export function StaffPerformance() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="bg-zinc-900/80">
           <div className="text-xs text-zinc-400 font-semibold">Floor Attendance Today</div>
-          <div className="text-2xl font-black text-white mt-1">
+          <div className="text-2xl font-black text-white mt-1 flex items-baseline gap-2 flex-wrap">
             <span className="text-emerald-400">{activeFloorCount} Present</span>
-            {halfDayCount > 0 && <span className="text-amber-400 text-lg ml-2 font-bold">({halfDayCount} Half Day)</span>}
+            {halfDayCount > 0 && <span className="text-amber-400 text-base font-bold">({halfDayCount} Half Day)</span>}
           </div>
-          <div className="text-[11px] text-zinc-500 mt-1 flex items-center gap-2">
+          <div className="text-[11px] text-zinc-500 mt-1 flex items-center gap-2 flex-wrap">
             <span>{onLeaveCount} on leave</span>
             <span>•</span>
             <span>{weeklyOffCount} off duty</span>
+            {inactiveCount > 0 && (
+              <>
+                <span>•</span>
+                <span>{inactiveCount} inactive</span>
+              </>
+            )}
             <span>•</span>
             <span className="font-bold text-zinc-400">{staff.length} Total</span>
           </div>
@@ -240,15 +276,19 @@ export function StaffPerformance() {
             <tbody className="divide-y divide-zinc-800/60 text-zinc-200">
               {staffSummaries.map((summary, idx) => {
                 const s = summary.staff;
-                const status = s.status || "active";
+                const effectiveStatus =
+                  staffWithTodayStatus.find((st) => st.id === s.id)?.effectiveStatus || normalizeStaffStatus(s.status);
 
                 // Monthly attendance records for this stylist
                 const monthlyRecords = attendance.filter(
-                  (r) => r.staff_id === s.id && r.date.startsWith(currentMonthStr)
+                  (r) =>
+                    r.staff_id === s.id &&
+                    (r.date.startsWith(currentMonthStr) || r.date.startsWith(currentMonthLocaleStr))
                 );
                 const pCount = monthlyRecords.filter((r) => r.status === "present").length;
                 const hdCount = monthlyRecords.filter((r) => r.status === "half_day").length;
-                const lCount = monthlyRecords.filter((r) => r.status === "on_leave").length;
+                const lCount = monthlyRecords.filter((r) => r.status === "on_leave" || r.status === "absent").length;
+                const woCount = monthlyRecords.filter((r) => r.status === "weekly_off").length;
 
                 return (
                   <tr
@@ -286,15 +326,17 @@ export function StaffPerformance() {
                       <div className="text-zinc-300 font-medium">{s.role}</div>
                       <div className="flex items-center gap-1.5 mt-1">
                         <select
-                          value={status}
-                          onChange={(e) => setStaffDailyStatus(s.id, e.target.value as any)}
+                          value={effectiveStatus}
+                          onChange={(e) => setStaffDailyStatus(s.id, e.target.value as StaffStatus)}
                           className={`h-6 px-1.5 text-[10px] rounded-lg font-bold border transition-colors cursor-pointer focus:outline-none focus:ring-1 ${
-                            status === "active"
-                              ? "bg-emerald-950/70 text-emerald-300 border-emerald-700/60 focus:ring-emerald-500"
-                              : status === "half_day"
-                              ? "bg-amber-950/70 text-amber-300 border-amber-600/70 focus:ring-amber-500"
-                              : status === "on_leave"
-                              ? "bg-rose-950/70 text-rose-300 border-rose-600/70 focus:ring-rose-500"
+                            effectiveStatus === "active"
+                              ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/70 focus:ring-emerald-500"
+                              : effectiveStatus === "half_day"
+                              ? "bg-amber-950/80 text-amber-300 border-amber-600/70 focus:ring-amber-500"
+                              : effectiveStatus === "on_leave"
+                              ? "bg-rose-950/80 text-rose-300 border-rose-600/70 focus:ring-rose-500"
+                              : effectiveStatus === "weekly_off"
+                              ? "bg-sky-950/80 text-sky-300 border-sky-600/70 focus:ring-sky-500"
                               : "bg-zinc-900 text-zinc-400 border-zinc-700 focus:ring-zinc-500"
                           }`}
                           title="Change attendance / floor status"
@@ -302,11 +344,12 @@ export function StaffPerformance() {
                           <option value="active" className="bg-zinc-950 text-emerald-400">🟢 Present</option>
                           <option value="half_day" className="bg-zinc-950 text-amber-400">🟡 Half Day</option>
                           <option value="on_leave" className="bg-zinc-950 text-rose-400">🔴 On Leave</option>
-                          <option value="weekly_off" className="bg-zinc-950 text-zinc-400">⚪ Weekly Off</option>
+                          <option value="weekly_off" className="bg-zinc-950 text-sky-400">⚪ Weekly Off</option>
+                          <option value="inactive" className="bg-zinc-950 text-zinc-400">⚫ Inactive</option>
                         </select>
 
                         <span className="text-[10px] text-zinc-500 font-mono hidden xl:inline" title="Monthly attendance">
-                          ({pCount}P • {hdCount}HD • {lCount}L)
+                          ({pCount}P • {hdCount}HD • {lCount}L{woCount > 0 ? ` • ${woCount}Off` : ""})
                         </span>
                       </div>
                     </td>

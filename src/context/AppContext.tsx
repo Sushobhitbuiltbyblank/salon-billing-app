@@ -359,6 +359,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateStaff = (staffMember: Staff) => {
     Storage.updateStaffMember(staffMember);
     setStaff(Storage.getStaff());
+
+    // Record today's attendance for consistency if staff status exists
+    const today = new Date().toISOString().slice(0, 10);
+    const todayLocale = new Date().toLocaleDateString("en-CA");
+    const attStatus: AttendanceStatus =
+      staffMember.status === "active"
+        ? "present"
+        : staffMember.status === "half_day"
+        ? "half_day"
+        : staffMember.status === "on_leave"
+        ? "on_leave"
+        : staffMember.status === "weekly_off"
+        ? "weekly_off"
+        : "on_leave";
+
+    Storage.markAttendance(staffMember.id, today, attStatus, undefined, staffMember.name);
+    if (todayLocale !== today) {
+      Storage.markAttendance(staffMember.id, todayLocale, attStatus, undefined, staffMember.name);
+    }
+    setAttendance(Storage.getAttendance());
+
     if (isSupabaseConfigured()) {
       SupabaseSync.saveStaff(staffMember);
     }
@@ -382,6 +403,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const rec = Storage.markAttendance(staffId, date, status, notes, staffMember?.name);
     setAttendance(Storage.getAttendance());
     setStaff(Storage.getStaff());
+
+    // Also sync to Supabase staff if date is today
+    const isToday =
+      date === new Date().toISOString().slice(0, 10) ||
+      date === new Date().toLocaleDateString("en-CA");
+    if (isToday && isSupabaseConfigured()) {
+      const updatedStaff = Storage.getStaff().find((s) => s.id === staffId);
+      if (updatedStaff) {
+        SupabaseSync.saveStaff(updatedStaff);
+      }
+    }
     return rec;
   };
 
@@ -393,8 +425,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       Storage.saveStaff(list);
       setStaff([...list]);
 
-      // Automatically log today's attendance entry
+      // Automatically log today's attendance entry across UTC & Local day
       const today = new Date().toISOString().slice(0, 10);
+      const todayLocale = new Date().toLocaleDateString("en-CA");
       const attStatus: AttendanceStatus =
         status === "active"
           ? "present"
@@ -407,6 +440,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : "on_leave";
 
       Storage.markAttendance(staffId, today, attStatus, undefined, target.name);
+      if (todayLocale !== today) {
+        Storage.markAttendance(staffId, todayLocale, attStatus, undefined, target.name);
+      }
       setAttendance(Storage.getAttendance());
 
       if (isSupabaseConfigured()) {
@@ -419,12 +455,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const list = [...staff];
     const target = list.find((s) => s.id === staffId);
     if (target) {
-      // Cycle: active -> half_day -> on_leave -> active
+      // Cycle: active -> half_day -> on_leave -> weekly_off -> active
       const nextStatus: StaffStatus =
         target.status === "active"
           ? "half_day"
           : target.status === "half_day"
           ? "on_leave"
+          : target.status === "on_leave"
+          ? "weekly_off"
           : "active";
       setStaffDailyStatus(staffId, nextStatus);
     }

@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS staff (
     phone VARCHAR(50),
     role VARCHAR(100) DEFAULT 'Senior Stylist', -- e.g. Senior Stylist, Color Specialist, Aesthetician, Junior Stylist
     commission_rate NUMERIC(8, 2) DEFAULT 15.00, -- Primary Service commission (Percentage % or Flat ₹ Amount)
-    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'on_leave', 'inactive')),
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'half_day', 'on_leave', 'weekly_off', 'inactive')),
     color VARCHAR(30) DEFAULT '#8b5cf6', -- Avatar accent color
     notes TEXT, -- Stores JSON configuration for: { commission_type: 'percent'|'fixed', product_commission_rate: 100, product_commission_type: 'fixed'|'percent', custom_notes: '...' }
     created_at TIMESTAMPTZ DEFAULT NOW()

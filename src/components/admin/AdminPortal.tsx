@@ -129,7 +129,9 @@ export function AdminPortal() {
 
   // Daily roster summary statistics
   const dailyAttendanceStats = useMemo(() => {
-    const isToday = selectedAttendanceDate === new Date().toISOString().slice(0, 10);
+    const isToday =
+      selectedAttendanceDate === new Date().toISOString().slice(0, 10) ||
+      selectedAttendanceDate === new Date().toLocaleDateString("en-CA");
     let presentCount = 0;
     let halfDayCount = 0;
     let leaveCount = 0;
@@ -203,7 +205,9 @@ export function AdminPortal() {
   }, [staff, attendance, attendanceMonth]);
 
   const handleMarkStaffAttendance = (staffId: string, status: AttendanceStatus, notes?: string) => {
-    const isToday = selectedAttendanceDate === new Date().toISOString().slice(0, 10);
+    const isToday =
+      selectedAttendanceDate === new Date().toISOString().slice(0, 10) ||
+      selectedAttendanceDate === new Date().toLocaleDateString("en-CA");
     markStaffAttendance(staffId, selectedAttendanceDate, status, notes);
     if (isToday) {
       const staffStatus: StaffStatus =
@@ -1099,7 +1103,9 @@ export function AdminPortal() {
           {/* STAFF CARDS GRID WITH 1-CLICK ATTENDANCE CONTROLS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {staff.map((st) => {
-              const isToday = selectedAttendanceDate === new Date().toISOString().slice(0, 10);
+              const isToday =
+                selectedAttendanceDate === new Date().toISOString().slice(0, 10) ||
+                selectedAttendanceDate === new Date().toLocaleDateString("en-CA");
               const record = dateAttendanceMap.get(st.id);
               const currentStatus: AttendanceStatus = record
                 ? record.status

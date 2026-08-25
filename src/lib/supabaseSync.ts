@@ -108,6 +108,7 @@ export const SupabaseSync = {
           let commission_type: "percent" | "fixed" = "percent";
           let product_commission_rate = Number(s.commission_rate) || 0;
           let product_commission_type: "percent" | "fixed" = "percent";
+          let floorStatus = s.status || "active";
 
           try {
             if (s.notes && s.notes.startsWith("{")) {
@@ -115,11 +116,18 @@ export const SupabaseSync = {
               commission_type = meta.commission_type || "percent";
               product_commission_rate = meta.product_commission_rate !== undefined ? Number(meta.product_commission_rate) : (Number(s.commission_rate) || 0);
               product_commission_type = meta.product_commission_type || "percent";
+              if (meta.floor_status) {
+                floorStatus = meta.floor_status;
+              }
               parsedNotes = meta.custom_notes || "";
             }
           } catch (e) {
             // regular string note
           }
+
+          // Normalize status
+          if (floorStatus === "present") floorStatus = "active";
+          if (floorStatus === "absent") floorStatus = "on_leave";
 
           return {
             ...s,
@@ -127,6 +135,7 @@ export const SupabaseSync = {
             commission_type,
             product_commission_rate,
             product_commission_type,
+            status: floorStatus,
             notes: parsedNotes,
           };
         }),
@@ -452,8 +461,17 @@ export const SupabaseSync = {
         commission_type: staffMember.commission_type || "percent",
         product_commission_rate: staffMember.product_commission_rate ?? staffMember.commission_rate,
         product_commission_type: staffMember.product_commission_type || "percent",
+        floor_status: staffMember.status || "active",
         custom_notes: staffMember.notes || "",
       };
+
+      // Ensure status is valid for any legacy DB constraints ('active', 'on_leave', 'inactive')
+      const safePgStatus =
+        staffMember.status === "inactive"
+          ? "inactive"
+          : staffMember.status === "on_leave" || staffMember.status === "weekly_off"
+          ? "on_leave"
+          : "active";
 
       const payload = {
         id: staffMember.id,
@@ -461,7 +479,7 @@ export const SupabaseSync = {
         phone: staffMember.phone || null,
         role: staffMember.role,
         commission_rate: Number(staffMember.commission_rate) || 0,
-        status: staffMember.status,
+        status: staffMember.status === "half_day" || staffMember.status === "weekly_off" ? safePgStatus : (staffMember.status || "active"),
         color: staffMember.color || null,
         notes: JSON.stringify(incentiveMeta),
       };

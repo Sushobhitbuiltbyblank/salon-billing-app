@@ -561,7 +561,8 @@ export const Storage = {
 
     // If marking for today's date, also sync the staff status on the floor
     const today = new Date().toISOString().slice(0, 10);
-    if (date === today) {
+    const todayLocale = new Date().toLocaleDateString("en-CA");
+    if (date === today || date === todayLocale) {
       const staffList = this.getStaff();
       const st = staffList.find((s) => s.id === staffId);
       if (st) {
