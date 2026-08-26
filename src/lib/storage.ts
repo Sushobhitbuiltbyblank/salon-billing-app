@@ -742,17 +742,11 @@ export const Storage = {
     }
 
     const list = this.getCustomers();
-    const cleanName = normalizeCustomerName(customer.name);
-    const isAnon = isAnonymousCustomerName(customer.name);
 
     const index = list.findIndex((c) => {
-      if (c.id && customer.id && c.id === customer.id) return true;
       const cPhone = normalizePhoneNumber(c.phone);
       if (cleanPhone.length >= 7 && cPhone.length >= 7 && cleanPhone === cPhone) return true;
-      const cName = normalizeCustomerName(c.name);
-      if (!isAnon && cleanName && cName && cleanName === cName) {
-        return !cPhone || !cleanPhone || cPhone === cleanPhone;
-      }
+      if (c.id && customer.id && c.id === customer.id) return true;
       return false;
     });
 

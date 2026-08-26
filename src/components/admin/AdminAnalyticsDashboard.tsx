@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { normalizePhoneNumber } from "@/lib/customerUtils";
 import {
   BarChart3,
   TrendingUp,
@@ -127,12 +128,14 @@ export function AdminAnalyticsDashboard() {
     const netProfit = grossSales - totalCOGS - totalExpenses;
     const profitMargin = grossSales > 0 ? ((netProfit / grossSales) * 100).toFixed(1) : "0";
 
-    // Unique clients served
+    // Unique clients served: strictly identified by mobile number (or invoice id for separate walk-ins)
     const clientSet = new Set<string>();
     filteredInvoices.forEach((inv) => {
-      const idOrName = inv.customer_phone?.trim() || inv.customer_name?.trim();
-      if (idOrName && idOrName.toLowerCase() !== "walk-in guest") {
-        clientSet.add(idOrName.toLowerCase());
+      const cleanPhone = normalizePhoneNumber(inv.customer_phone);
+      if (cleanPhone && cleanPhone.length >= 7) {
+        clientSet.add(cleanPhone);
+      } else if (inv.customer_name && inv.customer_name.toLowerCase() !== "walk-in guest") {
+        clientSet.add(`inv_${inv.id}`);
       }
     });
 

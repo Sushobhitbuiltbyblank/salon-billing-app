@@ -121,8 +121,6 @@ export function CustomerSelector() {
   const matchedCustomer = useMemo(() => {
     if (!draftCustomer) return null;
     const cleanPhone = normalizePhoneNumber(draftCustomer.phone);
-    const cleanName = normalizeCustomerName(draftCustomer.name);
-    const isAnon = isAnonymousCustomerName(draftCustomer.name);
 
     if (cleanPhone.length >= 7) {
       const byPhone = allAvailableCustomers.find(
@@ -131,16 +129,9 @@ export function CustomerSelector() {
       if (byPhone) return byPhone;
     }
 
-    if (!isAnon && cleanName) {
+    if (draftCustomer.id) {
       return (
-        allAvailableCustomers.find((c: Customer) => {
-          const cName = normalizeCustomerName(c.name);
-          const cPhone = normalizePhoneNumber(c.phone);
-          if (cName === cleanName) {
-            return !cleanPhone || !cPhone || cleanPhone === cPhone;
-          }
-          return false;
-        }) || null
+        allAvailableCustomers.find((c: Customer) => c.id === draftCustomer.id) || null
       );
     }
 

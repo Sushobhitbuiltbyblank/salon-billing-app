@@ -169,19 +169,14 @@ export function CustomerDirectory() {
   const customerInvoices = useMemo(() => {
     if (!selectedHistoryCustomer) return [];
     const cleanPhone = normalizePhoneNumber(selectedHistoryCustomer.phone);
-    const custName = normalizeCustomerName(selectedHistoryCustomer.name);
-    const isAnon = isAnonymousCustomerName(selectedHistoryCustomer.name);
 
     return invoices.filter((inv) => {
       if (inv.status === "void") return false;
       const invPhone = normalizePhoneNumber(inv.customer_phone);
-      const invName = normalizeCustomerName(inv.customer_name);
 
+      // Strict matching: by mobile number or explicit customer_id
       if (cleanPhone.length >= 7 && invPhone.length >= 7) return cleanPhone === invPhone;
       if (selectedHistoryCustomer.id && inv.customer_id) return selectedHistoryCustomer.id === inv.customer_id;
-      if (!isAnon && custName && custName === invName) {
-        return !invPhone || !cleanPhone || invPhone === cleanPhone;
-      }
       return false;
     });
   }, [selectedHistoryCustomer, invoices]);
