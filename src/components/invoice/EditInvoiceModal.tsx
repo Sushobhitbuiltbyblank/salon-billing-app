@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SplitStaffModal } from "@/components/billing/SplitStaffModal";
 import { calculateItemTotal, calculateInvoiceTotals } from "@/lib/calculations";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, generateUUID } from "@/lib/utils";
 import {
   FileEdit,
   User,
@@ -39,6 +39,8 @@ export function EditInvoiceModal() {
     setEditingInvoice,
     updateInvoice,
     setPrintInvoice,
+    customers,
+    saveCustomer,
     catalog,
     categories,
     staff,
@@ -50,6 +52,7 @@ export function EditInvoiceModal() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
+  const [customerGender, setCustomerGender] = useState<"female" | "male" | "other" | "unspecified">("unspecified");
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const [discountType, setDiscountType] = useState<DiscountType>("flat");
   const [discountValue, setDiscountValue] = useState<number>(0);
@@ -96,8 +99,17 @@ export function EditInvoiceModal() {
   useEffect(() => {
     if (editingInvoice) {
       setCustomerName(editingInvoice.customer_name || "");
-      setCustomerPhone(editingInvoice.customer_phone || "");
+      const cleanPhone = (editingInvoice.customer_phone || "").replace(/\D/g, "").slice(-10);
+      setCustomerPhone(cleanPhone);
       setCustomerEmail(editingInvoice.customer_email || "");
+
+      // Match customer gender from CRM customer database
+      const matchedCust = customers.find(
+        (c) =>
+          (c.id && c.id === editingInvoice.customer_id) ||
+          (cleanPhone.length >= 7 && c.phone && c.phone.replace(/\D/g, "").slice(-10) === cleanPhone)
+      );
+      setCustomerGender((matchedCust?.gender as any) || "unspecified");
 
       const loadedItems = (editingInvoice.items || []).map((it) => {
         let pkgServices = it.package_services;
@@ -455,6 +467,29 @@ export function EditInvoiceModal() {
       };
 
       const saved = await updateInvoice(updatedInvoice);
+
+      // Also sync and persist customer profile with updated gender
+      const clean10Phone = customerPhone.replace(/\D/g, "").slice(-10);
+      if (clean10Phone.length >= 7 || editingInvoice.customer_id) {
+        const matchedCust = customers.find(
+          (c) =>
+            (c.id && c.id === editingInvoice.customer_id) ||
+            (clean10Phone.length >= 7 && c.phone && c.phone.replace(/\D/g, "").slice(-10) === clean10Phone)
+        );
+
+        saveCustomer({
+          id: matchedCust?.id || editingInvoice.customer_id || generateUUID(),
+          name: customerName.trim() || matchedCust?.name || "Guest",
+          phone: clean10Phone.length >= 7 ? clean10Phone : (matchedCust?.phone || ""),
+          email: customerEmail.trim() || matchedCust?.email || undefined,
+          gender: customerGender,
+          total_visits: matchedCust?.total_visits || 1,
+          total_spent: matchedCust?.total_spent || totals.grandTotal,
+          last_visit: editingInvoice.created_at,
+          notes: matchedCust?.notes || undefined,
+        });
+      }
+
       setEditingInvoice(null);
 
       if (alsoPrint) {
@@ -522,7 +557,7 @@ export function EditInvoiceModal() {
             Customer Information
           </h4>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {/* NAME */}
             <div>
               <label className="text-[11px] font-medium text-zinc-400 mb-1 block">Customer Name *</label>
@@ -564,6 +599,35 @@ export function EditInvoiceModal() {
                   placeholder="e.g. 9845112345"
                   className="w-full h-8 pl-8 pr-2.5 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white font-mono focus:outline-none focus:ring-1 focus:ring-purple-500"
                 />
+              </div>
+            </div>
+
+            {/* GENDER SELECTOR */}
+            <div>
+              <label className="text-[11px] font-medium text-zinc-400 mb-1 block">Customer Gender</label>
+              <div className="grid grid-cols-3 gap-1 bg-zinc-900 p-0.5 rounded-xl border border-zinc-800 h-8 items-center">
+                {[
+                  { id: "female", label: "Female", emoji: "👩" },
+                  { id: "male", label: "Male", emoji: "👨" },
+                  { id: "other", label: "Other", emoji: "⚧" },
+                ].map((g) => {
+                  const isSelected = customerGender === g.id;
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => setCustomerGender(g.id as any)}
+                      className={`h-7 px-1 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                        isSelected
+                          ? "bg-purple-600 text-white shadow-sm font-black scale-102"
+                          : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                      }`}
+                    >
+                      <span>{g.emoji}</span>
+                      <span className="truncate">{g.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -652,7 +716,7 @@ export function EditInvoiceModal() {
                         </Badge>
                       )}
 
-                      {/* GUEST / PERSON TAG */}
+                      {/* GUEST / PERSON TAG & GENDER */}
                       <div className="flex items-center gap-1 bg-zinc-950 px-1.5 py-0.5 rounded-md border border-cyan-900/50">
                         <User className="h-2.5 w-2.5 text-cyan-400 shrink-0" />
                         <input
@@ -667,9 +731,29 @@ export function EditInvoiceModal() {
                             );
                           }}
                           placeholder="Person (e.g. Ram)"
-                          className="h-5 w-24 sm:w-28 text-[10px] bg-transparent text-cyan-300 placeholder:text-zinc-600 focus:outline-none font-medium"
+                          className="h-5 w-20 sm:w-24 text-[10px] bg-transparent text-cyan-300 placeholder:text-zinc-600 focus:outline-none font-medium"
                           title="Assign companion/person for this line item"
                         />
+                        <select
+                          value={item.guest_gender || "unspecified"}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setItems((prev) =>
+                              prev.map((it) =>
+                                it.id === item.id
+                                  ? { ...it, guest_gender: val !== "unspecified" ? (val as any) : undefined }
+                                  : it
+                              )
+                            );
+                          }}
+                          className="h-5 text-[9px] bg-zinc-900 border border-zinc-800 rounded text-zinc-300 font-bold px-1 focus:outline-none cursor-pointer"
+                          title="Guest Gender"
+                        >
+                          <option value="unspecified">👤 Auto</option>
+                          <option value="female">👩 F</option>
+                          <option value="male">👨 M</option>
+                          <option value="other">⚧ O</option>
+                        </select>
                       </div>
                     </div>
 
