@@ -128,6 +128,51 @@ export function CartItemList() {
     return result;
   }, [draftItems, draftCustomer?.name]);
 
+  // ASSIGN ALL SERVICES IN PACKAGE TO ONE PERSON
+  const handleAssignAllPackageGuests = (
+    itemId: string,
+    guestProfile: { name: string; gender?: "female" | "male" | "other" | "unspecified"; phone?: string }
+  ) => {
+    const targetItem = draftItems.find((i) => i.id === itemId);
+    if (!targetItem) return;
+
+    let services = targetItem.package_services;
+    if (!services || services.length === 0) {
+      const packageCatalogItem = catalog.find((c) => c.id === targetItem.item_id);
+      const serviceIds =
+        targetItem.package_service_ids || packageCatalogItem?.package_service_ids || [];
+      services = serviceIds
+        .map((sId) => {
+          const s = catalog.find((c) => c.id === sId);
+          if (!s) return null;
+          return {
+            service_id: s.id,
+            service_name: s.name,
+            price: Number(s.price) || 0,
+            regular_price: Number(s.price) || 0,
+            duration_mins: s.duration_mins,
+            primary_staff_id: targetItem.primary_staff_id,
+            staff_splits: targetItem.staff_splits,
+          };
+        })
+        .filter(Boolean) as any[];
+    }
+
+    const updatedServices = services.map((svc) => ({
+      ...svc,
+      guest_name: guestProfile.name.trim(),
+      guest_gender: guestProfile.gender !== "unspecified" ? guestProfile.gender : undefined,
+      guest_phone: guestProfile.phone?.trim() || undefined,
+    }));
+
+    updateDraftItem(itemId, {
+      guest_name: guestProfile.name.trim(),
+      guest_gender: guestProfile.gender !== "unspecified" ? guestProfile.gender : undefined,
+      guest_phone: guestProfile.phone?.trim() || undefined,
+      package_services: updatedServices,
+    });
+  };
+
   const handleOpenPersonSelector = (item: InvoiceItem) => {
     if (openGuestItemId === item.id) {
       setOpenGuestItemId(null);
@@ -152,18 +197,34 @@ export function CartItemList() {
   };
 
   const handleSaveGuestProfile = (itemId: string) => {
+    const item = draftItems.find((i) => i.id === itemId);
+    const isPkg = item?.item_type === "package";
+
     if (!guestFormName.trim()) {
-      updateDraftItem(itemId, {
-        guest_name: undefined,
-        guest_gender: undefined,
-        guest_phone: undefined,
-      });
+      if (isPkg) {
+        handleClearPerson(itemId);
+      } else {
+        updateDraftItem(itemId, {
+          guest_name: undefined,
+          guest_gender: undefined,
+          guest_phone: undefined,
+        });
+      }
     } else {
-      updateDraftItem(itemId, {
-        guest_name: guestFormName.trim(),
-        guest_gender: guestFormGender !== "unspecified" ? guestFormGender : undefined,
-        guest_phone: guestFormPhone.trim() || undefined,
-      });
+      if (isPkg) {
+        // Automatically updates all services inside this package combo
+        handleAssignAllPackageGuests(itemId, {
+          name: guestFormName.trim(),
+          gender: guestFormGender !== "unspecified" ? guestFormGender : undefined,
+          phone: guestFormPhone.trim() || undefined,
+        });
+      } else {
+        updateDraftItem(itemId, {
+          guest_name: guestFormName.trim(),
+          guest_gender: guestFormGender !== "unspecified" ? guestFormGender : undefined,
+          guest_phone: guestFormPhone.trim() || undefined,
+        });
+      }
     }
     setOpenGuestItemId(null);
   };
@@ -178,11 +239,21 @@ export function CartItemList() {
   };
 
   const handleQuickSelectGuest = (itemId: string, profile: KnownGuestProfile) => {
-    updateDraftItem(itemId, {
-      guest_name: profile.name,
-      guest_gender: profile.gender !== "unspecified" ? profile.gender : undefined,
-      guest_phone: profile.phone || undefined,
-    });
+    const item = draftItems.find((i) => i.id === itemId);
+    if (item?.item_type === "package") {
+      // Automatically updates all services inside this package combo
+      handleAssignAllPackageGuests(itemId, {
+        name: profile.name,
+        gender: profile.gender,
+        phone: profile.phone,
+      });
+    } else {
+      updateDraftItem(itemId, {
+        guest_name: profile.name,
+        guest_gender: profile.gender !== "unspecified" ? profile.gender : undefined,
+        guest_phone: profile.phone || undefined,
+      });
+    }
     setOpenGuestItemId(null);
   };
 
@@ -196,11 +267,28 @@ export function CartItemList() {
   };
 
   const handleClearPerson = (itemId: string) => {
-    updateDraftItem(itemId, {
-      guest_name: undefined,
-      guest_gender: undefined,
-      guest_phone: undefined,
-    });
+    const item = draftItems.find((i) => i.id === itemId);
+    if (item?.item_type === "package") {
+      let services = item.package_services || [];
+      const clearedServices = services.map((svc) => ({
+        ...svc,
+        guest_name: undefined,
+        guest_gender: undefined,
+        guest_phone: undefined,
+      }));
+      updateDraftItem(itemId, {
+        guest_name: undefined,
+        guest_gender: undefined,
+        guest_phone: undefined,
+        package_services: clearedServices,
+      });
+    } else {
+      updateDraftItem(itemId, {
+        guest_name: undefined,
+        guest_gender: undefined,
+        guest_phone: undefined,
+      });
+    }
     setOpenGuestItemId(null);
   };
 
@@ -212,11 +300,19 @@ export function CartItemList() {
   const handleApplyGuestToAll = (name: string, gender?: "female" | "male" | "other" | "unspecified", phone?: string) => {
     if (!name.trim()) return;
     draftItems.forEach((it) => {
-      updateDraftItem(it.id, {
-        guest_name: name.trim(),
-        guest_gender: gender !== "unspecified" ? gender : undefined,
-        guest_phone: phone?.trim() || undefined,
-      });
+      if (it.item_type === "package") {
+        handleAssignAllPackageGuests(it.id, {
+          name: name.trim(),
+          gender,
+          phone,
+        });
+      } else {
+        updateDraftItem(it.id, {
+          guest_name: name.trim(),
+          guest_gender: gender !== "unspecified" ? gender : undefined,
+          guest_phone: phone?.trim() || undefined,
+        });
+      }
     });
     setOpenGuestItemId(null);
   };
@@ -397,51 +493,6 @@ export function CartItemList() {
 
     updateDraftItem(itemId, {
       primary_staff_id: staffId || undefined,
-      package_services: updatedServices,
-    });
-  };
-
-  // ASSIGN ALL SERVICES IN PACKAGE TO ONE PERSON
-  const handleAssignAllPackageGuests = (
-    itemId: string,
-    guestProfile: { name: string; gender?: "female" | "male" | "other" | "unspecified"; phone?: string }
-  ) => {
-    const targetItem = draftItems.find((i) => i.id === itemId);
-    if (!targetItem) return;
-
-    let services = targetItem.package_services;
-    if (!services || services.length === 0) {
-      const packageCatalogItem = catalog.find((c) => c.id === targetItem.item_id);
-      const serviceIds =
-        targetItem.package_service_ids || packageCatalogItem?.package_service_ids || [];
-      services = serviceIds
-        .map((sId) => {
-          const s = catalog.find((c) => c.id === sId);
-          if (!s) return null;
-          return {
-            service_id: s.id,
-            service_name: s.name,
-            price: Number(s.price) || 0,
-            regular_price: Number(s.price) || 0,
-            duration_mins: s.duration_mins,
-            primary_staff_id: targetItem.primary_staff_id,
-            staff_splits: targetItem.staff_splits,
-          };
-        })
-        .filter(Boolean) as any[];
-    }
-
-    const updatedServices = services.map((svc) => ({
-      ...svc,
-      guest_name: guestProfile.name.trim(),
-      guest_gender: guestProfile.gender !== "unspecified" ? guestProfile.gender : undefined,
-      guest_phone: guestProfile.phone?.trim() || undefined,
-    }));
-
-    updateDraftItem(itemId, {
-      guest_name: guestProfile.name.trim(),
-      guest_gender: guestProfile.gender !== "unspecified" ? guestProfile.gender : undefined,
-      guest_phone: guestProfile.phone?.trim() || undefined,
       package_services: updatedServices,
     });
   };
@@ -725,13 +776,13 @@ export function CartItemList() {
                         onClick={() => handleOpenPersonSelector(item)}
                         className={`h-6 px-2 text-[10px] rounded-lg font-bold flex items-center gap-1 border transition-all ${
                           item.guest_name
-                            ? "bg-cyan-950/80 border-cyan-500/70 text-cyan-200"
+                            ? "bg-cyan-950/80 border-cyan-500/70 text-cyan-200 shadow-sm"
                             : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-cyan-500/60 hover:text-cyan-300"
                         }`}
-                        title="Assign entire package to a person"
+                        title="Assign package person (auto-fills all included services)"
                       >
                         <User className="h-2.5 w-2.5 text-cyan-400" />
-                        <span>{item.guest_name ? `Package: ${item.guest_name}` : "+ Package Person"}</span>
+                        <span>{item.guest_name ? `👤 ${item.guest_name}` : "+ Person"}</span>
                         <ChevronDown className="h-2.5 w-2.5 text-cyan-400/70" />
                       </button>
                     </div>
@@ -744,7 +795,7 @@ export function CartItemList() {
                     <div className="flex items-center justify-between pb-1 border-b border-zinc-900">
                       <span className="text-[11px] font-bold text-cyan-300 flex items-center gap-1.5">
                         <User className="h-3.5 w-3.5 text-cyan-400" />
-                        Assign Entire Package Combo to Person:
+                        Assign Package Person (Auto-fills all included services):
                       </span>
                       <button
                         type="button"
@@ -856,13 +907,15 @@ export function CartItemList() {
                             <Check className="h-3.5 w-3.5" />
                             Set Person
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleClearPerson(item.id)}
-                            className="h-7 px-2.5 rounded-xl text-rose-400 hover:text-rose-300 text-xs font-medium"
-                          >
-                            Clear
-                          </button>
+                          {item.guest_name && (
+                            <button
+                              type="button"
+                              onClick={() => handleClearPerson(item.id)}
+                              className="h-7 px-2.5 rounded-xl text-rose-400 hover:text-rose-300 text-xs font-medium"
+                            >
+                              Clear
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => setOpenGuestItemId(null)}
@@ -871,22 +924,6 @@ export function CartItemList() {
                             Cancel
                           </button>
                         </div>
-
-                        {guestFormName.trim() && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleAssignAllPackageGuests(item.id, {
-                                name: guestFormName.trim(),
-                                gender: guestFormGender,
-                                phone: guestFormPhone,
-                              })
-                            }
-                            className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold transition-colors"
-                          >
-                            ⚡ Apply &quot;{guestFormName.trim()}&quot; to all services in this package
-                          </button>
-                        )}
                       </div>
                     </div>
                   </div>
