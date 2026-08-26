@@ -742,52 +742,44 @@ export const Storage = {
     }
 
     const list = this.getCustomers();
+    const otherCustomers = list.filter((c) => {
+      const cPhone = normalizePhoneNumber(c.phone);
+      if (cleanPhone.length >= 7 && cPhone.length >= 7 && cleanPhone === cPhone) return false;
+      if (c.id && customer.id && c.id === customer.id) return false;
+      return true;
+    });
 
-    const index = list.findIndex((c) => {
+    const existing = list.find((c) => {
       const cPhone = normalizePhoneNumber(c.phone);
       if (cleanPhone.length >= 7 && cPhone.length >= 7 && cleanPhone === cPhone) return true;
       if (c.id && customer.id && c.id === customer.id) return true;
       return false;
     });
 
-    if (index >= 0) {
-      const existing = list[index];
-      const merged: Customer = {
-        ...existing,
-        ...customer,
-        id: existing.id || customer.id || generateUUID(),
-        name:
-          (!customer.name || isAnonymousCustomerName(customer.name)) && !isAnonymousCustomerName(existing.name)
-            ? existing.name
-            : customer.name || existing.name,
-        phone: cleanPhone.length === 10 ? cleanPhone : customer.phone || existing.phone || "",
-        gender: customer.gender || existing.gender || "unspecified",
-        email: customer.email || existing.email,
-        birthday: customer.birthday || existing.birthday,
-        anniversary: customer.anniversary || existing.anniversary,
-        notes: customer.notes || existing.notes,
-        total_visits: Math.max(existing.total_visits || 0, customer.total_visits || 0),
-        total_spent: Math.max(existing.total_spent || 0, customer.total_spent || 0),
-        last_visit: customer.last_visit || existing.last_visit,
-        created_at: existing.created_at || customer.created_at || new Date().toISOString(),
-      };
-      list[index] = merged;
-      this.saveCustomers(list);
-      return merged;
-    } else {
-      const newCustomer: Customer = {
-        ...customer,
-        id: customer.id || generateUUID(),
-        phone: cleanPhone.length === 10 ? cleanPhone : customer.phone || "",
-        gender: customer.gender || "unspecified",
-        total_visits: customer.total_visits || 1,
-        total_spent: customer.total_spent || 0,
-        created_at: customer.created_at || new Date().toISOString(),
-      };
-      list.push(newCustomer);
-      this.saveCustomers(list);
-      return newCustomer;
-    }
+    const merged: Customer = {
+      ...(existing || {}),
+      ...customer,
+      id: existing?.id || customer.id || generateUUID(),
+      name:
+        (!customer.name || isAnonymousCustomerName(customer.name)) && existing && !isAnonymousCustomerName(existing.name)
+          ? existing.name
+          : customer.name || existing?.name || `Guest (${cleanPhone})`,
+      phone: cleanPhone.length === 10 ? cleanPhone : customer.phone || existing?.phone || "",
+      gender: customer.gender || existing?.gender || "unspecified",
+      email: customer.email !== undefined ? customer.email : existing?.email,
+      birthday: customer.birthday !== undefined ? customer.birthday : existing?.birthday,
+      anniversary: customer.anniversary !== undefined ? customer.anniversary : existing?.anniversary,
+      notes: customer.notes !== undefined ? customer.notes : existing?.notes,
+      total_visits: customer.total_visits !== undefined ? customer.total_visits : (existing?.total_visits || 0),
+      total_spent: customer.total_spent !== undefined ? customer.total_spent : (existing?.total_spent || 0),
+      last_visit: customer.last_visit || existing?.last_visit,
+      last_reminder_sent_at: customer.last_reminder_sent_at || existing?.last_reminder_sent_at,
+      created_at: existing?.created_at || customer.created_at || new Date().toISOString(),
+    };
+
+    otherCustomers.unshift(merged);
+    this.saveCustomers(otherCustomers);
+    return merged;
   },
   deleteCustomer(id: string): void {
     const list = this.getCustomers();
