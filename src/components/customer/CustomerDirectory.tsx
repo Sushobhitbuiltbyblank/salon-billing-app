@@ -39,7 +39,6 @@ import {
   Gift,
   Heart,
   Edit2,
-  Trash2,
   ShoppingCart,
   X,
   TrendingUp,
@@ -69,7 +68,6 @@ export function CustomerDirectory() {
   const {
     customers,
     saveCustomer,
-    deleteCustomer,
     invoices,
     setPrintInvoice,
     setDraftCustomer,
@@ -273,12 +271,6 @@ export function CustomerDirectory() {
   const handleEdit = (customer: Customer) => {
     setEditingCustomer(customer);
     setIsCustomerModalOpen(true);
-  };
-
-  const handleDelete = (customer: Customer) => {
-    if (confirm(`Are you sure you want to delete customer "${customer.name}"?`)) {
-      deleteCustomer(customer.id);
-    }
   };
 
   const handleOpenHistory = (customer: Customer) => {
@@ -902,25 +894,14 @@ export function CustomerDirectory() {
                       </button>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(cust)}
-                        className="p-2 rounded-xl text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer"
-                        title="Edit Customer Profile"
-                      >
-                        <Edit2 className="h-3.5 w-3.5" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(cust)}
-                        className="p-2 rounded-xl text-zinc-400 hover:text-rose-400 bg-zinc-900 hover:bg-rose-950/40 border border-zinc-800 hover:border-rose-900 transition-colors cursor-pointer"
-                        title="Delete Customer Profile"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(cust)}
+                      className="p-2 rounded-xl text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer"
+                      title="Edit Customer Profile"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
               </Card>
