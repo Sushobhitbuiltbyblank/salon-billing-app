@@ -104,7 +104,7 @@ export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSet
         .map((item) => {
           let line = `  ${globalIndex++}. ${item.item_name} (${item.quantity}x) - ${settings.currency_symbol}${item.total_price.toFixed(2)}`;
           if (item.item_type === "package" && item.package_services && item.package_services.length > 0) {
-            const subLines = item.package_services.map((ps) => `     └ • ${ps.service_name}: ₹${ps.price}`).join("\n");
+            const subLines = item.package_services.map((ps) => `     └ • ${ps.guest_name ? `[${ps.guest_name}] ` : ""}${ps.service_name}: ₹${ps.price}`).join("\n");
             line += `\n${subLines}`;
           }
           return line;
@@ -118,7 +118,7 @@ export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSet
       .map((item, idx) => {
         let line = `${idx + 1}. *${item.item_name}* (${item.quantity}x) - ${settings.currency_symbol}${item.total_price.toFixed(2)}`;
         if (item.item_type === "package" && item.package_services && item.package_services.length > 0) {
-          const subLines = item.package_services.map((ps) => `   └ • ${ps.service_name}: ₹${ps.price}`).join("\n");
+          const subLines = item.package_services.map((ps) => `   └ • ${ps.guest_name ? `[${ps.guest_name}] ` : ""}${ps.service_name}: ₹${ps.price}`).join("\n");
           line += `\n${subLines}`;
         }
         return line;

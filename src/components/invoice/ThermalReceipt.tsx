@@ -31,6 +31,16 @@ export function ThermalReceipt({
   const guestBreakdown = React.useMemo(() => {
     const map = new Map<string, number>();
     (invoice.items || []).forEach((it) => {
+      if (it.item_type === "package" && it.package_services && it.package_services.length > 0) {
+        const hasSubGuest = it.package_services.some((s) => s.guest_name && s.guest_name.trim());
+        if (hasSubGuest) {
+          it.package_services.forEach((s) => {
+            const gName = (s.guest_name || "").trim() || (it.guest_name || "").trim() || (invoice.customer_name || "General");
+            map.set(gName, (map.get(gName) || 0) + (Number(s.price) || 0));
+          });
+          return;
+        }
+      }
       const gName = (it.guest_name || "").trim() || (invoice.customer_name || "General");
       map.set(gName, (map.get(gName) || 0) + (Number(it.total_price) || 0));
     });
@@ -157,9 +167,10 @@ export function ThermalReceipt({
                       <div style={{ fontSize: "8px", color: "#333333", marginTop: "1px", paddingLeft: "2px" }}>
                         {services.map((ps, pIdx) => {
                           const sName = getStaffName(ps.primary_staff_id) || primary;
+                          const psGuest = (ps.guest_name || "").trim();
                           return (
                             <div key={pIdx}>
-                              • {ps.service_name} {sName ? `(${sName})` : ""}
+                              • {psGuest ? `[${psGuest.toUpperCase()}] ` : ""}{ps.service_name} {sName ? `(${sName})` : ""}
                             </div>
                           );
                         })}

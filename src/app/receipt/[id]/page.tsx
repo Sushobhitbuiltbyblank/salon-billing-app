@@ -337,7 +337,7 @@ export default function PublicReceiptPage() {
                               const sName = staff.find((s) => s.id === ps.primary_staff_id)?.name || primaryStaff;
                               return (
                                 <div key={pIdx}>
-                                  • {ps.service_name} {sName ? `(Stylist: ${sName})` : ""}: ₹{ps.price}
+                                  • {ps.guest_name ? `[${ps.guest_name}] ` : ""}{ps.service_name} {sName ? `(Stylist: ${sName})` : ""}: ₹{ps.price}
                                 </div>
                               );
                             })}
@@ -364,6 +364,16 @@ export default function PublicReceiptPage() {
             if (!invoice.items) return null;
             const map = new Map<string, number>();
             invoice.items.forEach((it) => {
+              if (it.item_type === "package" && it.package_services && it.package_services.length > 0) {
+                const hasSubGuest = it.package_services.some((s) => s.guest_name && s.guest_name.trim());
+                if (hasSubGuest) {
+                  it.package_services.forEach((s) => {
+                    const gName = (s.guest_name || "").trim() || (it.guest_name || "").trim() || (invoice.customer_name || "General");
+                    map.set(gName, (map.get(gName) || 0) + (Number(s.price) || 0));
+                  });
+                  return;
+                }
+              }
               const gName = (it.guest_name || "").trim() || (invoice.customer_name || "General");
               map.set(gName, (map.get(gName) || 0) + (Number(it.total_price) || 0));
             });
