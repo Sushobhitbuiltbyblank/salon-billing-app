@@ -147,9 +147,9 @@ export function CustomerSelector() {
 
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
 
-  const handleSaveCurrentCustomer = () => {
+  const handleSaveCurrentCustomer = async () => {
     if (!draftCustomer?.name?.trim()) {
-      alert("Please enter Customer Name to save profile.");
+      alert("Customer Name is required to save customer.");
       return;
     }
     const cleanPhone = normalizePhoneNumber(draftCustomer?.phone);
@@ -157,7 +157,7 @@ export function CustomerSelector() {
       alert("A valid 10-digit mobile number is required to save customer profile in CRM.");
       return;
     }
-    const saved = saveCustomer({
+    const saved = await saveCustomer({
       id: draftCustomer.id || generateUUID(),
       name: draftCustomer.name.trim(),
       phone: cleanPhone,

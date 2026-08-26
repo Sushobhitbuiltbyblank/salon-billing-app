@@ -22,7 +22,7 @@ import { Storage, initStorage, DEFAULT_SETTINGS, DEFAULT_USERS } from "@/lib/sto
 import { SupabaseSync } from "@/lib/supabaseSync";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { calculateItemTotal } from "@/lib/calculations";
-import { normalizePhoneNumber } from "@/lib/customerUtils";
+import { normalizePhoneNumber, deduplicateCustomerArray } from "@/lib/customerUtils";
 
 interface AppContextType {
   users: AppUser[];
@@ -64,7 +64,7 @@ interface AppContextType {
   
   // CUSTOMERS
   customers: Customer[];
-  saveCustomer: (customer: Customer) => Customer;
+  saveCustomer: (customer: Customer) => Promise<Customer>;
   deleteCustomer: (customerId: string) => void;
   
   // INVOICES
@@ -210,8 +210,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.saveCatalog(cloudData.catalog);
         }
         if (cloudData.customers) {
-          setCustomers((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.customers) ? cloudData.customers : prev));
-          Storage.saveCustomers(cloudData.customers);
+          const localCusts = Storage.getCustomers();
+          const mergedCusts = deduplicateCustomerArray([...localCusts, ...cloudData.customers]);
+          setCustomers(mergedCusts);
+          Storage.saveCustomers(mergedCusts);
         }
         if (cloudData.invoices) {
           setInvoices((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.invoices) ? cloudData.invoices : prev));
@@ -574,22 +576,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   // CUSTOMER ACTIONS
-  const saveCustomer = (cust: Customer): Customer => {
+  const saveCustomer = async (cust: Customer): Promise<Customer> => {
     const saved = Storage.saveCustomer(cust);
     setCustomers(Storage.getCustomers());
     if (isSupabaseConfigured()) {
-      SupabaseSync.saveCustomer(saved).then((remoteCust) => {
+      try {
+        const remoteCust = await SupabaseSync.saveCustomer(saved);
         if (remoteCust) {
           const fresh = Storage.getCustomers();
           const p = normalizePhoneNumber(remoteCust.phone);
           const idx = fresh.findIndex((c) => normalizePhoneNumber(c.phone) === p);
           if (idx >= 0) {
             fresh[idx] = { ...fresh[idx], ...remoteCust };
-            Storage.saveCustomers(fresh);
-            setCustomers(fresh);
+          } else {
+            fresh.unshift(remoteCust);
           }
+          Storage.saveCustomers(fresh);
+          setCustomers(fresh);
         }
-      });
+      } catch (err) {
+        console.error("Supabase sync customer error:", err);
+      }
     }
     return saved;
   };

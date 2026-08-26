@@ -70,7 +70,7 @@ export function CustomerModal({
     setPhone(digits);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       alert("Customer Name is required.");
@@ -97,7 +97,7 @@ export function CustomerModal({
       created_at: customerToEdit?.created_at || new Date().toISOString(),
     };
 
-    const saved = saveCustomer(customerData);
+    const saved = await saveCustomer(customerData);
     setSaveSuccess(true);
 
     if (onSaved) {

@@ -93,7 +93,7 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
     draftCustomer.name.toLowerCase() !== "walk-in guest"
   );
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (draftItems.length === 0) return;
 
     // VALIDATE STYLIST FOR EVERY SERVICE & ALL PACKAGE SERVICES
@@ -148,7 +148,7 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
           (cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone)
       );
 
-      const savedCust = saveCustomer({
+      const savedCust = await saveCustomer({
         id: matchedCust?.id || draftCustomer?.id || generateUUID(),
         name: draftCustomer?.name?.trim() || matchedCust?.name || `Guest (${cleanPhone})`,
         phone: cleanPhone.length === 10 ? cleanPhone : (draftCustomer?.phone || matchedCust?.phone || ""),

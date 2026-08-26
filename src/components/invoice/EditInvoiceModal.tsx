@@ -461,7 +461,7 @@ export function EditInvoiceModal() {
             (clean10Phone.length >= 7 && c.phone && c.phone.replace(/\D/g, "").slice(-10) === clean10Phone)
         );
 
-        const savedCust = saveCustomer({
+        const savedCust = await saveCustomer({
           id: matchedCust?.id || editingInvoice.customer_id || generateUUID(),
           name: customerName.trim() || matchedCust?.name || "Guest",
           phone: clean10Phone.length >= 7 ? clean10Phone : (matchedCust?.phone || ""),
@@ -478,9 +478,10 @@ export function EditInvoiceModal() {
       const updatedInvoice: Invoice = {
         ...editingInvoice,
         customer_id: linkedCustomerId,
-        customer_name: customerName.trim(),
-        customer_phone: customerPhone.trim(),
-        customer_email: customerEmail.trim(),
+        customer_name: customerName.trim() || "Walk-in Guest",
+        customer_phone: clean10Phone.length >= 7 ? clean10Phone : "",
+        customer_email: customerEmail.trim() || "",
+        customer_gender: customerGender,
         items,
         subtotal: totals.subtotal,
         discount_amount: totals.discountAmount,
