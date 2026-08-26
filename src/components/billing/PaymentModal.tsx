@@ -125,9 +125,11 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
       return;
     }
 
-    // VALIDATE GENDER ONLY IF A NAMED CUSTOMER IS BEING ADDED
-    if (hasNamedCustomer && (!draftCustomer?.gender || draftCustomer.gender === "unspecified")) {
-      alert("⚠️ Gender Selection Required\n\nPlease select the customer's gender (Female, Male, or Other) for this customer profile.");
+    // VALIDATE GENDER MANDATORY FOR EVERY BILL
+    if (!draftCustomer?.gender || draftCustomer.gender === "unspecified") {
+      alert(
+        "⚠️ Customer Gender Required\n\nPlease select the customer gender (👩 Female, 👨 Male, or ⚧ Other) before completing payment."
+      );
       return;
     }
 
@@ -147,10 +149,7 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
         name: draftCustomer?.name?.trim() || matchedCust?.name || "Walk-in Guest",
         phone: cleanPhone.length >= 7 ? cleanPhone : (draftCustomer?.phone || matchedCust?.phone || ""),
         email: draftCustomer?.email || matchedCust?.email || undefined,
-        gender:
-          draftCustomer?.gender && draftCustomer.gender !== "unspecified"
-            ? draftCustomer.gender
-            : (matchedCust?.gender as any) || "female",
+        gender: draftCustomer?.gender || "female",
         birthday: draftCustomer?.birthday || matchedCust?.birthday || undefined,
         notes: draftCustomer?.notes || matchedCust?.notes || undefined,
         total_visits: (matchedCust?.total_visits || 0) + 1,
@@ -231,85 +230,83 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
         </div>
       </DialogHeader>
 
-      {/* GENDER & CLIENT SELECTOR BANNER */}
-      {hasNamedCustomer && (
-        <div
-          className={`mt-3 p-3 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 ${
-            !isGenderSet
-              ? "bg-amber-950/40 border-amber-500/60 shadow-lg shadow-amber-900/20"
-              : "bg-zinc-950/80 border-zinc-800"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-base">{!isGenderSet ? "⚠️" : "👤"}</span>
-            <div>
-              <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                <span>Customer Gender</span>
-                <span className="text-rose-400 font-bold">* (Required)</span>
-              </div>
-              <div className="text-[11px] text-zinc-400">
-                {!isGenderSet
-                  ? "Please select gender to record customer profile"
-                  : `Selected: ${draftCustomer?.gender?.toUpperCase()}`}
-              </div>
+      {/* GENDER & CLIENT SELECTOR BANNER - MANDATORY FOR EVERY BILL */}
+      <div
+        className={`mt-3 p-3 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 ${
+          !isGenderSet
+            ? "bg-amber-950/40 border-amber-500/60 shadow-lg shadow-amber-900/20"
+            : "bg-zinc-950/80 border-zinc-800"
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-base">{!isGenderSet ? "⚠️" : "👤"}</span>
+          <div>
+            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>Customer Gender</span>
+              <span className="text-rose-400 font-bold">* (Mandatory)</span>
+            </div>
+            <div className="text-[11px] text-zinc-400">
+              {!isGenderSet
+                ? "Please select gender before proceeding with payment"
+                : `Selected: ${draftCustomer?.gender?.toUpperCase()}`}
             </div>
           </div>
-
-          <div className="grid grid-cols-3 gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800 w-full sm:w-auto">
-            {[
-              { id: "female", label: "Female", emoji: "👩" },
-              { id: "male", label: "Male", emoji: "👨" },
-              { id: "other", label: "Other", emoji: "⚧" },
-            ].map((g) => {
-              const isSelected = draftCustomer?.gender === g.id;
-              return (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() => {
-                    const newGender = g.id as any;
-                    const updatedDraft = draftCustomer ? { ...draftCustomer, gender: newGender } : { gender: newGender };
-                    setDraftCustomer(updatedDraft);
-
-                    if (
-                      draftCustomer?.name?.trim() &&
-                      draftCustomer?.phone &&
-                      draftCustomer.phone.replace(/\D/g, "").length >= 7
-                    ) {
-                      const cleanP = normalizePhoneNumber(draftCustomer.phone);
-                      const matched = customers.find(
-                        (c) =>
-                          (draftCustomer?.id && c.id === draftCustomer.id) ||
-                          (cleanP.length >= 7 && normalizePhoneNumber(c.phone) === cleanP)
-                      );
-                      saveCustomer({
-                        id: matched?.id || draftCustomer.id || generateUUID(),
-                        name: draftCustomer.name.trim(),
-                        phone: cleanP,
-                        gender: newGender,
-                        email: draftCustomer.email || matched?.email,
-                        birthday: draftCustomer.birthday || matched?.birthday,
-                        notes: draftCustomer.notes || matched?.notes,
-                        total_visits: matched?.total_visits || 1,
-                        total_spent: matched?.total_spent || totals.grandTotal,
-                        created_at: matched?.created_at || draftCustomer.created_at || new Date().toISOString(),
-                      });
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    isSelected
-                      ? "bg-purple-600 text-white shadow-sm font-black scale-105"
-                      : "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                  }`}
-                >
-                  <span>{g.emoji}</span>
-                  <span>{g.label}</span>
-                </button>
-              );
-            })}
-          </div>
         </div>
-      )}
+
+        <div className="grid grid-cols-3 gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800 w-full sm:w-auto">
+          {[
+            { id: "female", label: "Female", emoji: "👩" },
+            { id: "male", label: "Male", emoji: "👨" },
+            { id: "other", label: "Other", emoji: "⚧" },
+          ].map((g) => {
+            const isSelected = draftCustomer?.gender === g.id;
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => {
+                  const newGender = g.id as any;
+                  const updatedDraft = draftCustomer ? { ...draftCustomer, gender: newGender } : { gender: newGender };
+                  setDraftCustomer(updatedDraft);
+
+                  if (
+                    draftCustomer?.name?.trim() &&
+                    draftCustomer?.phone &&
+                    draftCustomer.phone.replace(/\D/g, "").length >= 7
+                  ) {
+                    const cleanP = normalizePhoneNumber(draftCustomer.phone);
+                    const matched = customers.find(
+                      (c) =>
+                        (draftCustomer?.id && c.id === draftCustomer.id) ||
+                        (cleanP.length >= 7 && normalizePhoneNumber(c.phone) === cleanP)
+                    );
+                    saveCustomer({
+                      id: matched?.id || draftCustomer.id || generateUUID(),
+                      name: draftCustomer.name.trim(),
+                      phone: cleanP,
+                      gender: newGender,
+                      email: draftCustomer.email || matched?.email,
+                      birthday: draftCustomer.birthday || matched?.birthday,
+                      notes: draftCustomer.notes || matched?.notes,
+                      total_visits: matched?.total_visits || 1,
+                      total_spent: matched?.total_spent || totals.grandTotal,
+                      created_at: matched?.created_at || draftCustomer.created_at || new Date().toISOString(),
+                    });
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  isSelected
+                    ? "bg-purple-600 text-white shadow-sm font-black scale-105"
+                    : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                }`}
+              >
+                <span>{g.emoji}</span>
+                <span>{g.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3">
         {/* LEFT COLUMN: TOTALS, DISCOUNTS & TAX */}
