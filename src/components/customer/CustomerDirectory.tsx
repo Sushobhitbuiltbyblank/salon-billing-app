@@ -566,10 +566,10 @@ export function CustomerDirectory() {
           {activeCrmTab !== "reminders" && (
             <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 overflow-x-auto">
               {[
-                { id: "all", label: `All Time (${stats.totalClients})` },
-                { id: "today", label: `📅 Today (${stats.todayClients})` },
-                { id: "week", label: `🗓️ Week (${stats.weekClients})` },
-                { id: "month", label: `🗓️ Month (${stats.monthClients})` },
+                { id: "all", label: "All Time" },
+                { id: "today", label: "📅 Today" },
+                { id: "week", label: "🗓️ Week" },
+                { id: "month", label: "🗓️ Month" },
               ].map((tf) => (
                 <button
                   key={tf.id}
@@ -651,6 +651,14 @@ export function CustomerDirectory() {
               </select>
             </div>
           )}
+
+          {/* DYNAMIC RESULT COUNT BADGE ON THE SIDE */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-500/40 text-xs font-bold text-purple-200 shrink-0">
+            <Users className="h-3.5 w-3.5 text-purple-400" />
+            <span>Count:</span>
+            <span className="text-white font-black font-mono text-sm">{displayItems.length}</span>
+            <span className="text-zinc-500 text-[10px] font-normal">/ {unifiedCustomers.length}</span>
+          </div>
         </div>
       </div>
 

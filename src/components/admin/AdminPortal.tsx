@@ -250,7 +250,8 @@ export function AdminPortal() {
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
-  const [customerGenderFilter, setCustomerGenderFilter] = useState<string>("all");
+  const [customerGenderFilters, setCustomerGenderFilters] = useState<string[]>([]);
+  const [customerVipOnly, setCustomerVipOnly] = useState<boolean>(false);
   const [customerTimeframeFilter, setCustomerTimeframeFilter] = useState<CustomerTimeframeFilter>("all");
   const [customerSortBy, setCustomerSortBy] = useState<"spent" | "visits" | "name" | "recent">("recent");
   const [selectedHistoryCustomer, setSelectedHistoryCustomer] = useState<Customer | null>(null);
@@ -259,6 +260,25 @@ export function AdminPortal() {
   const unifiedCustomers = useMemo(() => {
     return unifyCustomerList(customers, invoices);
   }, [customers, invoices]);
+
+  const handleToggleCustomerGender = (gender: string) => {
+    setCustomerGenderFilters((prev) =>
+      prev.includes(gender) ? prev.filter((g) => g !== gender) : [...prev, gender]
+    );
+  };
+
+  const hasActiveCustomerFilters =
+    Boolean(customerSearchQuery) ||
+    customerTimeframeFilter !== "all" ||
+    customerGenderFilters.length > 0 ||
+    customerVipOnly;
+
+  const handleResetCustomerFilters = () => {
+    setCustomerSearchQuery("");
+    setCustomerTimeframeFilter("all");
+    setCustomerGenderFilters([]);
+    setCustomerVipOnly(false);
+  };
 
   const customerStats = useMemo(() => {
     const totalClients = unifiedCustomers.length;
@@ -983,10 +1003,10 @@ export function AdminPortal() {
               {/* TIMEFRAME FILTER CHIPS */}
               <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 overflow-x-auto">
                 {[
-                  { id: "all", label: `All Time (${customerStats.totalClients})` },
-                  { id: "today", label: `📅 Today (${customerStats.todayClients})` },
-                  { id: "week", label: `🗓️ Week (${customerStats.weekClients})` },
-                  { id: "month", label: `🗓️ Month (${customerStats.monthClients})` },
+                  { id: "all", label: "All Time" },
+                  { id: "today", label: "📅 Today" },
+                  { id: "week", label: "🗓️ Week" },
+                  { id: "month", label: "🗓️ Month" },
                 ].map((tf) => (
                   <button
                     key={tf.id}
@@ -1003,27 +1023,56 @@ export function AdminPortal() {
                 ))}
               </div>
 
-              {/* GENDER TABS */}
+              {/* MULTI-SELECT GENDER TABS */}
               <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setCustomerGenderFilters([])}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    customerGenderFilters.length === 0
+                      ? "bg-purple-600 text-white shadow-sm font-black"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  All Genders
+                </button>
                 {[
-                  { id: "all", label: "All" },
                   { id: "female", label: "👩 Female" },
                   { id: "male", label: "👨 Male" },
                   { id: "other", label: "⚧ Other" },
-                ].map((g) => (
-                  <button
-                    key={g.id}
-                    onClick={() => setCustomerGenderFilter(g.id)}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      customerGenderFilter === g.id
-                        ? "bg-purple-600 text-white shadow-sm font-black"
-                        : "text-zinc-400 hover:text-white"
-                    }`}
-                  >
-                    {g.label}
-                  </button>
-                ))}
+                ].map((g) => {
+                  const isSelected = customerGenderFilters.includes(g.id);
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => handleToggleCustomerGender(g.id)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-purple-600 text-white shadow-sm font-black"
+                          : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  );
+                })}
               </div>
+
+              {/* MULTI-FILTER VIP TOGGLE */}
+              <button
+                type="button"
+                onClick={() => setCustomerVipOnly(!customerVipOnly)}
+                className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 h-9 ${
+                  customerVipOnly
+                    ? "bg-amber-500 text-zinc-950 border-amber-400 font-black shadow-sm"
+                    : "bg-zinc-950 text-amber-400/80 border-zinc-800 hover:text-amber-300 hover:bg-zinc-900"
+                }`}
+                title="Toggle VIP clients only (5+ visits)"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                <span>VIP (5+)</span>
+              </button>
 
               {/* SORT DROPDOWN */}
               <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 h-9">
@@ -1039,6 +1088,51 @@ export function AdminPortal() {
                   <option value="name">Name (A-Z)</option>
                 </select>
               </div>
+
+              {/* DYNAMIC RESULT COUNT BADGE ON THE SIDE */}
+              {(() => {
+                const count = unifiedCustomers.filter((c) => {
+                  const q = customerSearchQuery.toLowerCase().trim();
+                  if (q) {
+                    const match =
+                      c.name.toLowerCase().includes(q) ||
+                      c.phone.includes(q) ||
+                      (c.email && c.email.toLowerCase().includes(q)) ||
+                      (c.notes && c.notes.toLowerCase().includes(q));
+                    if (!match) return false;
+                  }
+                  if (!isCustomerInTimeframe(c, customerTimeframeFilter)) return false;
+                  if (
+                    customerGenderFilters.length > 0 &&
+                    !customerGenderFilters.includes(c.gender || "unspecified")
+                  )
+                    return false;
+                  if (customerVipOnly && (c.total_visits || 0) < 5) return false;
+                  return true;
+                }).length;
+
+                return (
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-500/40 text-xs font-bold text-purple-200 shrink-0 h-9">
+                      <Users className="h-3.5 w-3.5 text-purple-400" />
+                      <span>Count:</span>
+                      <span className="text-white font-black font-mono text-sm">{count}</span>
+                      <span className="text-zinc-500 text-[10px] font-normal">/ {unifiedCustomers.length}</span>
+                    </div>
+
+                    {hasActiveCustomerFilters && (
+                      <button
+                        type="button"
+                        onClick={handleResetCustomerFilters}
+                        className="text-[11px] text-zinc-400 hover:text-white px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer h-9"
+                        title="Reset all filters"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -1047,20 +1141,26 @@ export function AdminPortal() {
             const filteredCustomers = unifiedCustomers
               .filter((c) => {
                 const q = customerSearchQuery.toLowerCase().trim();
-                const matchSearch =
-                  !q ||
-                  c.name.toLowerCase().includes(q) ||
-                  c.phone.includes(q) ||
-                  (c.email && c.email.toLowerCase().includes(q)) ||
-                  (c.notes && c.notes.toLowerCase().includes(q));
+                if (q) {
+                  const matchSearch =
+                    c.name.toLowerCase().includes(q) ||
+                    c.phone.includes(q) ||
+                    (c.email && c.email.toLowerCase().includes(q)) ||
+                    (c.notes && c.notes.toLowerCase().includes(q));
+                  if (!matchSearch) return false;
+                }
 
-                const matchGender =
-                  customerGenderFilter === "all" ||
-                  c.gender === customerGenderFilter;
+                if (
+                  customerGenderFilters.length > 0 &&
+                  !customerGenderFilters.includes(c.gender || "unspecified")
+                )
+                  return false;
 
-                const matchTimeframe = isCustomerInTimeframe(c, customerTimeframeFilter);
+                if (!isCustomerInTimeframe(c, customerTimeframeFilter)) return false;
 
-                return matchSearch && matchGender && matchTimeframe;
+                if (customerVipOnly && (c.total_visits || 0) < 5) return false;
+
+                return true;
               })
               .sort((a, b) => {
                 if (customerSortBy === "spent") return (b.total_spent || 0) - (a.total_spent || 0);

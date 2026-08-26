@@ -104,4 +104,43 @@ describe("Customer Timeframe & Sorting Filters", () => {
     expect(byRecent[0].name).toBe("Aman Gupta"); // Aug 26
     expect(byRecent[1].name).toBe("Pooja Sharma"); // Aug 23
   });
+
+  it("supports multiple combined filters simultaneously in Admin CRM", () => {
+    const list = [customerToday, customerThisWeek, customerThisMonth, customerOld];
+
+    // Multi-Filter 1: Timeframe 'week' + Gender 'female'
+    const filter1 = list.filter((c) => {
+      if (!isCustomerInTimeframe(c, "week", referenceDate)) return false;
+      if (c.gender !== "female") return false;
+      return true;
+    });
+    expect(filter1.length).toBe(1);
+    expect(filter1[0].name).toBe("Pooja Sharma");
+
+    // Multi-Filter 2: Timeframe 'all' + VIP Only (5+ visits)
+    const filter2 = list.filter((c) => {
+      if ((c.total_visits || 0) < 5) return false;
+      return true;
+    });
+    expect(filter2.length).toBe(1);
+    expect(filter2[0].name).toBe("Karan Johar");
+
+    // Multi-Filter 3: Timeframe 'month' + Multi-gender ['male', 'female'] + Search 'Sharma'
+    const filter3 = list.filter((c) => {
+      if (!isCustomerInTimeframe(c, "month", referenceDate)) return false;
+      if (!["male", "female"].includes(c.gender || "unspecified")) return false;
+      if (!c.name.toLowerCase().includes("sharma")) return false;
+      return true;
+    });
+    expect(filter3.length).toBe(1);
+    expect(filter3[0].name).toBe("Pooja Sharma");
+
+    // Multi-Filter 4: Timeframe 'today' + VIP Only
+    const filter4 = list.filter((c) => {
+      if (!isCustomerInTimeframe(c, "today", referenceDate)) return false;
+      if ((c.total_visits || 0) < 5) return false;
+      return true;
+    });
+    expect(filter4.length).toBe(0); // 0 matching today VIPs
+  });
 });
