@@ -851,7 +851,10 @@ export const Storage = {
           name: invoice.customer_name,
           phone: cleanPhone.length === 10 ? cleanPhone : invoice.customer_phone || "",
           email: invoice.customer_email,
-          gender: "unspecified",
+          gender:
+            invoice.customer_gender && invoice.customer_gender !== "unspecified"
+              ? invoice.customer_gender
+              : "female",
           total_visits: 1,
           total_spent: invoice.grand_total,
           last_visit: invoice.created_at,

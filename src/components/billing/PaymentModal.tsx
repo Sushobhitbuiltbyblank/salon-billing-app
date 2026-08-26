@@ -135,36 +135,43 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
 
     const invoiceNumber = generateInvoiceNumber(settings.invoice_prefix);
 
+    const chosenGender = draftCustomer?.gender || "female";
+
+    const cleanPhone = normalizePhoneNumber(draftCustomer?.phone);
+    let savedCustomerId = draftCustomer?.id;
+
     // Save customer profile with updated gender
-    if (hasNamedCustomer || (draftCustomer?.phone && draftCustomer.phone.replace(/\D/g, "").length >= 7)) {
-      const cleanPhone = normalizePhoneNumber(draftCustomer?.phone);
+    if (cleanPhone && cleanPhone.length >= 7) {
       const matchedCust = customers.find(
         (c) =>
           (draftCustomer?.id && c.id === draftCustomer.id) ||
           (cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone)
       );
 
-      saveCustomer({
+      const savedCust = saveCustomer({
         id: matchedCust?.id || draftCustomer?.id || generateUUID(),
-        name: draftCustomer?.name?.trim() || matchedCust?.name || "Walk-in Guest",
-        phone: cleanPhone.length >= 7 ? cleanPhone : (draftCustomer?.phone || matchedCust?.phone || ""),
+        name: draftCustomer?.name?.trim() || matchedCust?.name || `Guest (${cleanPhone})`,
+        phone: cleanPhone.length === 10 ? cleanPhone : (draftCustomer?.phone || matchedCust?.phone || ""),
         email: draftCustomer?.email || matchedCust?.email || undefined,
-        gender: draftCustomer?.gender || "female",
+        gender: chosenGender,
         birthday: draftCustomer?.birthday || matchedCust?.birthday || undefined,
         notes: draftCustomer?.notes || matchedCust?.notes || undefined,
         total_visits: (matchedCust?.total_visits || 0) + 1,
         total_spent: (matchedCust?.total_spent || 0) + totals.grandTotal,
         last_visit: new Date().toISOString(),
+        created_at: matchedCust?.created_at || draftCustomer?.created_at || new Date().toISOString(),
       });
+      if (savedCust?.id) savedCustomerId = savedCust.id;
     }
 
     const newInvoice: Invoice = {
       id: generateUUID(),
       invoice_number: invoiceNumber,
-      customer_id: draftCustomer?.id,
+      customer_id: savedCustomerId,
       customer_name: draftCustomer?.name?.trim() || "Walk-in Guest",
       customer_phone: draftCustomer?.phone || "",
       customer_email: draftCustomer?.email || "",
+      customer_gender: chosenGender,
       subtotal: totals.subtotal,
       discount_amount: totals.discountAmount,
       discount_type: draftDiscountType,

@@ -277,11 +277,50 @@ export const SupabaseSync = {
         items_meta: invoice.items,
       });
 
+      // Ensure customer profile is recorded in Supabase customers table with correct gender
+      let finalCustomerId = isValidUUID(invoice.customer_id) ? invoice.customer_id : null;
+      const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
+      if (cleanPhone && cleanPhone.length >= 7) {
+        const standardPhone = cleanPhone.length === 10 ? cleanPhone : (invoice.customer_phone || "");
+        const custGender =
+          invoice.customer_gender && invoice.customer_gender !== "unspecified"
+            ? invoice.customer_gender
+            : "female";
+
+        const { data: existingCust } = await supabase
+          .from("customers")
+          .select("id, gender, total_visits, total_spent")
+          .eq("phone", standardPhone)
+          .maybeSingle();
+
+        const customerPayload = {
+          id: existingCust?.id || finalCustomerId || undefined,
+          name: invoice.customer_name || `Guest (${standardPhone})`,
+          phone: standardPhone,
+          email: invoice.customer_email || null,
+          gender: custGender,
+          total_visits: (Number(existingCust?.total_visits) || 0) + 1,
+          total_spent: (Number(existingCust?.total_spent) || 0) + Number(invoice.grand_total),
+          last_visit: invoice.created_at || new Date().toISOString(),
+          created_at: invoice.created_at || new Date().toISOString(),
+        };
+
+        const { data: upsertedCust } = await supabase
+          .from("customers")
+          .upsert(customerPayload, { onConflict: "phone" })
+          .select("id")
+          .maybeSingle();
+
+        if (upsertedCust?.id) {
+          finalCustomerId = upsertedCust.id;
+        }
+      }
+
       // Sanitize header to match exact columns of 'invoices' table
       const invoiceHeader = {
         id: isValidUUID(invoice.id) ? invoice.id : undefined,
         invoice_number: invoice.invoice_number,
-        customer_id: isValidUUID(invoice.customer_id) ? invoice.customer_id : null,
+        customer_id: finalCustomerId,
         customer_name: invoice.customer_name || "Walk-in Guest",
         customer_phone: invoice.customer_phone || null,
         subtotal: Number(invoice.subtotal) || 0,

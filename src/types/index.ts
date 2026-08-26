@@ -175,6 +175,7 @@ export interface Invoice {
   customer_name: string;
   customer_phone?: string;
   customer_email?: string;
+  customer_gender?: "female" | "male" | "other" | "unspecified";
   subtotal: number;
   discount_amount: number;
   discount_type: DiscountType;

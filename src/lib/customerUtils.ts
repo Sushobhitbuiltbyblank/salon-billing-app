@@ -190,7 +190,10 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
         name: rawName || `Guest (${cleanPhone})`,
         phone: cleanPhone,
         email: inv.customer_email || undefined,
-        gender: "unspecified",
+        gender:
+          inv.customer_gender && inv.customer_gender !== "unspecified"
+            ? inv.customer_gender
+            : "female",
         total_visits: 0,
         total_spent: 0,
         last_visit: inv.created_at,
