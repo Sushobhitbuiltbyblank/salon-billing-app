@@ -733,19 +733,22 @@ export function CartItemList() {
                 =================================================================== */}
             {isPackage ? (
               <div className="mt-3 pt-3 border-t border-purple-900/40 space-y-2.5">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
+                {/* PACKAGE TOOLBAR: QUICK ASSIGN ALL */}
+                <div className="bg-zinc-950/60 p-2.5 rounded-xl border border-purple-900/30 space-y-2">
+                  <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-pink-300 flex items-center gap-1.5">
                       <Layers className="h-3.5 w-3.5 text-pink-400" />
                       Included Services ({packageServices.length || 0}):
                     </span>
                   </div>
 
-                  {/* QUICK ASSIGN TOOLS FOR THE PACKAGE */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {/* QUICK ASSIGN ALL TO ONE STYLIST */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-zinc-400">⚡ Stylist:</span>
+                  {/* 2-COLUMN GRID (50% STYLIST, 50% PERSON) */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* QUICK ASSIGN ALL STYLIST */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-semibold text-zinc-400 block truncate">
+                        ⚡ All Stylist:
+                      </span>
                       <select
                         onChange={(e) => {
                           if (e.target.value) {
@@ -754,10 +757,10 @@ export function CartItemList() {
                           }
                         }}
                         defaultValue=""
-                        className="h-6 px-1.5 text-[10px] bg-zinc-900 border border-purple-800/60 rounded-lg text-purple-300 font-medium"
+                        className="w-full h-7 px-2 text-[10px] bg-zinc-900 border border-purple-800/60 rounded-lg text-purple-300 font-medium focus:outline-none focus:ring-1 focus:ring-purple-500 truncate"
                       >
                         <option value="" disabled>
-                          Assign All
+                          ⚡ Assign All
                         </option>
                         {staff
                           .filter((s) => s.status === "active" || s.status === "half_day")
@@ -770,20 +773,25 @@ export function CartItemList() {
                     </div>
 
                     {/* ASSIGN PACKAGE COMBO PERSON */}
-                    <div className="flex items-center gap-1">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-semibold text-cyan-400 block truncate">
+                        👤 All Person:
+                      </span>
                       <button
                         type="button"
                         onClick={() => handleOpenPersonSelector(item)}
-                        className={`h-6 px-2 text-[10px] rounded-lg font-bold flex items-center gap-1 border transition-all ${
+                        className={`w-full h-7 px-2 text-[10px] rounded-lg font-bold flex items-center justify-between border transition-all ${
                           item.guest_name
                             ? "bg-cyan-950/80 border-cyan-500/70 text-cyan-200 shadow-sm"
                             : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-cyan-500/60 hover:text-cyan-300"
                         }`}
                         title="Assign package person (auto-fills all included services)"
                       >
-                        <User className="h-2.5 w-2.5 text-cyan-400" />
-                        <span>{item.guest_name ? `👤 ${item.guest_name}` : "+ Person"}</span>
-                        <ChevronDown className="h-2.5 w-2.5 text-cyan-400/70" />
+                        <div className="flex items-center gap-1 min-w-0 truncate">
+                          <User className="h-2.5 w-2.5 text-cyan-400 shrink-0" />
+                          <span className="truncate">{item.guest_name ? item.guest_name : "+ Person"}</span>
+                        </div>
+                        <ChevronDown className="h-2.5 w-2.5 text-cyan-400/70 shrink-0 ml-1" />
                       </button>
                     </div>
                   </div>
@@ -938,98 +946,97 @@ export function CartItemList() {
                     const isSubPersonOpen = openGuestItemId === subKey;
 
                     return (
-                      <div key={svc.service_id || sIdx} className="space-y-1.5">
-                        <div
-                          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl border transition-all ${
-                            isSvcUnassigned
-                              ? "bg-amber-950/30 border-amber-500/60"
-                              : "bg-zinc-900/80 border-zinc-800/80"
-                          }`}
-                        >
-                          {/* SERVICE TITLE & PERSON BADGE */}
-                          <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
-                            <Scissors className="h-3 w-3 text-pink-400 shrink-0" />
-                            <span className="text-xs font-bold text-zinc-100 truncate">
+                      <div
+                        key={svc.service_id || sIdx}
+                        className={`p-2.5 rounded-xl border space-y-2 transition-all ${
+                          isSvcUnassigned
+                            ? "bg-amber-950/20 border-amber-500/40"
+                            : "bg-zinc-900/90 border-zinc-800/80"
+                        }`}
+                      >
+                        {/* ROW 1: SERVICE TITLE & PRICE */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <Scissors className="h-3.5 w-3.5 text-pink-400 shrink-0" />
+                            <span className="text-xs font-bold text-zinc-100 truncate" title={svc.service_name}>
                               {svc.service_name}
                             </span>
                             {svc.guest_name && (
-                              <span className="inline-flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/60">
+                              <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/50 shrink-0">
                                 👤 {svc.guest_name}
                               </span>
                             )}
                           </div>
 
-                          {/* CONTROLS: BILLED AMOUNT + STYLIST + PERSON BUTTON */}
-                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-                            {/* EDITABLE SERVICE PRICE */}
-                            <div className="flex items-center gap-1">
-                              <span className="text-[10px] text-zinc-400 font-semibold">₹:</span>
-                              <input
-                                type="number"
-                                min="0"
-                                step="10"
-                                value={svc.price === 0 ? "" : svc.price}
-                                placeholder="0"
-                                onChange={(e) =>
-                                  handlePackageServicePriceChange(
-                                    item.id,
-                                    svc.service_id,
-                                    e.target.value === "" ? 0 : Number(e.target.value) || 0
-                                  )
-                                }
-                                className="w-16 h-6 px-1.5 text-[11px] font-mono font-bold text-emerald-400 bg-zinc-950 border border-zinc-800 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                title="Customise billed amount for this service inside the package"
-                              />
-                            </div>
-
-                            {/* PER-SERVICE STYLIST SELECTOR */}
-                            <div className="flex items-center gap-1 min-w-[130px]">
-                              <select
-                                value={svc.primary_staff_id || ""}
-                                onChange={(e) =>
-                                  handlePackageServiceStaffChange(
-                                    item.id,
-                                    svc.service_id,
-                                    e.target.value
-                                  )
-                                }
-                                className={`h-6 px-2 text-[10px] rounded-lg font-bold flex-1 transition-all focus:outline-none focus:ring-1 ${
-                                  isSvcUnassigned
-                                    ? "bg-amber-950/60 border border-amber-500 text-amber-200 focus:ring-amber-500"
-                                    : "bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
-                                }`}
-                              >
-                                <option value="">-- Stylist * --</option>
-                                {staff.map((s) => (
-                                  <option
-                                    key={s.id}
-                                    value={s.id}
-                                    disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
-                                  >
-                                    {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
-                                  </option>
-                                ))}
-                              </select>
-                              {assignedStaff && (
-                                <Check className="h-3 w-3 text-emerald-400 shrink-0" />
-                              )}
-                            </div>
-
-                            {/* PER-SERVICE PERSON BUTTON */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenSubServicePersonSelector(item.id, svc)}
-                              className={`h-6 px-2 text-[10px] rounded-lg font-bold flex items-center gap-1 border transition-all ${
-                                svc.guest_name
-                                  ? "bg-cyan-950/90 border-cyan-500 text-cyan-200 shadow-sm"
-                                  : "bg-zinc-950 border-dashed border-zinc-700 text-zinc-400 hover:border-cyan-500/60 hover:text-cyan-300"
-                              }`}
-                              title="Assign this specific service to a companion/person"
-                            >
-                              <User className="h-2.5 w-2.5 text-cyan-400" />
-                              <span className="truncate max-w-[80px]">{svc.guest_name || "+ Person"}</span>
-                            </button>
+                          {/* EDITABLE SERVICE PRICE */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-[10px] text-zinc-400 font-semibold">₹:</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="10"
+                              value={svc.price === 0 ? "" : svc.price}
+                              placeholder="0"
+                              onChange={(e) =>
+                                handlePackageServicePriceChange(
+                                  item.id,
+                                  svc.service_id,
+                                  e.target.value === "" ? 0 : Number(e.target.value) || 0
+                                )
+                              }
+                              className="w-16 h-6 px-1.5 text-[11px] font-mono font-bold text-emerald-400 bg-zinc-950 border border-zinc-800 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                              title="Customise billed amount for this service inside the package"
+                            />
                           </div>
+                        </div>
+
+                        {/* ROW 2: STYLIST SELECTOR & PERSON BUTTON (2-COLUMN GRID) */}
+                        <div className="grid grid-cols-2 gap-1.5 pt-1.5 border-t border-zinc-950">
+                          {/* PER-SERVICE STYLIST SELECTOR */}
+                          <select
+                            value={svc.primary_staff_id || ""}
+                            onChange={(e) =>
+                              handlePackageServiceStaffChange(
+                                item.id,
+                                svc.service_id,
+                                e.target.value
+                              )
+                            }
+                            className={`w-full h-7 px-2 text-[10px] rounded-lg font-medium transition-all focus:outline-none focus:ring-1 truncate ${
+                              isSvcUnassigned
+                                ? "bg-amber-950/60 border border-amber-500 text-amber-200 focus:ring-amber-500"
+                                : "bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
+                            }`}
+                          >
+                            <option value="">-- Stylist * --</option>
+                            {staff.map((s) => (
+                              <option
+                                key={s.id}
+                                value={s.id}
+                                disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
+                              >
+                                {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
+                              </option>
+                            ))}
+                          </select>
+
+                          {/* PER-SERVICE PERSON BUTTON */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSubServicePersonSelector(item.id, svc)}
+                            className={`w-full h-7 px-2 text-[10px] rounded-lg font-bold flex items-center justify-between border transition-all ${
+                              svc.guest_name
+                                ? "bg-cyan-950/90 border-cyan-500 text-cyan-200 shadow-sm"
+                                : "bg-zinc-950 border border-zinc-800 text-zinc-400 hover:border-cyan-500/60 hover:text-cyan-300"
+                            }`}
+                            title="Assign this specific service to a companion/person"
+                          >
+                            <div className="flex items-center gap-1 min-w-0 truncate">
+                              <User className="h-2.5 w-2.5 text-cyan-400 shrink-0" />
+                              <span className="truncate">{svc.guest_name ? svc.guest_name : "+ Person"}</span>
+                            </div>
+                            <ChevronDown className="h-2.5 w-2.5 text-cyan-400/70 shrink-0 ml-1" />
+                          </button>
                         </div>
 
                         {/* EXPANDED SUB-SERVICE PERSON FORM */}
