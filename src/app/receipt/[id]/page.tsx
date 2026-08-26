@@ -323,7 +323,14 @@ export default function PublicReceiptPage() {
                   return (
                     <tr key={idx}>
                       <td className="py-1.5 pr-1">
-                        <div className="font-semibold text-zinc-900">{item.item_name}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap font-semibold text-zinc-900">
+                          {item.guest_name && (
+                            <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-cyan-100 text-cyan-900 border border-cyan-300">
+                              👤 {item.guest_name}
+                            </span>
+                          )}
+                          <span>{item.item_name}</span>
+                        </div>
                         {isPkg && services && services.length > 0 ? (
                           <div className="text-[8.5px] text-zinc-600 space-y-0.5 mt-0.5">
                             {services.map((ps, pIdx) => {
@@ -351,6 +358,35 @@ export default function PublicReceiptPage() {
               </tbody>
             </table>
           </div>
+
+          {/* MULTI-PERSON BREAKDOWN IF APPLICABLE */}
+          {(() => {
+            if (!invoice.items) return null;
+            const map = new Map<string, number>();
+            invoice.items.forEach((it) => {
+              const gName = (it.guest_name || "").trim() || (invoice.customer_name || "General");
+              map.set(gName, (map.get(gName) || 0) + (Number(it.total_price) || 0));
+            });
+            const breakdown: { name: string; total: number }[] = [];
+            map.forEach((total, name) => breakdown.push({ name, total }));
+            if (breakdown.length <= 1) return null;
+
+            return (
+              <div className="my-2.5 p-2.5 rounded-xl bg-cyan-50/70 border border-cyan-200 text-[10px] space-y-1">
+                <div className="font-bold text-cyan-900 uppercase tracking-wide">
+                  👥 Per-Person Split Summary:
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                  {breakdown.map((gb, gIdx) => (
+                    <div key={gIdx} className="flex justify-between items-center text-zinc-700 bg-white px-2 py-1 rounded border border-cyan-100 font-medium">
+                      <span>• {gb.name}:</span>
+                      <strong className="text-zinc-900 font-mono">{formatCurrency(gb.total, settings.currency_symbol)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* TOTALS & BREAKDOWN */}
           <div className="py-3 border-b border-dashed border-zinc-300 space-y-1.5 text-[10px]">

@@ -154,10 +154,15 @@ export function CustomerSelector() {
       alert("Please enter Customer Name to save profile.");
       return;
     }
+    const cleanPhone = normalizePhoneNumber(draftCustomer?.phone);
+    if (!cleanPhone || cleanPhone.length < 10) {
+      alert("A valid 10-digit mobile number is required to save customer profile in CRM.");
+      return;
+    }
     const saved = saveCustomer({
       id: draftCustomer.id || generateUUID(),
       name: draftCustomer.name.trim(),
-      phone: draftCustomer.phone || "",
+      phone: cleanPhone,
       gender: draftCustomer.gender || "female",
       email: draftCustomer.email,
       birthday: draftCustomer.birthday,

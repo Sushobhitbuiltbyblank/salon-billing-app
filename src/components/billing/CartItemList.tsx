@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { InvoiceItem, PackageServiceItem } from "@/types";
 import {
   Trash2,
   Users,
   User,
+  UserPlus,
   Plus,
   Minus,
   Edit2,
@@ -18,6 +19,8 @@ import {
   Check,
   Layers,
   ChevronDown,
+  X,
+  Tag,
 } from "lucide-react";
 import { SplitStaffModal } from "./SplitStaffModal";
 import { formatCurrency } from "@/lib/utils";
@@ -25,9 +28,73 @@ import { Badge } from "@/components/ui/badge";
 import { calculateItemTotal } from "@/lib/calculations";
 
 export function CartItemList() {
-  const { draftItems, updateDraftItem, removeDraftItem, staff, settings, catalog } = useApp();
+  const {
+    draftItems,
+    updateDraftItem,
+    removeDraftItem,
+    staff,
+    settings,
+    catalog,
+    draftCustomer,
+  } = useApp();
   const [activeSplitItem, setActiveSplitItem] = useState<InvoiceItem | null>(null);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
+  const [openGuestItemId, setOpenGuestItemId] = useState<string | null>(null);
+  const [newGuestInput, setNewGuestInput] = useState("");
+
+  // Collect unique guest names from current cart items and draft customer
+  const knownGuests = useMemo(() => {
+    const list: string[] = [];
+    if (
+      draftCustomer?.name &&
+      draftCustomer.name.trim() &&
+      draftCustomer.name.toLowerCase() !== "walk-in guest"
+    ) {
+      list.push(draftCustomer.name.trim());
+    }
+    draftItems.forEach((it) => {
+      if (it.guest_name && it.guest_name.trim()) {
+        const name = it.guest_name.trim();
+        if (!list.some((l) => l.toLowerCase() === name.toLowerCase())) {
+          list.push(name);
+        }
+      }
+    });
+    return list;
+  }, [draftCustomer?.name, draftItems]);
+
+  // Compute multi-guest summary if items have distinct person tags
+  const multiGuestSummary = useMemo(() => {
+    const map = new Map<string, { count: number; total: number }>();
+    draftItems.forEach((it) => {
+      const gName = (it.guest_name || "").trim() || (draftCustomer?.name || "General");
+      const current = map.get(gName) || { count: 0, total: 0 };
+      map.set(gName, {
+        count: current.count + it.quantity,
+        total: current.total + (Number(it.total_price) || 0),
+      });
+    });
+    const result: { name: string; count: number; total: number }[] = [];
+    map.forEach((val, key) => {
+      result.push({ name: key, count: val.count, total: val.total });
+    });
+    return result;
+  }, [draftItems, draftCustomer?.name]);
+
+  const handleAssignGuest = (itemId: string, guestName?: string) => {
+    updateDraftItem(itemId, { guest_name: guestName ? guestName.trim() : undefined });
+    setOpenGuestItemId(null);
+    setNewGuestInput("");
+  };
+
+  const handleApplyGuestToAll = (guestName: string) => {
+    if (!guestName.trim()) return;
+    draftItems.forEach((it) => {
+      updateDraftItem(it.id, { guest_name: guestName.trim() });
+    });
+    setOpenGuestItemId(null);
+    setNewGuestInput("");
+  };
 
   const handleOpenSplit = (item: InvoiceItem) => {
     setActiveSplitItem(item);
@@ -162,6 +229,40 @@ export function CartItemList() {
 
   return (
     <div className="space-y-2.5">
+      {/* MULTI-PERSON BILL SUMMARY BANNER */}
+      {multiGuestSummary.length > 1 && (
+        <div className="p-3 rounded-2xl border border-cyan-700/50 bg-gradient-to-r from-cyan-950/40 via-zinc-950/80 to-purple-950/40 backdrop-blur-xl shadow-lg">
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+            <span className="text-[11px] font-bold tracking-wide text-cyan-300 flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5 text-cyan-400" />
+              Multi-Person Bill ({multiGuestSummary.length} Persons):
+            </span>
+            <span className="text-[10px] text-zinc-400 font-medium">
+              Services itemized per person on bill & WhatsApp
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {multiGuestSummary.map((g) => (
+              <div
+                key={g.name}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/90 border border-cyan-800/60 shadow-sm"
+              >
+                <span className="text-xs font-bold text-cyan-300 flex items-center gap-1">
+                  <User className="h-3 w-3 text-cyan-400" />
+                  {g.name}:
+                </span>
+                <span className="font-mono text-xs font-extrabold text-emerald-400">
+                  {formatCurrency(g.total, settings.currency_symbol)}
+                </span>
+                <span className="text-[10px] text-zinc-500 font-medium">
+                  ({g.count} item{g.count > 1 ? "s" : ""})
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {draftItems.map((item, index) => {
         const isService = item.item_type === "service";
         const isPackage = item.item_type === "package";
@@ -188,7 +289,7 @@ export function CartItemList() {
                 : "border-zinc-800/90 bg-zinc-950/80 hover:border-purple-500/40 hover:bg-zinc-900/90"
             }`}
           >
-            {/* ROW 1: ITEM NAME, BADGE, AND LINE TOTAL */}
+            {/* ROW 1: ITEM NAME, BADGE, GUEST TAG, AND LINE TOTAL */}
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -210,6 +311,144 @@ export function CartItemList() {
                       {isService ? "Service" : "Product"}
                     </Badge>
                   )}
+
+                  {/* GUEST / PERSON ASSIGNMENT CHIP & POPUP */}
+                  <div className="relative inline-block">
+                    {item.guest_name ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenGuestItemId(openGuestItemId === item.id ? null : item.id)
+                        }
+                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-500/60 hover:border-cyan-400 hover:bg-cyan-900/60 shadow-sm transition-all"
+                        title={`Assigned to: ${item.guest_name} (Click to change/remove)`}
+                      >
+                        <User className="h-2.5 w-2.5 text-cyan-400" />
+                        <span>{item.guest_name}</span>
+                        <ChevronDown className="h-2.5 w-2.5 text-cyan-400/70" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenGuestItemId(openGuestItemId === item.id ? null : item.id)
+                        }
+                        className="inline-flex items-center gap-1 text-[9.5px] font-medium px-1.5 py-0.5 rounded-full bg-zinc-900/90 text-zinc-400 border border-dashed border-zinc-700/80 hover:text-cyan-300 hover:border-cyan-500/60 hover:bg-cyan-950/30 transition-all"
+                        title="Assign specific companion/guest for this service (e.g. Ram, Sam)"
+                      >
+                        <UserPlus className="h-2.5 w-2.5" />
+                        <span>+ Person</span>
+                      </button>
+                    )}
+
+                    {/* GUEST POPUP SELECTOR */}
+                    {openGuestItemId === item.id && (
+                      <div className="absolute left-0 top-full mt-1.5 z-40 w-64 p-3 rounded-2xl border border-cyan-700/70 bg-zinc-950/95 shadow-2xl backdrop-blur-2xl text-left space-y-2.5 animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1">
+                            <User className="h-3 w-3 text-cyan-400" />
+                            Assign to Person / Guest:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setOpenGuestItemId(null)}
+                            className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+
+                        {/* QUICK SUGGESTION CHIPS */}
+                        {knownGuests.length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-[9px] text-zinc-400 block font-medium">
+                              Select Person:
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {knownGuests.map((gName) => {
+                                const isSelected =
+                                  (item.guest_name || "").toLowerCase() === gName.toLowerCase();
+                                return (
+                                  <button
+                                    key={gName}
+                                    type="button"
+                                    onClick={() => handleAssignGuest(item.id, gName)}
+                                    className={`text-[10px] px-2 py-0.5 rounded-lg border font-semibold transition-all ${
+                                      isSelected
+                                        ? "bg-cyan-500/30 border-cyan-400 text-cyan-200 font-bold"
+                                        : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                                    }`}
+                                  >
+                                    👤 {gName}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* INLINE NEW PERSON INPUT */}
+                        <div className="space-y-1 pt-1 border-t border-zinc-900">
+                          <span className="text-[9px] text-zinc-400 block font-medium">
+                            New Companion / Guest Name:
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={newGuestInput}
+                              onChange={(e) => setNewGuestInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && newGuestInput.trim()) {
+                                  e.preventDefault();
+                                  handleAssignGuest(item.id, newGuestInput.trim());
+                                }
+                              }}
+                              placeholder="e.g. Sam, Ram, Friend"
+                              className="flex-1 h-7 px-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-600 focus:outline-none focus:border-cyan-500 font-medium"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              disabled={!newGuestInput.trim()}
+                              onClick={() => handleAssignGuest(item.id, newGuestInput.trim())}
+                              className="h-7 px-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-[10px] font-bold text-white transition-all flex items-center gap-1"
+                            >
+                              <Check className="h-3 w-3" />
+                              Set
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* FOOTER ACTIONS: REMOVE OR APPLY TO ALL */}
+                        <div className="pt-1.5 border-t border-zinc-900 flex items-center justify-between gap-1 text-[9.5px]">
+                          {item.guest_name ? (
+                            <button
+                              type="button"
+                              onClick={() => handleAssignGuest(item.id, undefined)}
+                              className="text-rose-400 hover:text-rose-300 transition-colors flex items-center gap-1 font-medium"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              Clear Person Tag
+                            </button>
+                          ) : (
+                            <span className="text-zinc-500">Unassigned</span>
+                          )}
+
+                          {item.guest_name && (
+                            <button
+                              type="button"
+                              onClick={() => handleApplyGuestToAll(item.guest_name!)}
+                              className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors"
+                              title="Assign this person to all items in cart"
+                            >
+                              Apply to all
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {isStylistMissing && (
                     <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
                       <AlertCircle className="h-2.5 w-2.5" />

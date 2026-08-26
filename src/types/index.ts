@@ -103,6 +103,7 @@ export interface PackageServiceItem {
   price: number; // custom / allocated service amount in this package
   regular_price?: number;
   duration_mins?: number;
+  guest_name?: string; // Optional companion / guest tag (e.g. Ram / Sam)
   staff_splits?: StaffSplitAssignment[];
   primary_staff_id?: string;
   secondary_staff_id?: string;
@@ -120,6 +121,9 @@ export interface InvoiceItem {
   discount: number; // Discount per item
   total_price: number;
   
+  // Guest / Multi-Person assignment (e.g. Ram, Sam, Partner, Friend)
+  guest_name?: string;
+
   // Package / Combo details
   package_service_ids?: string[];
   package_regular_price?: number;

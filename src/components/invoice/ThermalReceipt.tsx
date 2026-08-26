@@ -28,6 +28,17 @@ export function ThermalReceipt({
   const isA4 = format === "a4";
   const is58mm = format === "58mm";
 
+  const guestBreakdown = React.useMemo(() => {
+    const map = new Map<string, number>();
+    (invoice.items || []).forEach((it) => {
+      const gName = (it.guest_name || "").trim() || (invoice.customer_name || "General");
+      map.set(gName, (map.get(gName) || 0) + (Number(it.total_price) || 0));
+    });
+    const res: { name: string; total: number }[] = [];
+    map.forEach((total, name) => res.push({ name, total }));
+    return res;
+  }, [invoice.items, invoice.customer_name]);
+
   const googleReviewUrl = settings.google_review_url || "https://g.page/r/CbGd_cwnL9zrEBM/review";
   const instagramUrl = settings.instagram_url || "https://www.instagram.com/beleziasalonlaxminagar?igsi=MTI0ZG85dGRvdTl6aQ%3D%3D&utm_source=qr";
   const qrSize = isA4 ? 76 : is58mm ? 48 : 58;
@@ -134,7 +145,14 @@ export function ThermalReceipt({
               return (
                 <tr key={idx} style={{ verticalAlign: "top", borderBottom: "1px dotted #f0f0f0" }}>
                   <td style={{ padding: "2px 1px" }}>
-                    <div style={{ fontWeight: "bold" }}>{item.item_name}</div>
+                    <div style={{ fontWeight: "bold" }}>
+                      {item.guest_name && (
+                        <span style={{ backgroundColor: "#000000", color: "#ffffff", padding: "1px 4px", borderRadius: "3px", fontSize: "7.5px", marginRight: "4px", textTransform: "uppercase" }}>
+                          [{item.guest_name}]
+                        </span>
+                      )}
+                      {item.item_name}
+                    </div>
                     {isPkg && services && services.length > 0 ? (
                       <div style={{ fontSize: "8px", color: "#333333", marginTop: "1px", paddingLeft: "2px" }}>
                         {services.map((ps, pIdx) => {
@@ -167,6 +185,21 @@ export function ThermalReceipt({
           </tbody>
         </table>
       </div>
+
+      {/* MULTI-GUEST SUB-BREAKDOWN */}
+      {guestBreakdown.length > 1 && (
+        <div style={{ padding: "3px 0", borderBottom: "1px dashed #000000", fontSize: "9px" }}>
+          <div style={{ fontWeight: "bold", textTransform: "uppercase", marginBottom: "2px" }}>
+            👥 Per Person Split:
+          </div>
+          {guestBreakdown.map((gb, gIdx) => (
+            <div key={gIdx} style={{ display: "flex", justifyContent: "space-between", color: "#222222", padding: "0.5px 0" }}>
+              <span>• {gb.name}:</span>
+              <strong>{formatCurrency(gb.total, settings.currency_symbol)}</strong>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* TOTALS & TAX BREAKDOWN */}
       <div style={{ padding: "4px 0", borderBottom: "1px dashed #000000", fontSize: "9.5px" }}>

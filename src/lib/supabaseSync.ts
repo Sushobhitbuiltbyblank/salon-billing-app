@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
 import { DEFAULT_USERS, DEFAULT_CATEGORIES, DEFAULT_CATALOG, Storage } from "./storage";
+import { normalizePhoneNumber } from "./customerUtils";
 import {
   AppUser,
   CatalogItem,
@@ -645,6 +646,11 @@ export const SupabaseSync = {
   // 7. CUSTOMERS SYNC
   async saveCustomer(customer: Customer) {
     if (!isSupabaseConfigured() || !supabase) return null;
+    const cleanPhone = normalizePhoneNumber(customer.phone);
+    // STRICT CRM RULE: Only sync customers with valid mobile numbers (>= 7 digits)
+    if (!cleanPhone || cleanPhone.length < 7) {
+      return null;
+    }
     try {
       const isValidUUID = (str?: string | null) =>
         Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
@@ -652,7 +658,7 @@ export const SupabaseSync = {
       const payload = {
         id: isValidUUID(customer.id) ? customer.id : undefined,
         name: customer.name,
-        phone: customer.phone,
+        phone: cleanPhone.length === 10 ? cleanPhone : customer.phone,
         email: customer.email || null,
         gender: customer.gender || "unspecified",
         birthday: customer.birthday || null,

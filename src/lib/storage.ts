@@ -734,8 +734,14 @@ export const Storage = {
     }
   },
   saveCustomer(customer: Customer): Customer {
-    const list = this.getCustomers();
     const cleanPhone = normalizePhoneNumber(customer.phone);
+    // STRICT CRM RULE: Only save customer if they have a valid mobile number (>= 7 digits)
+    if (!cleanPhone || cleanPhone.length < 7) {
+      console.warn("CRM customer skipped: No valid mobile number provided for", customer.name);
+      return customer;
+    }
+
+    const list = this.getCustomers();
     const cleanName = normalizeCustomerName(customer.name);
     const isAnon = isAnonymousCustomerName(customer.name);
 
@@ -825,21 +831,17 @@ export const Storage = {
     invoices.unshift(invoice);
     this.saveInvoices(invoices);
 
-    // Update customer stats if phone or customer_name exists
+    // STRICT CRM RULE: Update customer stats ONLY if phone has a valid mobile number (>= 7 digits)
     const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
     const cleanName = normalizeCustomerName(invoice.customer_name);
     const isAnon = isAnonymousCustomerName(invoice.customer_name);
 
-    if (cleanPhone || (!isAnon && cleanName)) {
+    if (cleanPhone && cleanPhone.length >= 7) {
       const customers = this.getCustomers();
       const existing = customers.find((c) => {
         const cPhone = normalizePhoneNumber(c.phone);
-        if (cleanPhone.length >= 7 && cPhone.length >= 7 && cleanPhone === cPhone) return true;
+        if (cleanPhone === cPhone) return true;
         if (invoice.customer_id && c.id === invoice.customer_id) return true;
-        const cName = normalizeCustomerName(c.name);
-        if (!isAnon && cleanName && cName && cleanName === cName) {
-          return !cPhone || !cleanPhone || cPhone === cleanPhone;
-        }
         return false;
       });
 
@@ -847,7 +849,7 @@ export const Storage = {
         existing.total_visits = (existing.total_visits || 0) + 1;
         existing.total_spent = (existing.total_spent || 0) + invoice.grand_total;
         existing.last_visit = invoice.created_at;
-        if ((!existing.phone || existing.phone.length < 10) && cleanPhone) {
+        if ((!existing.phone || existing.phone.length < 10) && cleanPhone.length === 10) {
           existing.phone = cleanPhone;
         }
         if (invoice.customer_name && !isAnon && invoice.customer_name.trim() !== existing.name.trim()) {
@@ -861,7 +863,7 @@ export const Storage = {
         this.saveCustomer({
           id: invoice.customer_id || generateUUID(),
           name: invoice.customer_name,
-          phone: cleanPhone || invoice.customer_phone || "",
+          phone: cleanPhone.length === 10 ? cleanPhone : invoice.customer_phone || "",
           email: invoice.customer_email,
           gender: "unspecified",
           total_visits: 1,

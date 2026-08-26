@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Customer } from "@/types";
 import { useApp } from "@/context/AppContext";
 import { generateUUID } from "@/lib/utils";
+import { normalizePhoneNumber } from "@/lib/customerUtils";
 import {
   Dialog,
   DialogHeader,
@@ -71,11 +72,16 @@ export function CustomerModal({
       alert("Customer Name is required.");
       return;
     }
+    const cleanPhone = normalizePhoneNumber(phone);
+    if (!cleanPhone || cleanPhone.length < 10) {
+      alert("A valid 10-digit mobile number is required to save customer profile in CRM.");
+      return;
+    }
 
     const customerData: Customer = {
       id: customerToEdit?.id || generateUUID(),
       name: name.trim(),
-      phone: phone.trim(),
+      phone: cleanPhone,
       gender,
       email: email.trim() || undefined,
       birthday: birthday || undefined,

@@ -54,6 +54,9 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
   customers.forEach((cust) => {
     if (!cust) return;
     const cleanPhone = normalizePhoneNumber(cust.phone);
+    // STRICT CRM RULE: Only save/keep customers with a valid mobile number (>= 7 digits)
+    if (!cleanPhone || cleanPhone.length < 7) return;
+
     const cleanName = normalizeCustomerName(cust.name);
     const isAnon = isAnonymousCustomerName(cust.name);
 
@@ -118,7 +121,7 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
       const newEntry: Customer = {
         ...cust,
         id: cust.id || generateUUID(),
-        phone: cleanPhone.length === 10 ? cleanPhone : (cust.phone || ""),
+        phone: cleanPhone,
         name: cust.name || (cleanPhone ? `Guest (${cleanPhone})` : "Guest"),
         gender: cust.gender || "unspecified",
         total_visits: Number(cust.total_visits) || 0,
@@ -141,7 +144,7 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
  * with recalculated visit totals and revenue figures.
  */
 export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): Customer[] {
-  // 1. First deduplicate all registered customer records
+  // 1. First deduplicate all registered customer records (only with valid mobile numbers)
   const registered = deduplicateCustomerArray(customers || []);
 
   const idMap = new Map<string, Customer>();
@@ -166,8 +169,8 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
     const cleanName = normalizeCustomerName(rawName);
     const isAnon = isAnonymousCustomerName(rawName);
 
-    // Skip anonymous invoices with no phone number
-    if (isAnon && !cleanPhone) return;
+    // STRICT CRM RULE: Skip invoices with no valid mobile number
+    if (!cleanPhone || cleanPhone.length < 7) return;
 
     // Check if we already have this customer
     let matched: Customer | undefined;
@@ -178,6 +181,7 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
     } else if (!isAnon && cleanName && nameMap.has(cleanName)) {
       const candidate = nameMap.get(cleanName)!;
       const candidatePhone = normalizePhoneNumber(candidate.phone);
+      // Merge only if neither has a conflicting different phone
       if (!candidatePhone || !cleanPhone || candidatePhone === cleanPhone) {
         matched = candidate;
       }
@@ -206,7 +210,7 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
       const newCust: Customer = {
         id: inv.customer_id || generateUUID(),
         name: rawName || (cleanPhone ? `Guest (${cleanPhone})` : "Guest"),
-        phone: cleanPhone.length === 10 ? cleanPhone : (inv.customer_phone || ""),
+        phone: cleanPhone,
         email: inv.customer_email || undefined,
         gender: "unspecified",
         total_visits: 0,
@@ -223,35 +227,40 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
   });
 
   // 3. Accurately compute visit counts and spend from real invoices for all customers
-  return unifiedList.map((cust) => {
-    const custPhone = normalizePhoneNumber(cust.phone);
-    const custName = normalizeCustomerName(cust.name);
-    const isAnon = isAnonymousCustomerName(cust.name);
+  return unifiedList
+    .filter((c) => {
+      const p = normalizePhoneNumber(c.phone);
+      return p && p.length >= 7;
+    })
+    .map((cust) => {
+      const custPhone = normalizePhoneNumber(cust.phone);
+      const custName = normalizeCustomerName(cust.name);
+      const isAnon = isAnonymousCustomerName(cust.name);
 
-    const custInvoices = (invoices || []).filter((inv) => {
-      if (inv.status === "void") return false;
-      const invPhone = normalizePhoneNumber(inv.customer_phone);
-      const invName = normalizeCustomerName(inv.customer_name);
+      const custInvoices = (invoices || []).filter((inv) => {
+        if (inv.status === "void") return false;
+        const invPhone = normalizePhoneNumber(inv.customer_phone);
+        const invName = normalizeCustomerName(inv.customer_name);
 
-      if (custPhone.length >= 7 && invPhone.length >= 7) {
-        return custPhone === invPhone;
-      }
-      if (cust.id && inv.customer_id) {
-        return cust.id === inv.customer_id;
-      }
-      if (!isAnon && custName && custName === invName) {
-        return !invPhone || !custPhone || invPhone === custPhone;
-      }
-      return false;
+        if (custPhone.length >= 7 && invPhone.length >= 7) {
+          return custPhone === invPhone;
+        }
+        if (cust.id && inv.customer_id) {
+          return cust.id === inv.customer_id;
+        }
+        if (!isAnon && custName && custName === invName) {
+          return !invPhone || !custPhone || invPhone === custPhone;
+        }
+        return false;
+      });
+
+      const invoiceVisits = custInvoices.length;
+      const invoiceSpent = custInvoices.reduce((sum, inv) => sum + (inv.grand_total || 0), 0);
+
+      return {
+        ...cust,
+        total_visits: Math.max(cust.total_visits || 0, invoiceVisits),
+        total_spent: Math.max(cust.total_spent || 0, invoiceSpent),
+      };
     });
-
-    const invoiceVisits = custInvoices.length;
-    const invoiceSpent = custInvoices.reduce((sum, inv) => sum + (inv.grand_total || 0), 0);
-
-    return {
-      ...cust,
-      total_visits: Math.max(cust.total_visits || 0, invoiceVisits),
-      total_spent: Math.max(cust.total_spent || 0, invoiceSpent),
-    };
-  });
 }

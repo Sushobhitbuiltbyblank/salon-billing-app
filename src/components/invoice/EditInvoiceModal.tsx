@@ -651,6 +651,26 @@ export function EditInvoiceModal() {
                           {isService ? "Service" : "Product"}
                         </Badge>
                       )}
+
+                      {/* GUEST / PERSON TAG */}
+                      <div className="flex items-center gap-1 bg-zinc-950 px-1.5 py-0.5 rounded-md border border-cyan-900/50">
+                        <User className="h-2.5 w-2.5 text-cyan-400 shrink-0" />
+                        <input
+                          type="text"
+                          value={item.guest_name || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setItems((prev) =>
+                              prev.map((it) =>
+                                it.id === item.id ? { ...it, guest_name: val ? val : undefined } : it
+                              )
+                            );
+                          }}
+                          placeholder="Person (e.g. Ram)"
+                          className="h-5 w-24 sm:w-28 text-[10px] bg-transparent text-cyan-300 placeholder:text-zinc-600 focus:outline-none font-medium"
+                          title="Assign companion/person for this line item"
+                        />
+                      </div>
                     </div>
 
                     <div className="text-right">

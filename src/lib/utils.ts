@@ -79,16 +79,52 @@ export function getReceiptPublicUrl(invoice: Invoice): string {
 export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSettings): { text: string; receiptUrl: string } {
   const receiptUrl = getReceiptPublicUrl(invoice);
 
-  const itemsText = (invoice.items || [])
-    .map((item, idx) => {
-      let line = `${idx + 1}. *${item.item_name}* (${item.quantity}x) - ${settings.currency_symbol}${item.total_price.toFixed(2)}`;
-      if (item.item_type === "package" && item.package_services && item.package_services.length > 0) {
-        const subLines = item.package_services.map((ps) => `   └ • ${ps.service_name}: ₹${ps.price}`).join("\n");
-        line += `\n${subLines}`;
+  const items = invoice.items || [];
+  const uniqueGuests = Array.from(
+    new Set(items.map((i) => (i.guest_name || "").trim()).filter(Boolean))
+  );
+
+  let itemsText = "";
+  if (uniqueGuests.length > 0) {
+    const groupedMap = new Map<string, typeof items>();
+    items.forEach((item) => {
+      const gName = (item.guest_name || "").trim() || (invoice.customer_name || "General");
+      if (!groupedMap.has(gName)) {
+        groupedMap.set(gName, []);
       }
-      return line;
-    })
-    .join("\n");
+      groupedMap.get(gName)!.push(item);
+    });
+
+    const groupSections: string[] = [];
+    let globalIndex = 1;
+    groupedMap.forEach((gItems, gName) => {
+      const gSubtotal = gItems.reduce((sum, it) => sum + (Number(it.total_price) || 0), 0);
+      const header = `👤 *${gName}* (${settings.currency_symbol}${gSubtotal.toFixed(2)}):`;
+      const lines = gItems
+        .map((item) => {
+          let line = `  ${globalIndex++}. ${item.item_name} (${item.quantity}x) - ${settings.currency_symbol}${item.total_price.toFixed(2)}`;
+          if (item.item_type === "package" && item.package_services && item.package_services.length > 0) {
+            const subLines = item.package_services.map((ps) => `     └ • ${ps.service_name}: ₹${ps.price}`).join("\n");
+            line += `\n${subLines}`;
+          }
+          return line;
+        })
+        .join("\n");
+      groupSections.push(`${header}\n${lines}`);
+    });
+    itemsText = groupSections.join("\n\n");
+  } else {
+    itemsText = items
+      .map((item, idx) => {
+        let line = `${idx + 1}. *${item.item_name}* (${item.quantity}x) - ${settings.currency_symbol}${item.total_price.toFixed(2)}`;
+        if (item.item_type === "package" && item.package_services && item.package_services.length > 0) {
+          const subLines = item.package_services.map((ps) => `   └ • ${ps.service_name}: ₹${ps.price}`).join("\n");
+          line += `\n${subLines}`;
+        }
+        return line;
+      })
+      .join("\n");
+  }
 
   const message = `✨ *${settings.salon_name}* ✨
 📍 _${settings.tagline}_
