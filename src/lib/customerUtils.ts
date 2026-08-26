@@ -34,6 +34,8 @@ export function isAnonymousCustomerName(name?: string | null): boolean {
     norm === "walk in" ||
     norm === "walkin" ||
     norm === "guest" ||
+    norm.startsWith("guest (") ||
+    norm.startsWith("walk-in (") ||
     norm === "anonymous" ||
     norm === "client"
   );
