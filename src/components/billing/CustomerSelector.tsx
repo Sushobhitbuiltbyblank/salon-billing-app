@@ -64,7 +64,7 @@ export function CustomerSelector() {
             gender:
               existing.gender && existing.gender !== "unspecified"
                 ? existing.gender
-                : draftCustomer?.gender || "female",
+                : draftCustomer?.gender,
             email: existing.email || draftCustomer?.email || "",
             birthday: existing.birthday || draftCustomer?.birthday || "",
             notes: existing.notes || draftCustomer?.notes || "",
@@ -80,13 +80,13 @@ export function CustomerSelector() {
     setIsAddingDetails(true);
     if (!draftCustomer) {
       setDraftCustomer({
-        gender: field === "gender" ? (cleanValue as any) : "female",
+        gender: field === "gender" ? (cleanValue as any) : undefined,
         [field]: cleanValue,
       });
     } else {
       setDraftCustomer({
         ...draftCustomer,
-        gender: field === "gender" ? (cleanValue as any) : (draftCustomer.gender || "female"),
+        gender: field === "gender" ? (cleanValue as any) : draftCustomer.gender,
         [field]: cleanValue,
       });
     }
@@ -298,9 +298,9 @@ export function CustomerSelector() {
                 Gender <span className="text-rose-400 font-bold">*</span>
               </label>
               {!draftCustomer?.gender || draftCustomer.gender === "unspecified" ? (
-                <span className="text-[10px] text-amber-400 font-bold animate-pulse">Required</span>
+                <span className="text-[10px] text-amber-400 font-bold animate-pulse">Required *</span>
               ) : (
-                <span className="text-[10px] text-emerald-400 font-medium">✓ Set</span>
+                <span className="text-[10px] text-emerald-400 font-medium">✓ {draftCustomer.gender.toUpperCase()}</span>
               )}
             </div>
             <div className="grid grid-cols-3 gap-1 bg-zinc-950/90 p-0.5 rounded-xl border border-zinc-800 h-10 sm:h-9 items-center">
@@ -309,7 +309,7 @@ export function CustomerSelector() {
                 { id: "male", label: "Male", emoji: "👨" },
                 { id: "other", label: "Other", emoji: "⚧" },
               ].map((g) => {
-                const isSelected = (draftCustomer?.gender || "female") === g.id;
+                const isSelected = draftCustomer?.gender === g.id;
                 return (
                   <button
                     key={g.id}
