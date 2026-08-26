@@ -151,7 +151,7 @@ export function EditInvoiceModal() {
       setStatus(editingInvoice.status || "paid");
       setNotes(editingInvoice.notes || "");
     }
-  }, [editingInvoice, catalog]);
+  }, [editingInvoice, catalog, customers]);
 
   // Recalculate totals
   const totals = useMemo(() => {
@@ -447,8 +447,33 @@ export function EditInvoiceModal() {
             }
           : undefined;
 
+      // Also sync and persist customer profile with updated gender
+      let linkedCustomerId = editingInvoice.customer_id;
+      const clean10Phone = customerPhone.replace(/\D/g, "").slice(-10);
+      if (clean10Phone.length >= 7 || editingInvoice.customer_id) {
+        const matchedCust = customers.find(
+          (c) =>
+            (c.id && c.id === editingInvoice.customer_id) ||
+            (clean10Phone.length >= 7 && c.phone && c.phone.replace(/\D/g, "").slice(-10) === clean10Phone)
+        );
+
+        const savedCust = saveCustomer({
+          id: matchedCust?.id || editingInvoice.customer_id || generateUUID(),
+          name: customerName.trim() || matchedCust?.name || "Guest",
+          phone: clean10Phone.length >= 7 ? clean10Phone : (matchedCust?.phone || ""),
+          email: customerEmail.trim() || matchedCust?.email || undefined,
+          gender: customerGender,
+          total_visits: matchedCust?.total_visits || 1,
+          total_spent: matchedCust?.total_spent || totals.grandTotal,
+          last_visit: editingInvoice.created_at,
+          notes: matchedCust?.notes || undefined,
+        });
+        if (savedCust?.id) linkedCustomerId = savedCust.id;
+      }
+
       const updatedInvoice: Invoice = {
         ...editingInvoice,
+        customer_id: linkedCustomerId,
         customer_name: customerName.trim(),
         customer_phone: customerPhone.trim(),
         customer_email: customerEmail.trim(),
@@ -467,29 +492,6 @@ export function EditInvoiceModal() {
       };
 
       const saved = await updateInvoice(updatedInvoice);
-
-      // Also sync and persist customer profile with updated gender
-      const clean10Phone = customerPhone.replace(/\D/g, "").slice(-10);
-      if (clean10Phone.length >= 7 || editingInvoice.customer_id) {
-        const matchedCust = customers.find(
-          (c) =>
-            (c.id && c.id === editingInvoice.customer_id) ||
-            (clean10Phone.length >= 7 && c.phone && c.phone.replace(/\D/g, "").slice(-10) === clean10Phone)
-        );
-
-        saveCustomer({
-          id: matchedCust?.id || editingInvoice.customer_id || generateUUID(),
-          name: customerName.trim() || matchedCust?.name || "Guest",
-          phone: clean10Phone.length >= 7 ? clean10Phone : (matchedCust?.phone || ""),
-          email: customerEmail.trim() || matchedCust?.email || undefined,
-          gender: customerGender,
-          total_visits: matchedCust?.total_visits || 1,
-          total_spent: matchedCust?.total_spent || totals.grandTotal,
-          last_visit: editingInvoice.created_at,
-          notes: matchedCust?.notes || undefined,
-        });
-      }
-
       setEditingInvoice(null);
 
       if (alsoPrint) {

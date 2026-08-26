@@ -655,10 +655,20 @@ export const SupabaseSync = {
       const isValidUUID = (str?: string | null) =>
         Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
 
+      // Resolve existing customer ID in Supabase to avoid primary key vs unique phone conflict
+      const standardPhone = cleanPhone.length === 10 ? cleanPhone : customer.phone;
+      const { data: existingCust } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("phone", standardPhone)
+        .maybeSingle();
+
+      const customerId = existingCust?.id || (isValidUUID(customer.id) ? customer.id : undefined);
+
       const payload = {
-        id: isValidUUID(customer.id) ? customer.id : undefined,
+        id: customerId,
         name: customer.name,
-        phone: cleanPhone.length === 10 ? cleanPhone : customer.phone,
+        phone: standardPhone,
         email: customer.email || null,
         gender: customer.gender || "unspecified",
         birthday: customer.birthday || null,
@@ -671,7 +681,12 @@ export const SupabaseSync = {
         created_at: customer.created_at || new Date().toISOString(),
       };
 
-      const { data, error } = await supabase.from("customers").upsert(payload).select().single();
+      const { data, error } = await supabase
+        .from("customers")
+        .upsert(payload, { onConflict: "phone" })
+        .select()
+        .single();
+
       if (error) console.error("Supabase saveCustomer error:", error);
       return data;
     } catch (err) {

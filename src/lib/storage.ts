@@ -761,12 +761,7 @@ export const Storage = {
             ? existing.name
             : customer.name || existing.name,
         phone: cleanPhone.length === 10 ? cleanPhone : customer.phone || existing.phone || "",
-        gender:
-          customer.gender && customer.gender !== "unspecified"
-            ? customer.gender
-            : existing.gender && existing.gender !== "unspecified"
-            ? existing.gender
-            : "unspecified",
+        gender: customer.gender || existing.gender || "unspecified",
         email: customer.email || existing.email,
         birthday: customer.birthday || existing.birthday,
         anniversary: customer.anniversary || existing.anniversary,

@@ -22,6 +22,7 @@ import { Storage, initStorage, DEFAULT_SETTINGS, DEFAULT_USERS } from "@/lib/sto
 import { SupabaseSync } from "@/lib/supabaseSync";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { calculateItemTotal } from "@/lib/calculations";
+import { normalizePhoneNumber } from "@/lib/customerUtils";
 
 interface AppContextType {
   users: AppUser[];
@@ -577,7 +578,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const saved = Storage.saveCustomer(cust);
     setCustomers(Storage.getCustomers());
     if (isSupabaseConfigured()) {
-      SupabaseSync.saveCustomer(saved);
+      SupabaseSync.saveCustomer(saved).then((remoteCust) => {
+        if (remoteCust) {
+          const fresh = Storage.getCustomers();
+          const p = normalizePhoneNumber(remoteCust.phone);
+          const idx = fresh.findIndex((c) => normalizePhoneNumber(c.phone) === p);
+          if (idx >= 0) {
+            fresh[idx] = { ...fresh[idx], ...remoteCust };
+            Storage.saveCustomers(fresh);
+            setCustomers(fresh);
+          }
+        }
+      });
     }
     return saved;
   };
@@ -614,6 +626,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (cloudData?.invoices) {
         setInvoices(cloudData.invoices);
         Storage.saveInvoices(cloudData.invoices);
+      }
+      if (cloudData?.customers) {
+        setCustomers(cloudData.customers);
+        Storage.saveCustomers(cloudData.customers);
       }
     }
     return updated;
