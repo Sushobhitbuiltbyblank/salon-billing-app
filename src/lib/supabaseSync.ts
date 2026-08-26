@@ -293,14 +293,27 @@ export const SupabaseSync = {
           .eq("phone", standardPhone)
           .maybeSingle();
 
+        // Calculate accurate non-void invoice count and total spent for this customer
+        const { data: phoneInvoices } = await supabase
+          .from("invoices")
+          .select("id, grand_total, status")
+          .eq("customer_phone", standardPhone)
+          .neq("status", "void");
+
+        const previousInvoices = (phoneInvoices || []).filter((inv) => inv.id !== invoice.id);
+        const accurateVisits = previousInvoices.length + 1;
+        const accurateSpent =
+          previousInvoices.reduce((sum, inv) => sum + (Number(inv.grand_total) || 0), 0) +
+          Number(invoice.grand_total || 0);
+
         const customerPayload = {
           id: existingCust?.id || finalCustomerId || undefined,
           name: invoice.customer_name || `Guest (${standardPhone})`,
           phone: standardPhone,
           email: invoice.customer_email || null,
           gender: custGender,
-          total_visits: (Number(existingCust?.total_visits) || 0) + 1,
-          total_spent: (Number(existingCust?.total_spent) || 0) + Number(invoice.grand_total),
+          total_visits: accurateVisits,
+          total_spent: accurateSpent,
           last_visit: invoice.created_at || new Date().toISOString(),
           created_at: invoice.created_at || new Date().toISOString(),
         };

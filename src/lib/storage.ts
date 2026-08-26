@@ -831,10 +831,20 @@ export const Storage = {
         return false;
       });
 
+      const allInvoices = this.getInvoices().filter((inv) => inv.status !== "void");
+      const custInvoices = allInvoices.filter((inv) => {
+        const invPhone = normalizePhoneNumber(inv.customer_phone);
+        if (cleanPhone.length >= 7 && invPhone.length >= 7) return cleanPhone === invPhone;
+        if (invoice.customer_id && inv.customer_id) return invoice.customer_id === inv.customer_id;
+        return false;
+      });
+      const accurateVisits = Math.max(1, custInvoices.length);
+      const accurateSpent = custInvoices.reduce((sum, inv) => sum + (Number(inv.grand_total) || 0), 0);
+
       if (existing) {
-        existing.total_visits = (existing.total_visits || 0) + 1;
-        existing.total_spent = (existing.total_spent || 0) + invoice.grand_total;
-        existing.last_visit = invoice.created_at;
+        existing.total_visits = accurateVisits;
+        existing.total_spent = accurateSpent;
+        existing.last_visit = invoice.created_at || existing.last_visit;
         if ((!existing.phone || existing.phone.length < 10) && cleanPhone.length === 10) {
           existing.phone = cleanPhone;
         }
@@ -855,8 +865,8 @@ export const Storage = {
             invoice.customer_gender && invoice.customer_gender !== "unspecified"
               ? invoice.customer_gender
               : "female",
-          total_visits: 1,
-          total_spent: invoice.grand_total,
+          total_visits: accurateVisits,
+          total_spent: accurateSpent,
           last_visit: invoice.created_at,
         });
       }
