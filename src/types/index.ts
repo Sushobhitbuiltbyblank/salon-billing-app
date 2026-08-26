@@ -104,6 +104,8 @@ export interface PackageServiceItem {
   regular_price?: number;
   duration_mins?: number;
   guest_name?: string; // Optional companion / guest tag (e.g. Ram / Sam)
+  guest_gender?: 'female' | 'male' | 'other' | 'unspecified';
+  guest_phone?: string;
   staff_splits?: StaffSplitAssignment[];
   primary_staff_id?: string;
   secondary_staff_id?: string;
@@ -123,6 +125,8 @@ export interface InvoiceItem {
   
   // Guest / Multi-Person assignment (e.g. Ram, Sam, Partner, Friend)
   guest_name?: string;
+  guest_gender?: 'female' | 'male' | 'other' | 'unspecified';
+  guest_phone?: string;
 
   // Package / Combo details
   package_service_ids?: string[];

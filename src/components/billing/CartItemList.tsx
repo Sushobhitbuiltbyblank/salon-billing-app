@@ -27,6 +27,12 @@ import { formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { calculateItemTotal } from "@/lib/calculations";
 
+export interface KnownGuestProfile {
+  name: string;
+  gender?: "female" | "male" | "other" | "unspecified";
+  phone?: string;
+}
+
 export function CartItemList() {
   const {
     draftItems,
@@ -40,28 +46,40 @@ export function CartItemList() {
   const [activeSplitItem, setActiveSplitItem] = useState<InvoiceItem | null>(null);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
   const [openGuestItemId, setOpenGuestItemId] = useState<string | null>(null);
-  const [newGuestInput, setNewGuestInput] = useState("");
 
-  // Collect unique guest names from current cart items and draft customer
-  const knownGuests = useMemo(() => {
-    const list: string[] = [];
+  // Form states for adding / editing person on a service
+  const [guestFormName, setGuestFormName] = useState("");
+  const [guestFormGender, setGuestFormGender] = useState<"female" | "male" | "other" | "unspecified">("unspecified");
+  const [guestFormPhone, setGuestFormPhone] = useState("");
+
+  // Collect unique guest profiles from draft customer and current cart items
+  const knownGuests: KnownGuestProfile[] = useMemo(() => {
+    const map = new Map<string, KnownGuestProfile>();
     if (
       draftCustomer?.name &&
       draftCustomer.name.trim() &&
       draftCustomer.name.toLowerCase() !== "walk-in guest"
     ) {
-      list.push(draftCustomer.name.trim());
+      map.set(draftCustomer.name.trim().toLowerCase(), {
+        name: draftCustomer.name.trim(),
+        gender: draftCustomer.gender || "unspecified",
+        phone: draftCustomer.phone || "",
+      });
     }
     draftItems.forEach((it) => {
       if (it.guest_name && it.guest_name.trim()) {
-        const name = it.guest_name.trim();
-        if (!list.some((l) => l.toLowerCase() === name.toLowerCase())) {
-          list.push(name);
+        const key = it.guest_name.trim().toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, {
+            name: it.guest_name.trim(),
+            gender: it.guest_gender || "unspecified",
+            phone: it.guest_phone || "",
+          });
         }
       }
     });
-    return list;
-  }, [draftCustomer?.name, draftItems]);
+    return Array.from(map.values());
+  }, [draftCustomer, draftItems]);
 
   // Compute multi-guest summary if items have distinct person tags
   const multiGuestSummary = useMemo(() => {
@@ -81,30 +99,67 @@ export function CartItemList() {
     return result;
   }, [draftItems, draftCustomer?.name]);
 
-  const handleAssignGuest = (itemId: string, guestName?: string) => {
-    updateDraftItem(itemId, { guest_name: guestName ? guestName.trim() : undefined });
-    setOpenGuestItemId(null);
-    setNewGuestInput("");
+  const handleOpenPersonSelector = (item: InvoiceItem) => {
+    if (openGuestItemId === item.id) {
+      setOpenGuestItemId(null);
+    } else {
+      setOpenGuestItemId(item.id);
+      setGuestFormName(item.guest_name || "");
+      setGuestFormGender(item.guest_gender || "unspecified");
+      setGuestFormPhone(item.guest_phone || "");
+    }
   };
 
-  const handleApplyGuestToAll = (guestName: string) => {
-    if (!guestName.trim()) return;
-    draftItems.forEach((it) => {
-      updateDraftItem(it.id, { guest_name: guestName.trim() });
+  const handleSaveGuestProfile = (itemId: string) => {
+    if (!guestFormName.trim()) {
+      updateDraftItem(itemId, {
+        guest_name: undefined,
+        guest_gender: undefined,
+        guest_phone: undefined,
+      });
+    } else {
+      updateDraftItem(itemId, {
+        guest_name: guestFormName.trim(),
+        guest_gender: guestFormGender !== "unspecified" ? guestFormGender : undefined,
+        guest_phone: guestFormPhone.trim() || undefined,
+      });
+    }
+    setOpenGuestItemId(null);
+  };
+
+  const handleQuickSelectGuest = (itemId: string, profile: KnownGuestProfile) => {
+    updateDraftItem(itemId, {
+      guest_name: profile.name,
+      guest_gender: profile.gender !== "unspecified" ? profile.gender : undefined,
+      guest_phone: profile.phone || undefined,
     });
     setOpenGuestItemId(null);
-    setNewGuestInput("");
+  };
+
+  const handleClearPerson = (itemId: string) => {
+    updateDraftItem(itemId, {
+      guest_name: undefined,
+      guest_gender: undefined,
+      guest_phone: undefined,
+    });
+    setOpenGuestItemId(null);
+  };
+
+  const handleApplyGuestToAll = (name: string, gender?: "female" | "male" | "other" | "unspecified", phone?: string) => {
+    if (!name.trim()) return;
+    draftItems.forEach((it) => {
+      updateDraftItem(it.id, {
+        guest_name: name.trim(),
+        guest_gender: gender !== "unspecified" ? gender : undefined,
+        guest_phone: phone?.trim() || undefined,
+      });
+    });
+    setOpenGuestItemId(null);
   };
 
   const handleOpenSplit = (item: InvoiceItem) => {
     setActiveSplitItem(item);
     setIsSplitModalOpen(true);
-  };
-
-  const getStaffName = (staffId?: string) => {
-    if (!staffId) return null;
-    const found = staff.find((s) => s.id === staffId);
-    return found ? found.name : null;
   };
 
   // PACKAGE SERVICE HANDLERS: EDIT SERVICE PRICE
@@ -118,35 +173,39 @@ export function CartItemList() {
 
     let services = targetItem.package_services;
     if (!services || services.length === 0) {
-      // Fallback build if missing
-      services = (targetItem.package_service_ids || [])
-        .map((sId) => catalog.find((c) => c.id === sId))
-        .filter(Boolean)
-        .map((svc) => ({
-          service_id: svc!.id,
-          service_name: svc!.name,
-          price: Math.round(targetItem.unit_price / (targetItem.package_service_ids?.length || 1)),
-          regular_price: svc!.price,
-          duration_mins: svc!.duration_mins || 30,
-          primary_staff_id: targetItem.primary_staff_id,
-        }));
+      const packageCatalogItem = catalog.find((c) => c.id === targetItem.item_id);
+      const serviceIds =
+        targetItem.package_service_ids || packageCatalogItem?.package_service_ids || [];
+      services = serviceIds
+        .map((sId) => {
+          const s = catalog.find((c) => c.id === sId);
+          if (!s) return null;
+          return {
+            service_id: s.id,
+            service_name: s.name,
+            price: Number(s.price) || 0,
+            regular_price: Number(s.price) || 0,
+            duration_mins: s.duration_mins,
+            primary_staff_id: targetItem.primary_staff_id,
+            staff_splits: targetItem.staff_splits,
+          };
+        })
+        .filter(Boolean) as any[];
     }
 
     const updatedServices = services.map((svc) =>
       svc.service_id === serviceId ? { ...svc, price: Math.max(0, newPrice) } : svc
     );
 
-    const newUnitPrice = updatedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
-    const newTotalPrice = calculateItemTotal(newUnitPrice, targetItem.quantity, targetItem.discount);
+    const calculatedNewPackageTotal = updatedServices.reduce((sum, s) => sum + (s.price || 0), 0);
 
     updateDraftItem(itemId, {
       package_services: updatedServices,
-      unit_price: newUnitPrice,
-      total_price: newTotalPrice,
+      unit_price: calculatedNewPackageTotal,
     });
   };
 
-  // PACKAGE SERVICE HANDLERS: EDIT SERVICE STYLIST
+  // PACKAGE SERVICE HANDLERS: ASSIGN INDIVIDUAL SERVICE STYLIST
   const handlePackageServiceStaffChange = (
     itemId: string,
     serviceId: string,
@@ -157,88 +216,105 @@ export function CartItemList() {
 
     let services = targetItem.package_services;
     if (!services || services.length === 0) {
-      services = (targetItem.package_service_ids || [])
-        .map((sId) => catalog.find((c) => c.id === sId))
-        .filter(Boolean)
-        .map((svc) => ({
-          service_id: svc!.id,
-          service_name: svc!.name,
-          price: Math.round(targetItem.unit_price / (targetItem.package_service_ids?.length || 1)),
-          regular_price: svc!.price,
-          duration_mins: svc!.duration_mins || 30,
-          primary_staff_id: undefined,
-        }));
+      const packageCatalogItem = catalog.find((c) => c.id === targetItem.item_id);
+      const serviceIds =
+        targetItem.package_service_ids || packageCatalogItem?.package_service_ids || [];
+      services = serviceIds
+        .map((sId) => {
+          const s = catalog.find((c) => c.id === sId);
+          if (!s) return null;
+          return {
+            service_id: s.id,
+            service_name: s.name,
+            price: Number(s.price) || 0,
+            regular_price: Number(s.price) || 0,
+            duration_mins: s.duration_mins,
+            primary_staff_id: targetItem.primary_staff_id,
+            staff_splits: targetItem.staff_splits,
+          };
+        })
+        .filter(Boolean) as any[];
     }
 
-    const updatedServices = services.map((svc) =>
-      svc.service_id === serviceId ? { ...svc, primary_staff_id: staffId || undefined } : svc
-    );
-
-    const firstAssigned = updatedServices.find((s) => s.primary_staff_id)?.primary_staff_id;
+    const updatedServices = services.map((svc) => {
+      if (svc.service_id === serviceId) {
+        const primary_staff_id = staffId || undefined;
+        const staff_splits = primary_staff_id
+          ? [{ staff_id: primary_staff_id, amount: svc.price, ratio: 100 }]
+          : undefined;
+        return { ...svc, primary_staff_id, staff_splits };
+      }
+      return svc;
+    });
 
     updateDraftItem(itemId, {
       package_services: updatedServices,
-      primary_staff_id: firstAssigned,
     });
   };
 
-  // PACKAGE SERVICE HANDLERS: ASSIGN ALL SERVICES TO 1 STYLIST
+  // QUICK ASSIGN ALL SUB-SERVICES IN A PACKAGE TO ONE STYLIST
   const handleAssignAllPackageServices = (itemId: string, staffId: string) => {
     const targetItem = draftItems.find((i) => i.id === itemId);
     if (!targetItem) return;
 
     let services = targetItem.package_services;
     if (!services || services.length === 0) {
-      services = (targetItem.package_service_ids || [])
-        .map((sId) => catalog.find((c) => c.id === sId))
-        .filter(Boolean)
-        .map((svc) => ({
-          service_id: svc!.id,
-          service_name: svc!.name,
-          price: Math.round(targetItem.unit_price / (targetItem.package_service_ids?.length || 1)),
-          regular_price: svc!.price,
-          duration_mins: svc!.duration_mins || 30,
-          primary_staff_id: staffId || undefined,
-        }));
-    } else {
-      services = services.map((svc) => ({
-        ...svc,
-        primary_staff_id: staffId || undefined,
-      }));
+      const packageCatalogItem = catalog.find((c) => c.id === targetItem.item_id);
+      const serviceIds =
+        targetItem.package_service_ids || packageCatalogItem?.package_service_ids || [];
+      services = serviceIds
+        .map((sId) => {
+          const s = catalog.find((c) => c.id === sId);
+          if (!s) return null;
+          return {
+            service_id: s.id,
+            service_name: s.name,
+            price: Number(s.price) || 0,
+            regular_price: Number(s.price) || 0,
+            duration_mins: s.duration_mins,
+          };
+        })
+        .filter(Boolean) as any[];
     }
 
-    updateDraftItem(itemId, {
-      package_services: services,
+    const updatedServices = services.map((svc) => ({
+      ...svc,
       primary_staff_id: staffId || undefined,
+      staff_splits: staffId ? [{ staff_id: staffId, amount: svc.price, ratio: 100 }] : undefined,
+    }));
+
+    updateDraftItem(itemId, {
+      primary_staff_id: staffId || undefined,
+      package_services: updatedServices,
     });
   };
 
   if (draftItems.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/40 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-950/40 text-purple-400 mb-3">
-          <ShoppingBag className="h-6 w-6" />
+      <div className="flex flex-col items-center justify-center p-8 text-center bg-zinc-950/40 rounded-2xl border border-zinc-800/60">
+        <div className="h-12 w-12 rounded-2xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-3 shadow-inner">
+          <Scissors className="h-6 w-6" />
         </div>
-        <h4 className="text-sm font-bold text-zinc-300">Invoice is currently empty</h4>
-        <p className="text-xs text-zinc-500 mt-1 max-w-xs">
-          Select services or retail products from the catalog to add them to this invoice.
+        <h4 className="text-sm font-semibold text-zinc-300">Cart is Empty</h4>
+        <p className="text-xs text-zinc-500 max-w-xs mt-1">
+          Select services, packages, or retail products from the catalog to start building this invoice.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-2.5">
-      {/* MULTI-PERSON BILL SUMMARY BANNER */}
+    <div className="space-y-3">
+      {/* MULTI-PERSON BILL SUMMARY BANNER (Shown when 2+ guests are tagged) */}
       {multiGuestSummary.length > 1 && (
-        <div className="p-3 rounded-2xl border border-cyan-700/50 bg-gradient-to-r from-cyan-950/40 via-zinc-950/80 to-purple-950/40 backdrop-blur-xl shadow-lg">
-          <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-            <span className="text-[11px] font-bold tracking-wide text-cyan-300 flex items-center gap-1.5">
+        <div className="p-3 rounded-2xl bg-gradient-to-r from-cyan-950/60 via-indigo-950/40 to-purple-950/60 border border-cyan-700/60 shadow-lg shadow-cyan-950/30 space-y-2 animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
               <Users className="h-3.5 w-3.5 text-cyan-400" />
-              Multi-Person Bill ({multiGuestSummary.length} Persons):
+              Multi-Person Bill Summary ({multiGuestSummary.length} Persons)
             </span>
             <span className="text-[10px] text-zinc-400 font-medium">
-              Services itemized per person on bill & WhatsApp
+              Itemized per person on receipt & WhatsApp
             </span>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -277,6 +353,7 @@ export function CartItemList() {
             : !item.primary_staff_id);
 
         const isStylistMissing = isService ? !item.primary_staff_id : isPackageStylistMissing;
+        const isPersonOpen = openGuestItemId === item.id;
 
         return (
           <div
@@ -289,7 +366,7 @@ export function CartItemList() {
                 : "border-zinc-800/90 bg-zinc-950/80 hover:border-purple-500/40 hover:bg-zinc-900/90"
             }`}
           >
-            {/* ROW 1: ITEM NAME, BADGE, GUEST TAG, AND LINE TOTAL */}
+            {/* ROW 1: ITEM NAME, BADGE, PERSON BADGE, AND LINE TOTAL */}
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -312,142 +389,23 @@ export function CartItemList() {
                     </Badge>
                   )}
 
-                  {/* GUEST / PERSON ASSIGNMENT CHIP & POPUP */}
-                  <div className="relative inline-block">
-                    {item.guest_name ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setOpenGuestItemId(openGuestItemId === item.id ? null : item.id)
-                        }
-                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-500/60 hover:border-cyan-400 hover:bg-cyan-900/60 shadow-sm transition-all"
-                        title={`Assigned to: ${item.guest_name} (Click to change/remove)`}
-                      >
-                        <User className="h-2.5 w-2.5 text-cyan-400" />
-                        <span>{item.guest_name}</span>
-                        <ChevronDown className="h-2.5 w-2.5 text-cyan-400/70" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setOpenGuestItemId(openGuestItemId === item.id ? null : item.id)
-                        }
-                        className="inline-flex items-center gap-1 text-[9.5px] font-medium px-1.5 py-0.5 rounded-full bg-zinc-900/90 text-zinc-400 border border-dashed border-zinc-700/80 hover:text-cyan-300 hover:border-cyan-500/60 hover:bg-cyan-950/30 transition-all"
-                        title="Assign specific companion/guest for this service (e.g. Ram, Sam)"
-                      >
-                        <UserPlus className="h-2.5 w-2.5" />
-                        <span>+ Person</span>
-                      </button>
-                    )}
-
-                    {/* GUEST POPUP SELECTOR */}
-                    {openGuestItemId === item.id && (
-                      <div className="absolute left-0 top-full mt-1.5 z-40 w-64 p-3 rounded-2xl border border-cyan-700/70 bg-zinc-950/95 shadow-2xl backdrop-blur-2xl text-left space-y-2.5 animate-in fade-in zoom-in-95 duration-150">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1">
-                            <User className="h-3 w-3 text-cyan-400" />
-                            Assign to Person / Guest:
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setOpenGuestItemId(null)}
-                            className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-
-                        {/* QUICK SUGGESTION CHIPS */}
-                        {knownGuests.length > 0 && (
-                          <div className="space-y-1">
-                            <span className="text-[9px] text-zinc-400 block font-medium">
-                              Select Person:
-                            </span>
-                            <div className="flex flex-wrap gap-1">
-                              {knownGuests.map((gName) => {
-                                const isSelected =
-                                  (item.guest_name || "").toLowerCase() === gName.toLowerCase();
-                                return (
-                                  <button
-                                    key={gName}
-                                    type="button"
-                                    onClick={() => handleAssignGuest(item.id, gName)}
-                                    className={`text-[10px] px-2 py-0.5 rounded-lg border font-semibold transition-all ${
-                                      isSelected
-                                        ? "bg-cyan-500/30 border-cyan-400 text-cyan-200 font-bold"
-                                        : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-                                    }`}
-                                  >
-                                    👤 {gName}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* INLINE NEW PERSON INPUT */}
-                        <div className="space-y-1 pt-1 border-t border-zinc-900">
-                          <span className="text-[9px] text-zinc-400 block font-medium">
-                            New Companion / Guest Name:
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="text"
-                              value={newGuestInput}
-                              onChange={(e) => setNewGuestInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" && newGuestInput.trim()) {
-                                  e.preventDefault();
-                                  handleAssignGuest(item.id, newGuestInput.trim());
-                                }
-                              }}
-                              placeholder="e.g. Sam, Ram, Friend"
-                              className="flex-1 h-7 px-2 text-xs bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-600 focus:outline-none focus:border-cyan-500 font-medium"
-                              autoFocus
-                            />
-                            <button
-                              type="button"
-                              disabled={!newGuestInput.trim()}
-                              onClick={() => handleAssignGuest(item.id, newGuestInput.trim())}
-                              className="h-7 px-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-[10px] font-bold text-white transition-all flex items-center gap-1"
-                            >
-                              <Check className="h-3 w-3" />
-                              Set
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* FOOTER ACTIONS: REMOVE OR APPLY TO ALL */}
-                        <div className="pt-1.5 border-t border-zinc-900 flex items-center justify-between gap-1 text-[9.5px]">
-                          {item.guest_name ? (
-                            <button
-                              type="button"
-                              onClick={() => handleAssignGuest(item.id, undefined)}
-                              className="text-rose-400 hover:text-rose-300 transition-colors flex items-center gap-1 font-medium"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              Clear Person Tag
-                            </button>
-                          ) : (
-                            <span className="text-zinc-500">Unassigned</span>
-                          )}
-
-                          {item.guest_name && (
-                            <button
-                              type="button"
-                              onClick={() => handleApplyGuestToAll(item.guest_name!)}
-                              className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors"
-                              title="Assign this person to all items in cart"
-                            >
-                              Apply to all
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  {/* ACTIVE PERSON TAG BADGE */}
+                  {item.guest_name && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-950/90 text-cyan-300 border border-cyan-500/60 shadow-sm">
+                      <User className="h-2.5 w-2.5 text-cyan-400" />
+                      <span>{item.guest_name}</span>
+                      {item.guest_gender && item.guest_gender !== "unspecified" && (
+                        <span className="text-[9px] text-cyan-400/80 uppercase">
+                          ({item.guest_gender === "female" ? "F" : item.guest_gender === "male" ? "M" : "O"})
+                        </span>
+                      )}
+                      {item.guest_phone && (
+                        <span className="text-[9px] text-zinc-400 font-mono">
+                          • {item.guest_phone.slice(-4)}
+                        </span>
+                      )}
+                    </span>
+                  )}
 
                   {isStylistMissing && (
                     <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
@@ -463,11 +421,6 @@ export function CartItemList() {
                 <div className="text-sm font-extrabold text-emerald-400 font-mono">
                   {formatCurrency(item.total_price, settings.currency_symbol)}
                 </div>
-                {item.discount > 0 && (
-                  <span className="text-[10px] text-rose-400 line-through font-mono block">
-                    {formatCurrency(item.unit_price * item.quantity, settings.currency_symbol)}
-                  </span>
-                )}
               </div>
             </div>
 
@@ -486,7 +439,7 @@ export function CartItemList() {
                         removeDraftItem(item.id);
                       }
                     }}
-                    className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                    className="h-6 w-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                   >
                     <Minus className="h-3 w-3" />
                   </button>
@@ -496,7 +449,7 @@ export function CartItemList() {
                   <button
                     type="button"
                     onClick={() => updateDraftItem(item.id, { quantity: item.quantity + 1 })}
-                    className="h-6 w-6 flex items-center justify-center rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                    className="h-6 w-6 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                   >
                     <Plus className="h-3 w-3" />
                   </button>
@@ -712,101 +665,313 @@ export function CartItemList() {
                 </div>
               </div>
             ) : (
-              /* REGULAR SERVICE / PRODUCT STYLIST & SPLIT ROW */
-              <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-zinc-900/60 flex-wrap">
-                {/* STYLIST SELECTOR & SPLIT BUTTON */}
-                <div className="flex items-center gap-1.5 flex-1 min-w-[220px] flex-wrap">
-                  {item.staff_splits && item.staff_splits.length > 1 ? (
-                    /* MULTI-STAFF SPLIT DISPLAY */
-                    <button
-                      type="button"
-                      onClick={() => handleOpenSplit(item)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold bg-purple-950/70 border-purple-600/80 text-purple-200 shadow-sm hover:bg-purple-900/70 transition-all cursor-pointer"
-                      title="Click to modify staff split amounts"
-                    >
-                      <Users className="h-3.5 w-3.5 text-purple-400" />
-                      <span className="font-bold">
-                        Split ({item.staff_splits.length} Staff):
-                      </span>
-                      <span className="font-mono text-zinc-300">
-                        {item.staff_splits
-                          .map((s) => {
-                            const st = staff.find((staffMember) => staffMember.id === s.staff_id);
-                            return `${st?.name || "Staff"} (₹${s.amount})`;
-                          })
-                          .join(" + ")}
-                      </span>
-                    </button>
-                  ) : (
-                    /* SINGLE STYLIST DROPDOWN */
-                    <>
-                      <User
-                        className={`h-3.5 w-3.5 shrink-0 ${
-                          isStylistMissing ? "text-amber-400" : "text-purple-400"
-                        }`}
-                      />
-                      <select
-                        value={item.primary_staff_id || ""}
-                        onChange={(e) => {
-                          const newStaffId = e.target.value || undefined;
-                          const currentTotal = item.total_price || (item.unit_price * item.quantity);
-                          updateDraftItem(item.id, {
-                            primary_staff_id: newStaffId,
-                            staff_splits: newStaffId
-                              ? [{ staff_id: newStaffId, amount: currentTotal, ratio: 100 }]
-                              : undefined,
-                          });
-                        }}
-                        className={`h-7 px-2 text-xs rounded-lg font-medium flex-1 max-w-[200px] transition-all focus:outline-none focus:ring-1 ${
-                          isStylistMissing
-                            ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
-                            : "bg-zinc-900 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
-                        }`}
-                      >
-                        <option value="">
-                          {isService ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
-                        </option>
-                        {staff.map((s) => (
-                          <option
-                            key={s.id}
-                            value={s.id}
-                            disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
-                          >
-                            {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
-                          </option>
-                        ))}
-                      </select>
+              /* ===================================================================
+                 ROW 3: DEDICATED STYLIST SELECTOR & PERSON / COMPANION SELECTOR
+                 =================================================================== */
+              <div className="mt-3 pt-3 border-t border-zinc-900/80 space-y-2.5">
+                {/* 2-COLUMN GRID (STACKS RESPONSIVELY ON MOBILE) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* COL 1: STYLIST SELECTOR */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1">
+                      <User className={`h-3 w-3 ${isStylistMissing ? "text-amber-400" : "text-purple-400"}`} />
+                      {isService ? "Assigned Stylist *" : "Staff (Optional)"}
+                    </span>
 
-                      {/* SPLIT COMMISSION TRIGGER */}
+                    {item.staff_splits && item.staff_splits.length > 1 ? (
+                      /* MULTI-STAFF SPLIT DISPLAY */
                       <button
                         type="button"
                         onClick={() => handleOpenSplit(item)}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-medium transition-all bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-purple-300 hover:text-white cursor-pointer"
-                        title="Split commission between multiple staff by amount"
+                        className="w-full flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold bg-purple-950/70 border-purple-600/80 text-purple-200 shadow-sm hover:bg-purple-900/70 transition-all cursor-pointer text-left"
+                        title="Click to modify staff split amounts"
                       >
-                        <Users className="h-3 w-3" />
-                        <span>Split Staff</span>
+                        <span className="flex items-center gap-1 truncate">
+                          <Users className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                          <span className="font-bold">Split ({item.staff_splits.length}):</span>
+                          <span className="font-mono text-zinc-300 truncate">
+                            {item.staff_splits
+                              .map((s) => {
+                                const st = staff.find((staffMember) => staffMember.id === s.staff_id);
+                                return `${st?.name || "Staff"} (₹${s.amount})`;
+                              })
+                              .join(" + ")}
+                          </span>
+                        </span>
                       </button>
-                    </>
-                  )}
+                    ) : (
+                      /* SINGLE STYLIST DROPDOWN WITH SPLIT BUTTON */
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={item.primary_staff_id || ""}
+                          onChange={(e) => {
+                            const newStaffId = e.target.value || undefined;
+                            const currentTotal = item.total_price || (item.unit_price * item.quantity);
+                            updateDraftItem(item.id, {
+                              primary_staff_id: newStaffId,
+                              staff_splits: newStaffId
+                                ? [{ staff_id: newStaffId, amount: currentTotal, ratio: 100 }]
+                                : undefined,
+                            });
+                          }}
+                          className={`h-8 px-2.5 text-xs rounded-xl font-medium flex-1 transition-all focus:outline-none focus:ring-1 ${
+                            isStylistMissing
+                              ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
+                              : "bg-zinc-900 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
+                          }`}
+                        >
+                          <option value="">
+                            {isService ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
+                          </option>
+                          {staff.map((s) => (
+                            <option
+                              key={s.id}
+                              value={s.id}
+                              disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
+                            >
+                              {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* SPLIT BUTTON */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSplit(item)}
+                          className="h-8 px-2.5 rounded-xl border text-[11px] font-semibold transition-all bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-purple-300 hover:text-white shrink-0 flex items-center gap-1"
+                          title="Split commission between multiple staff"
+                        >
+                          <Users className="h-3 w-3" />
+                          <span>Split</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* COL 2: PERSON / COMPANION SELECTOR (MATCHES STYLIST ROW) */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-cyan-300 flex items-center gap-1">
+                        <UserPlus className="h-3 w-3 text-cyan-400" />
+                        Person / Guest
+                      </span>
+                      {item.guest_name && (
+                        <button
+                          type="button"
+                          onClick={() => handleClearPerson(item.id)}
+                          className="text-[9.5px] text-rose-400 hover:text-rose-300 font-medium transition-colors"
+                        >
+                          Clear Person
+                        </button>
+                      )}
+                    </div>
+
+                    {/* PERSON BUTTON TRIGGER */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPersonSelector(item)}
+                      className={`w-full h-8 px-2.5 text-xs rounded-xl font-semibold flex items-center justify-between transition-all border ${
+                        item.guest_name
+                          ? "bg-cyan-950/70 border-cyan-500/80 text-cyan-200 shadow-sm"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-cyan-500/50 hover:text-cyan-300"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 truncate">
+                        <User className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                        <span className="truncate">
+                          {item.guest_name ? (
+                            <>
+                              <strong className="text-white">{item.guest_name}</strong>
+                              {item.guest_gender && item.guest_gender !== "unspecified" && (
+                                <span className="text-[10px] text-cyan-300/80 ml-1 font-normal uppercase">
+                                  ({item.guest_gender === "female" ? "F" : item.guest_gender === "male" ? "M" : "O"})
+                                </span>
+                              )}
+                              {item.guest_phone && (
+                                <span className="text-[10px] text-zinc-400 ml-1 font-mono font-normal">
+                                  • {item.guest_phone}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            "+ Select / Add Person"
+                          )}
+                        </span>
+                      </span>
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 text-cyan-400 shrink-0 transition-transform ${
+                          isPersonOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
 
-                {/* REMOVE BUTTON */}
-                <button
-                  type="button"
-                  onClick={() => removeDraftItem(item.id)}
-                  className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors"
-                  title="Remove item"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {/* EXPANDED PERSON FORM (MOBILE & DESKTOP ACCESSIBLE) */}
+                {isPersonOpen && (
+                  <div className="p-3.5 rounded-2xl border border-cyan-700/70 bg-zinc-950/95 shadow-2xl space-y-3 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex items-center justify-between pb-1 border-b border-zinc-900">
+                      <span className="text-[11px] font-bold text-cyan-300 flex items-center gap-1.5">
+                        <User className="h-3.5 w-3.5 text-cyan-400" />
+                        Assign Service to Person:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setOpenGuestItemId(null)}
+                        className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {/* QUICK SELECT CHIPS */}
+                    {knownGuests.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-semibold text-zinc-400 block">
+                          Quick Select from Bill:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {knownGuests.map((g) => {
+                            const isSelected =
+                              (item.guest_name || "").toLowerCase() === g.name.toLowerCase();
+                            return (
+                              <button
+                                key={g.name}
+                                type="button"
+                                onClick={() => handleQuickSelectGuest(item.id, g)}
+                                className={`text-xs px-2.5 py-1 rounded-xl border font-bold transition-all flex items-center gap-1.5 ${
+                                  isSelected
+                                    ? "bg-cyan-500/30 border-cyan-400 text-cyan-200 shadow-sm"
+                                    : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                                }`}
+                              >
+                                <span>👤 {g.name}</span>
+                                {g.phone && (
+                                  <span className="text-[10px] text-zinc-400 font-mono font-normal">
+                                    ({g.phone.slice(-4)})
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* DETAILED FORM: NAME + OPTIONAL GENDER + OPTIONAL NUMBER */}
+                    <div className="pt-2 border-t border-zinc-900 space-y-2.5">
+                      <span className="text-[10px] font-semibold text-zinc-400 block">
+                        Or Add / Edit Companion Details:
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {/* NAME */}
+                        <div>
+                          <label className="text-[9.5px] font-bold text-zinc-400 block mb-1">
+                            Person Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={guestFormName}
+                            onChange={(e) => setGuestFormName(e.target.value)}
+                            placeholder="e.g. Sam, Ram, Friend"
+                            className="w-full h-8 px-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-600 focus:outline-none focus:border-cyan-500 font-medium"
+                          />
+                        </div>
+
+                        {/* GENDER (OPTIONAL) */}
+                        <div>
+                          <label className="text-[9.5px] font-bold text-zinc-400 block mb-1">
+                            Gender (Optional)
+                          </label>
+                          <select
+                            value={guestFormGender}
+                            onChange={(e) => setGuestFormGender(e.target.value as any)}
+                            className="w-full h-8 px-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-xl text-zinc-200 focus:outline-none focus:border-cyan-500 font-medium"
+                          >
+                            <option value="unspecified">-- Optional --</option>
+                            <option value="female">Female 👩</option>
+                            <option value="male">Male 👨</option>
+                            <option value="other">Other 🧑</option>
+                          </select>
+                        </div>
+
+                        {/* MOBILE NUMBER (OPTIONAL) */}
+                        <div>
+                          <label className="text-[9.5px] font-bold text-zinc-400 block mb-1">
+                            Mobile No. (Optional)
+                          </label>
+                          <input
+                            type="tel"
+                            maxLength={10}
+                            value={guestFormPhone}
+                            onChange={(e) =>
+                              setGuestFormPhone(e.target.value.replace(/\D/g, "").slice(0, 10))
+                            }
+                            placeholder="10-digit mobile"
+                            className="w-full h-8 px-2.5 text-xs bg-zinc-900 border border-zinc-700 rounded-xl text-white font-mono placeholder:text-zinc-600 focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* ACTION BUTTONS */}
+                      <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={!guestFormName.trim()}
+                            onClick={() => handleSaveGuestProfile(item.id)}
+                            className="h-7 px-3.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-xs font-bold text-white transition-all flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            Set Person
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setOpenGuestItemId(null)}
+                            className="h-7 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs font-medium text-zinc-400 hover:text-white transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+
+                        {guestFormName.trim() && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleApplyGuestToAll(
+                                guestFormName.trim(),
+                                guestFormGender,
+                                guestFormPhone
+                              )
+                            }
+                            className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold transition-colors"
+                          >
+                            ⚡ Apply &quot;{guestFormName.trim()}&quot; to all services
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* BOTTOM ACTION BAR: REMOVE SERVICE BUTTON */}
+                <div className="flex items-center justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => removeDraftItem(item.id)}
+                    className="px-2 py-1 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors flex items-center gap-1 text-[11px]"
+                    title="Remove item from cart"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Remove Item</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
         );
       })}
 
-      {/* SPLIT MODAL INSTANCE */}
       <SplitStaffModal
         item={activeSplitItem}
         open={isSplitModalOpen}
@@ -820,4 +985,3 @@ export function CartItemList() {
     </div>
   );
 }
-
