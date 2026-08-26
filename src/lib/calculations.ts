@@ -72,18 +72,34 @@ export interface LineItemCommission {
 
 export function calculateItemStaffCommissions(
   item: InvoiceItem,
-  staffList: Staff[]
+  staffList: Staff[],
+  invoiceRealizationFactor: number = 1
 ): LineItemCommission {
   const isProduct = item.item_type === "product";
-  const itemTotal = item.total_price || (item.unit_price * item.quantity);
+  const itemNetTotal =
+    item.total_price !== undefined
+      ? item.total_price
+      : calculateItemTotal(item.unit_price, item.quantity, item.discount);
+
+  // Realized net total for this line item after bill-level discounts
+  const realizedItemTotal = itemNetTotal * invoiceRealizationFactor;
   const splits: IndividualStaffCommission[] = [];
 
   if (item.staff_splits && item.staff_splits.length > 0) {
-    // Process N-Staff Split Assignments with explicit ₹ amounts
+    // Process N-Staff Split Assignments
+    const totalSplitAmount = item.staff_splits.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+
     item.staff_splits.forEach((split) => {
       const staffMember = staffList.find((s) => s.id === split.staff_id);
-      const allocatedAmount = Number(split.amount) || 0;
-      const ratio = itemTotal > 0 ? (allocatedAmount / itemTotal) * 100 : 0;
+      const rawAmount = Number(split.amount) || 0;
+      const ratio =
+        split.ratio !== undefined && !isNaN(split.ratio)
+          ? split.ratio
+          : totalSplitAmount > 0
+          ? (rawAmount / totalSplitAmount) * 100
+          : 100;
+
+      const salesVolume = (realizedItemTotal * ratio) / 100;
 
       let commission = 0;
       if (staffMember) {
@@ -95,16 +111,19 @@ export function calculateItemStaffCommissions(
           : (staffMember.commission_type ?? "percent");
 
         if (type === "fixed") {
-          commission = itemTotal > 0 ? (rate * item.quantity * allocatedAmount) / itemTotal : rate * item.quantity;
+          commission =
+            itemNetTotal > 0
+              ? (rate * item.quantity * (salesVolume / itemNetTotal))
+              : (item.unit_price > 0 ? 0 : rate * item.quantity);
         } else {
-          commission = (allocatedAmount * rate) / 100;
+          commission = (salesVolume * rate) / 100;
         }
       }
 
       splits.push({
         staffId: split.staff_id,
         staffName: staffMember?.name || split.staff_name,
-        salesVolume: allocatedAmount,
+        salesVolume,
         commission,
         ratio,
       });
@@ -117,7 +136,7 @@ export function calculateItemStaffCommissions(
     const secondaryRatio = item.secondary_split_ratio ?? 0;
 
     if (primaryStaff) {
-      const primarySalesVolume = (itemTotal * primaryRatio) / 100;
+      const primarySalesVolume = (realizedItemTotal * primaryRatio) / 100;
       const rate = isProduct
         ? (primaryStaff.product_commission_rate ?? primaryStaff.commission_rate)
         : primaryStaff.commission_rate;
@@ -125,10 +144,15 @@ export function calculateItemStaffCommissions(
         ? (primaryStaff.product_commission_type ?? primaryStaff.commission_type ?? "percent")
         : (primaryStaff.commission_type ?? "percent");
 
-      const primaryCommission =
-        type === "fixed"
-          ? (rate * item.quantity * primaryRatio) / 100
-          : (primarySalesVolume * rate) / 100;
+      let primaryCommission = 0;
+      if (type === "fixed") {
+        primaryCommission =
+          itemNetTotal > 0
+            ? (rate * item.quantity * primaryRatio * (primarySalesVolume / itemNetTotal)) / 100
+            : (item.unit_price > 0 ? 0 : (rate * item.quantity * primaryRatio) / 100);
+      } else {
+        primaryCommission = (primarySalesVolume * rate) / 100;
+      }
 
       splits.push({
         staffId: primaryStaff.id,
@@ -140,7 +164,7 @@ export function calculateItemStaffCommissions(
     }
 
     if (secondaryStaff) {
-      const secondarySalesVolume = (itemTotal * secondaryRatio) / 100;
+      const secondarySalesVolume = (realizedItemTotal * secondaryRatio) / 100;
       const rate = isProduct
         ? (secondaryStaff.product_commission_rate ?? secondaryStaff.commission_rate)
         : secondaryStaff.commission_rate;
@@ -148,10 +172,15 @@ export function calculateItemStaffCommissions(
         ? (secondaryStaff.product_commission_type ?? secondaryStaff.commission_type ?? "percent")
         : (secondaryStaff.commission_type ?? "percent");
 
-      const secondaryCommission =
-        type === "fixed"
-          ? (rate * item.quantity * secondaryRatio) / 100
-          : (secondarySalesVolume * rate) / 100;
+      let secondaryCommission = 0;
+      if (type === "fixed") {
+        secondaryCommission =
+          itemNetTotal > 0
+            ? (rate * item.quantity * secondaryRatio * (secondarySalesVolume / itemNetTotal)) / 100
+            : (item.unit_price > 0 ? 0 : (rate * item.quantity * secondaryRatio) / 100);
+      } else {
+        secondaryCommission = (secondarySalesVolume * rate) / 100;
+      }
 
       splits.push({
         staffId: secondaryStaff.id,
@@ -204,8 +233,36 @@ export function calculateStaffPerformance(
   staffList.forEach((s) => staffInvoices.set(s.id, new Set()));
 
   invoices
-    .filter((inv) => inv.status !== "void")
+    .filter((inv) => inv.status !== "void" && (inv.status as string) !== "cancelled")
     .forEach((invoice) => {
+      // Calculate invoice-level subtotal and realization factor after overall bill discount
+      const invoiceSubtotal =
+        invoice.subtotal !== undefined && invoice.subtotal > 0
+          ? invoice.subtotal
+          : invoice.items.reduce(
+              (sum, it) =>
+                sum +
+                (it.total_price !== undefined
+                  ? it.total_price
+                  : calculateItemTotal(it.unit_price, it.quantity, it.discount)),
+              0
+            );
+
+      const discountAmount =
+        invoice.discount_amount !== undefined
+          ? invoice.discount_amount
+          : invoice.discount_type === "percentage"
+          ? (invoiceSubtotal * (invoice.discount_value || 0)) / 100
+          : Math.min(invoiceSubtotal, invoice.discount_value || 0);
+
+      // Realization factor across all items on this bill (e.g. 200/250 = 0.8)
+      const invoiceRealizationFactor =
+        invoiceSubtotal > 0
+          ? Math.max(0, (invoiceSubtotal - discountAmount) / invoiceSubtotal)
+          : invoiceSubtotal === 0
+          ? 0
+          : 1;
+
       invoice.items.forEach((item) => {
         // PACKAGE COMBO: CREDIT INDIVIDUAL SERVICES TO RESPECTIVE ASSIGNED STYLISTS
         if (
@@ -213,23 +270,56 @@ export function calculateStaffPerformance(
           item.package_services &&
           item.package_services.length > 0
         ) {
+          const itemNetTotal =
+            (item.total_price !== undefined
+              ? item.total_price
+              : calculateItemTotal(item.unit_price, item.quantity, item.discount)) *
+            invoiceRealizationFactor;
+
+          const totalServicesCatalogPrice = item.package_services.reduce(
+            (s, ps) => s + (Number(ps.price) || 0),
+            0
+          );
+
           item.package_services.forEach((pkgSvc) => {
+            const svcWeight =
+              totalServicesCatalogPrice > 0
+                ? (Number(pkgSvc.price) || 0) / totalServicesCatalogPrice
+                : 1 / item.package_services!.length;
+
+            const svcNetSales = itemNetTotal * svcWeight;
+
             if (pkgSvc.staff_splits && pkgSvc.staff_splits.length > 0) {
+              const totalSplitAmount = pkgSvc.staff_splits.reduce(
+                (s, x) => s + (Number(x.amount) || 0),
+                0
+              );
+
               pkgSvc.staff_splits.forEach((split) => {
                 if (summaryMap.has(split.staff_id)) {
                   const staffMember = staffList.find((s) => s.id === split.staff_id);
                   const entry = summaryMap.get(split.staff_id)!;
-                  const svcSales = Number(split.amount) || 0;
-                  const totalPkgSvcPrice = (Number(pkgSvc.price) || 0) * (item.quantity || 1);
+                  const rawAmount = Number(split.amount) || 0;
+                  const ratio =
+                    split.ratio !== undefined && !isNaN(split.ratio)
+                      ? split.ratio
+                      : totalSplitAmount > 0
+                      ? (rawAmount / totalSplitAmount) * 100
+                      : 100;
+
+                  const svcSales = (svcNetSales * ratio) / 100;
                   let svcCommission = 0;
                   if (staffMember) {
                     const rate = staffMember.commission_rate;
                     const type = staffMember.commission_type ?? "percent";
                     svcCommission =
                       type === "fixed"
-                        ? totalPkgSvcPrice > 0 ? (rate * item.quantity * svcSales) / totalPkgSvcPrice : rate * item.quantity
+                        ? svcNetSales > 0
+                          ? (rate * item.quantity * ratio * (svcSales / (itemNetTotal * svcWeight || 1))) / 100
+                          : 0
                         : (svcSales * rate) / 100;
                   }
+
                   entry.services_count += item.quantity;
                   entry.total_sales_generated += svcSales;
                   entry.total_commission_earned += svcCommission;
@@ -239,14 +329,14 @@ export function calculateStaffPerformance(
             } else if (pkgSvc.primary_staff_id && summaryMap.has(pkgSvc.primary_staff_id)) {
               const staffMember = staffList.find((s) => s.id === pkgSvc.primary_staff_id);
               const entry = summaryMap.get(pkgSvc.primary_staff_id)!;
-              const svcSales = (Number(pkgSvc.price) || 0) * (item.quantity || 1);
+              const svcSales = svcNetSales;
 
               let svcCommission = 0;
               if (staffMember) {
                 const rate = staffMember.commission_rate;
                 const type = staffMember.commission_type ?? "percent";
                 svcCommission =
-                  type === "fixed" ? rate * item.quantity : (svcSales * rate) / 100;
+                  type === "fixed" ? (svcSales > 0 ? rate * item.quantity : 0) : (svcSales * rate) / 100;
               }
 
               entry.services_count += item.quantity;
@@ -259,7 +349,7 @@ export function calculateStaffPerformance(
         }
 
         // REGULAR SERVICE / PRODUCT COMMISSIONS (N-STAFF SUPPORT)
-        const comm = calculateItemStaffCommissions(item, staffList);
+        const comm = calculateItemStaffCommissions(item, staffList, invoiceRealizationFactor);
         comm.splits.forEach((split) => {
           if (split.staffId && summaryMap.has(split.staffId)) {
             const entry = summaryMap.get(split.staffId)!;

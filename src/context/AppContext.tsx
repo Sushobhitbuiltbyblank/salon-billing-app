@@ -787,6 +787,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             merged.quantity,
             merged.discount
           );
+
+          // If staff_splits exist and were not explicitly provided in this update, keep their split amounts in sync with net total_price
+          if (merged.staff_splits && merged.staff_splits.length > 0 && !updates.staff_splits) {
+            const totalSplit = merged.staff_splits.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+            merged.staff_splits = merged.staff_splits.map((sp) => {
+              const ratio =
+                sp.ratio !== undefined && !isNaN(sp.ratio)
+                  ? sp.ratio
+                  : totalSplit > 0
+                  ? (Number(sp.amount) / totalSplit) * 100
+                  : 100;
+              return {
+                ...sp,
+                ratio,
+                amount: Math.round((merged.total_price * ratio) / 100),
+              };
+            });
+          }
+
           return merged;
         }
         return item;

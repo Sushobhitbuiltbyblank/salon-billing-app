@@ -32,14 +32,19 @@ export function SplitStaffModal({
 
   const itemTotal = useMemo(() => {
     if (!item) return 0;
-    return item.total_price || (item.unit_price * item.quantity);
+    return item.total_price !== undefined
+      ? item.total_price
+      : Math.max(0, item.unit_price * item.quantity - (item.discount || 0));
   }, [item]);
 
   const isProduct = item?.item_type === "product";
 
   useEffect(() => {
     if (open && item) {
-      const currentItemTotal = item.total_price || (item.unit_price * item.quantity);
+      const currentItemTotal =
+        item.total_price !== undefined
+          ? item.total_price
+          : Math.max(0, item.unit_price * item.quantity - (item.discount || 0));
 
       if (item.staff_splits && item.staff_splits.length > 0) {
         setSplitRows(
@@ -196,10 +201,13 @@ export function SplitStaffModal({
     }
 
     // Prepare staff_splits array
-    const staffSplits: StaffSplitAssignment[] = splitRows.map((r) => {
+    const staffSplits: StaffSplitAssignment[] = splitRows.map((r, idx) => {
       const stylist = staff.find((s) => s.id === r.staff_id);
       const amt = Number(r.amount) || 0;
-      const ratio = itemTotal > 0 ? Math.round((amt / itemTotal) * 100) : 0;
+      const ratio =
+        itemTotal > 0
+          ? Math.round((amt / itemTotal) * 100)
+          : Math.round(100 / splitRows.length);
       return {
         staff_id: r.staff_id,
         staff_name: stylist?.name,
@@ -211,8 +219,14 @@ export function SplitStaffModal({
     const primaryRow = splitRows[0];
     const secondaryRow = splitRows[1];
 
-    const primaryRatio = itemTotal > 0 ? Math.round(((Number(primaryRow?.amount) || 0) / itemTotal) * 100) : 100;
-    const secondaryRatio = itemTotal > 0 && secondaryRow ? Math.round(((Number(secondaryRow?.amount) || 0) / itemTotal) * 100) : 0;
+    const primaryRatio =
+      itemTotal > 0
+        ? Math.round(((Number(primaryRow?.amount) || 0) / itemTotal) * 100)
+        : (secondaryRow ? 50 : 100);
+    const secondaryRatio =
+      itemTotal > 0 && secondaryRow
+        ? Math.round(((Number(secondaryRow?.amount) || 0) / itemTotal) * 100)
+        : (secondaryRow ? 50 : 0);
 
     onSave({
       staff_splits: staffSplits,

@@ -211,12 +211,85 @@ export function AdminAnalyticsDashboard() {
     });
 
     filteredInvoices.forEach((inv) => {
+      const invSubtotal =
+        inv.subtotal !== undefined && inv.subtotal > 0
+          ? inv.subtotal
+          : (inv.items || []).reduce((sum, it) => sum + (it.total_price || 0), 0);
+
+      const discountAmt =
+        inv.discount_amount !== undefined
+          ? inv.discount_amount
+          : inv.discount_type === "percentage"
+          ? (invSubtotal * (inv.discount_value || 0)) / 100
+          : Math.min(invSubtotal, inv.discount_value || 0);
+
+      const invoiceRealizationFactor =
+        invSubtotal > 0
+          ? Math.max(0, (invSubtotal - discountAmt) / invSubtotal)
+          : invSubtotal === 0
+          ? 0
+          : 1;
+
       inv.items?.forEach((it) => {
+        // PACKAGE COMBO: CREDIT INDIVIDUAL SERVICES PROPORTIONALLY
+        if (it.item_type === "package" && it.package_services && it.package_services.length > 0) {
+          const itemNetTotal = (it.total_price || 0) * invoiceRealizationFactor;
+          const totalServicesCatalogPrice = it.package_services.reduce(
+            (s, ps) => s + (Number(ps.price) || 0),
+            0
+          );
+
+          it.package_services.forEach((pkgSvc) => {
+            const svcWeight =
+              totalServicesCatalogPrice > 0
+                ? (Number(pkgSvc.price) || 0) / totalServicesCatalogPrice
+                : 1 / it.package_services!.length;
+            const svcNetSales = itemNetTotal * svcWeight;
+
+            if (pkgSvc.staff_splits && pkgSvc.staff_splits.length > 0) {
+              const totalSplitAmount = pkgSvc.staff_splits.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+              pkgSvc.staff_splits.forEach((split) => {
+                if (split.staff_id && staffMap.has(split.staff_id)) {
+                  const entry = staffMap.get(split.staff_id)!;
+                  const rawAmount = Number(split.amount) || 0;
+                  const ratio =
+                    split.ratio !== undefined && !isNaN(split.ratio)
+                      ? split.ratio
+                      : totalSplitAmount > 0
+                      ? (rawAmount / totalSplitAmount) * 100
+                      : 100;
+                  const itemRev = (svcNetSales * ratio) / 100;
+                  entry.serviceRev += itemRev;
+                  entry.totalRev += itemRev;
+                  entry.count += 1;
+                }
+              });
+            } else if (pkgSvc.primary_staff_id && staffMap.has(pkgSvc.primary_staff_id)) {
+              const entry = staffMap.get(pkgSvc.primary_staff_id)!;
+              const itemRev = svcNetSales;
+              entry.serviceRev += itemRev;
+              entry.totalRev += itemRev;
+              entry.count += 1;
+            }
+          });
+          return;
+        }
+
+        // REGULAR ITEMS (SERVICE OR PRODUCT)
+        const realizedItemTotal = (it.total_price || 0) * invoiceRealizationFactor;
         if (it.staff_splits && it.staff_splits.length > 0) {
+          const totalSplitAmount = it.staff_splits.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
           it.staff_splits.forEach((split) => {
             if (split.staff_id && staffMap.has(split.staff_id)) {
               const entry = staffMap.get(split.staff_id)!;
-              const itemRev = Number(split.amount) || 0;
+              const rawAmount = Number(split.amount) || 0;
+              const ratio =
+                split.ratio !== undefined && !isNaN(split.ratio)
+                  ? split.ratio
+                  : totalSplitAmount > 0
+                  ? (rawAmount / totalSplitAmount) * 100
+                  : 100;
+              const itemRev = (realizedItemTotal * ratio) / 100;
 
               if (it.item_type === "product") {
                 entry.productRev += itemRev;
@@ -231,7 +304,7 @@ export function AdminAnalyticsDashboard() {
           if (it.primary_staff_id && staffMap.has(it.primary_staff_id)) {
             const entry = staffMap.get(it.primary_staff_id)!;
             const ratio = (it.primary_split_ratio || 100) / 100;
-            const itemRev = (it.total_price || 0) * ratio;
+            const itemRev = realizedItemTotal * ratio;
 
             if (it.item_type === "product") {
               entry.productRev += itemRev;
@@ -245,7 +318,7 @@ export function AdminAnalyticsDashboard() {
           if (it.secondary_staff_id && staffMap.has(it.secondary_staff_id)) {
             const entry = staffMap.get(it.secondary_staff_id)!;
             const ratio = (it.secondary_split_ratio || 0) / 100;
-            const itemRev = (it.total_price || 0) * ratio;
+            const itemRev = realizedItemTotal * ratio;
 
             if (it.item_type === "product") {
               entry.productRev += itemRev;

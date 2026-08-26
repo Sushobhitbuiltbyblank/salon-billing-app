@@ -1194,7 +1194,10 @@ export function CartItemList() {
                         value={item.primary_staff_id || ""}
                         onChange={(e) => {
                           const newStaffId = e.target.value || undefined;
-                          const currentTotal = item.total_price || (item.unit_price * item.quantity);
+                          const currentTotal =
+                            item.total_price !== undefined
+                              ? item.total_price
+                              : Math.max(0, item.unit_price * item.quantity - (item.discount || 0));
                           updateDraftItem(item.id, {
                             primary_staff_id: newStaffId,
                             staff_splits: newStaffId
