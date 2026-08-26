@@ -109,7 +109,11 @@ export function EditInvoiceModal() {
           (c.id && c.id === editingInvoice.customer_id) ||
           (cleanPhone.length >= 7 && c.phone && c.phone.replace(/\D/g, "").slice(-10) === cleanPhone)
       );
-      setCustomerGender((matchedCust?.gender as any) || "unspecified");
+      setCustomerGender(
+        matchedCust?.gender && matchedCust.gender !== "unspecified"
+          ? (matchedCust.gender as any)
+          : "female"
+      );
 
       const loadedItems = (editingInvoice.items || []).map((it) => {
         let pkgServices = it.package_services;
@@ -613,7 +617,7 @@ export function EditInvoiceModal() {
                   { id: "male", label: "Male", emoji: "👨" },
                   { id: "other", label: "Other", emoji: "⚧" },
                 ].map((g) => {
-                  const isSelected = customerGender === g.id;
+                  const isSelected = (customerGender || "female") === g.id;
                   return (
                     <button
                       key={g.id}

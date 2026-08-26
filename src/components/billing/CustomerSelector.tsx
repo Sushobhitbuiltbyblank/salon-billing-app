@@ -86,7 +86,7 @@ export function CustomerSelector() {
     } else {
       setDraftCustomer({
         ...draftCustomer,
-        gender: draftCustomer.gender || (field === "gender" ? (cleanValue as any) : "female"),
+        gender: field === "gender" ? (cleanValue as any) : (draftCustomer.gender || "female"),
         [field]: cleanValue,
       });
     }
@@ -315,21 +315,28 @@ export function CustomerSelector() {
                     key={g.id}
                     type="button"
                     onClick={() => {
-                      handleFieldChange("gender", g.id);
-                      if (
-                        draftCustomer?.name?.trim() &&
-                        draftCustomer?.phone &&
-                        draftCustomer.phone.replace(/\D/g, "").length >= 7
-                      ) {
-                        const cleanP = normalizePhoneNumber(draftCustomer.phone);
+                      const newGender = g.id as any;
+                      const nextCustomer: Partial<Customer> = {
+                        ...(draftCustomer || {}),
+                        id: draftCustomer?.id || generateUUID(),
+                        name: draftCustomer?.name || "",
+                        phone: draftCustomer?.phone || "",
+                        gender: newGender,
+                        created_at: draftCustomer?.created_at || new Date().toISOString(),
+                      };
+                      setDraftCustomer(nextCustomer);
+                      setIsAddingDetails(true);
+
+                      const cleanP = normalizePhoneNumber(draftCustomer?.phone);
+                      if (draftCustomer?.name?.trim() && cleanP && cleanP.length >= 7) {
                         const matched = allAvailableCustomers.find(
                           (c) => normalizePhoneNumber(c.phone) === cleanP
                         );
                         saveCustomer({
-                          id: matched?.id || draftCustomer.id || generateUUID(),
+                          id: matched?.id || draftCustomer?.id || generateUUID(),
                           name: draftCustomer.name.trim(),
                           phone: cleanP,
-                          gender: g.id as any,
+                          gender: newGender,
                           email: draftCustomer.email || matched?.email,
                           birthday: draftCustomer.birthday || matched?.birthday,
                           notes: draftCustomer.notes || matched?.notes,
