@@ -20,6 +20,8 @@ import {
   normalizePhoneNumber,
   normalizeCustomerName,
   isAnonymousCustomerName,
+  isCustomerInTimeframe,
+  CustomerTimeframeFilter,
 } from "@/lib/customerUtils";
 import {
   detectCustomerReminders,
@@ -78,6 +80,7 @@ export function CustomerDirectory() {
   } = useApp();
 
   const [activeCrmTab, setActiveCrmTab] = useState<"all" | "reminders" | "vip">("all");
+  const [timeframeFilter, setTimeframeFilter] = useState<CustomerTimeframeFilter>("all");
   const [reminderSubFilter, setReminderSubFilter] = useState<ReminderFilterType>("all_due");
   const [searchQuery, setSearchQuery] = useState("");
   const [genderFilter, setGenderFilter] = useState<string>("all");
@@ -124,6 +127,9 @@ export function CustomerDirectory() {
   // COMPUTED STATS ACROSS UNIFIED CUSTOMERS
   const stats = useMemo(() => {
     const totalClients = unifiedCustomers.length;
+    const todayClients = unifiedCustomers.filter((c) => isCustomerInTimeframe(c, "today")).length;
+    const weekClients = unifiedCustomers.filter((c) => isCustomerInTimeframe(c, "week")).length;
+    const monthClients = unifiedCustomers.filter((c) => isCustomerInTimeframe(c, "month")).length;
     const vipClients = unifiedCustomers.filter((c) => (c.total_visits || 0) >= 5).length;
     const totalRevenue = unifiedCustomers.reduce((acc, c) => acc + (c.total_spent || 0), 0);
     const totalVisits = unifiedCustomers.reduce((acc, c) => acc + (c.total_visits || 0), 0);
@@ -131,6 +137,9 @@ export function CustomerDirectory() {
 
     return {
       totalClients,
+      todayClients,
+      weekClients,
+      monthClients,
       vipClients,
       totalRevenue,
       avgVisits,
@@ -184,8 +193,9 @@ export function CustomerDirectory() {
 
         const matchGender = genderFilter === "all" || c.gender === genderFilter;
         const matchVip = activeCrmTab !== "vip" || (c.total_visits || 0) >= 5;
+        const matchTimeframe = isCustomerInTimeframe(c, timeframeFilter);
 
-        return matchSearch && matchGender && matchVip;
+        return matchSearch && matchGender && matchVip && matchTimeframe;
       })
       .sort((a, b) => {
         if (sortBy === "spent") return (b.total_spent || 0) - (a.total_spent || 0);
@@ -216,6 +226,7 @@ export function CustomerDirectory() {
       });
   }, [
     activeCrmTab,
+    timeframeFilter,
     reminderSubFilter,
     reminderData,
     unifiedCustomers,
@@ -451,10 +462,15 @@ export function CustomerDirectory() {
         </div>
       ) : (
         /* STANDARD CRM KPI CARDS */
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Card
+            onClick={() => setTimeframeFilter("all")}
+            className={`p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden cursor-pointer transition-all hover:border-purple-500/50 ${
+              timeframeFilter === "all" ? "ring-1 ring-purple-500 border-purple-500" : ""
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Total Clients</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Total Clients</span>
               <div className="h-7 w-7 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
                 <Users className="h-4 w-4" />
               </div>
@@ -465,35 +481,63 @@ export function CustomerDirectory() {
             </div>
           </Card>
 
-          <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
+          <Card
+            onClick={() => setTimeframeFilter("today")}
+            className={`p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden cursor-pointer transition-all hover:border-emerald-500/50 ${
+              timeframeFilter === "today" ? "ring-1 ring-emerald-500 border-emerald-500" : ""
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-amber-400">VIP Repeat Clients</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Today's Clients</span>
+              <div className="h-7 w-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <Calendar className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-emerald-300">{stats.todayClients}</span>
+              <span className="text-[11px] text-zinc-500 font-medium">active today</span>
+            </div>
+          </Card>
+
+          <Card
+            onClick={() => setTimeframeFilter("week")}
+            className={`p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden cursor-pointer transition-all hover:border-cyan-500/50 ${
+              timeframeFilter === "week" ? "ring-1 ring-cyan-500 border-cyan-500" : ""
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">This Week</span>
+              <div className="h-7 w-7 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                <Clock className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-cyan-300">{stats.weekClients}</span>
+              <span className="text-[11px] text-zinc-500 font-medium">last 7 days</span>
+            </div>
+          </Card>
+
+          <Card
+            onClick={() => setTimeframeFilter("month")}
+            className={`p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden cursor-pointer transition-all hover:border-amber-500/50 ${
+              timeframeFilter === "month" ? "ring-1 ring-amber-500 border-amber-500" : ""
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">This Month</span>
               <div className="h-7 w-7 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
                 <Sparkles className="h-4 w-4" />
               </div>
             </div>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-amber-300">{stats.vipClients}</span>
-              <span className="text-[11px] text-zinc-500 font-medium">5+ visits</span>
-            </div>
-          </Card>
-
-          <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Avg Visits / Client</span>
-              <div className="h-7 w-7 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
-                <TrendingUp className="h-4 w-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-indigo-300">{stats.avgVisits}</span>
-              <span className="text-[11px] text-zinc-500 font-medium">visits</span>
+              <span className="text-2xl sm:text-3xl font-black text-amber-300">{stats.monthClients}</span>
+              <span className="text-[11px] text-zinc-500 font-medium">this month</span>
             </div>
           </Card>
         </div>
       )}
 
-      {/* SEARCH, GENDER FILTER & SORT TOOLBAR */}
+      {/* SEARCH, TIMEFRAME, GENDER FILTER & SORT TOOLBAR */}
       <div className="p-3 bg-zinc-900/90 border border-zinc-800/90 rounded-2xl flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 shadow-lg">
         {/* SEARCH INPUT */}
         <div className="relative flex-1">
@@ -518,6 +562,31 @@ export function CustomerDirectory() {
 
         {/* FILTERS AND SORT */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* TIMEFRAME FILTER CHIPS (IN ALL/VIP TABS) */}
+          {activeCrmTab !== "reminders" && (
+            <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 overflow-x-auto">
+              {[
+                { id: "all", label: `All Time (${stats.totalClients})` },
+                { id: "today", label: `📅 Today (${stats.todayClients})` },
+                { id: "week", label: `🗓️ Week (${stats.weekClients})` },
+                { id: "month", label: `🗓️ Month (${stats.monthClients})` },
+              ].map((tf) => (
+                <button
+                  key={tf.id}
+                  type="button"
+                  onClick={() => setTimeframeFilter(tf.id as CustomerTimeframeFilter)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    timeframeFilter === tf.id
+                      ? "bg-purple-600 text-white shadow-sm font-black"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {tf.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* REMINDER SUB-FILTER CHIPS (ONLY IN REMINDERS TAB) */}
           {activeCrmTab === "reminders" && (
             <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 overflow-x-auto">
@@ -555,7 +624,7 @@ export function CustomerDirectory() {
               <button
                 key={g.id}
                 onClick={() => setGenderFilter(g.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   genderFilter === g.id
                     ? "bg-purple-600 text-white shadow-sm font-black"
                     : "text-zinc-400 hover:text-white"
@@ -568,7 +637,7 @@ export function CustomerDirectory() {
 
           {/* SORT DROPDOWN (ONLY IN ALL/VIP TAB) */}
           {activeCrmTab !== "reminders" && (
-            <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 h-10">
+            <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 h-9">
               <ArrowUpDown className="h-3.5 w-3.5 text-zinc-500" />
               <select
                 value={sortBy}

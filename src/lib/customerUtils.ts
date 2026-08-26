@@ -253,3 +253,44 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
       };
     });
 }
+
+export type CustomerTimeframeFilter = "all" | "today" | "week" | "month";
+
+/**
+ * Evaluates whether a customer visited/registered within a given timeframe (today, this week, this month).
+ */
+export function isCustomerInTimeframe(
+  customer: Customer,
+  timeframe: CustomerTimeframeFilter,
+  now: Date = new Date()
+): boolean {
+  if (timeframe === "all") return true;
+  const visitStr = customer.last_visit || customer.created_at;
+  if (!visitStr) return false;
+
+  const visitDate = new Date(visitStr);
+  if (isNaN(visitDate.getTime())) return false;
+
+  if (timeframe === "today") {
+    return (
+      visitDate.getFullYear() === now.getFullYear() &&
+      visitDate.getMonth() === now.getMonth() &&
+      visitDate.getDate() === now.getDate()
+    );
+  }
+
+  if (timeframe === "week") {
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    return visitDate >= sevenDaysAgo;
+  }
+
+  if (timeframe === "month") {
+    return (
+      visitDate.getFullYear() === now.getFullYear() &&
+      visitDate.getMonth() === now.getMonth()
+    );
+  }
+
+  return true;
+}

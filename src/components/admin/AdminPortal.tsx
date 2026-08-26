@@ -23,7 +23,7 @@ import { CustomerModal } from "@/components/customer/CustomerModal";
 import { AdminAnalyticsDashboard } from "@/components/admin/AdminAnalyticsDashboard";
 import { AdminInvoiceManagement } from "@/components/admin/AdminInvoiceManagement";
 import { formatCurrency, formatDate, generateUUID } from "@/lib/utils";
-import { unifyCustomerList } from "@/lib/customerUtils";
+import { unifyCustomerList, isCustomerInTimeframe, CustomerTimeframeFilter } from "@/lib/customerUtils";
 import {
   Shield,
   Users,
@@ -64,6 +64,10 @@ import {
   UserX,
   AlertCircle,
   FileText,
+  ArrowUpDown,
+  TrendingUp,
+  Printer,
+  History,
 } from "lucide-react";
 
 export function AdminPortal() {
@@ -94,6 +98,7 @@ export function AdminPortal() {
     invoices,
     setDraftCustomer,
     setActiveTab,
+    setPrintInvoice,
     settings,
     updateSettings,
   } = useApp();
@@ -246,10 +251,35 @@ export function AdminPortal() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
   const [customerGenderFilter, setCustomerGenderFilter] = useState<string>("all");
+  const [customerTimeframeFilter, setCustomerTimeframeFilter] = useState<CustomerTimeframeFilter>("all");
+  const [customerSortBy, setCustomerSortBy] = useState<"spent" | "visits" | "name" | "recent">("recent");
+  const [selectedHistoryCustomer, setSelectedHistoryCustomer] = useState<Customer | null>(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
   const unifiedCustomers = useMemo(() => {
     return unifyCustomerList(customers, invoices);
   }, [customers, invoices]);
+
+  const customerStats = useMemo(() => {
+    const totalClients = unifiedCustomers.length;
+    const todayClients = unifiedCustomers.filter((c) => isCustomerInTimeframe(c, "today")).length;
+    const weekClients = unifiedCustomers.filter((c) => isCustomerInTimeframe(c, "week")).length;
+    const monthClients = unifiedCustomers.filter((c) => isCustomerInTimeframe(c, "month")).length;
+    const vipClients = unifiedCustomers.filter((c) => (c.total_visits || 0) >= 5).length;
+    const totalRevenue = unifiedCustomers.reduce((acc, c) => acc + (c.total_spent || 0), 0);
+    const totalVisits = unifiedCustomers.reduce((acc, c) => acc + (c.total_visits || 0), 0);
+    const avgVisits = totalClients > 0 ? (totalVisits / totalClients).toFixed(1) : "0";
+
+    return {
+      totalClients,
+      todayClients,
+      weekClients,
+      monthClients,
+      vipClients,
+      totalRevenue,
+      avgVisits,
+    };
+  }, [unifiedCustomers]);
 
   const [visiblePins, setVisiblePins] = useState<Record<string, boolean>>({});
 
@@ -852,67 +882,197 @@ export function AdminPortal() {
             </Button>
           </div>
 
-          {/* SEARCH & GENDER FILTERS */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-zinc-950/60 p-2.5 rounded-2xl border border-zinc-800">
-            <div className="relative w-full sm:w-80">
+          {/* CRM KPI OVERVIEW CARDS */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Card
+              onClick={() => setCustomerTimeframeFilter("all")}
+              className={`p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden cursor-pointer transition-all hover:border-purple-500/50 ${
+                customerTimeframeFilter === "all" ? "ring-1 ring-purple-500 border-purple-500" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Total Clients</span>
+                <div className="h-7 w-7 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                  <Users className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl sm:text-3xl font-black text-white">{customerStats.totalClients}</span>
+                <span className="text-[11px] text-zinc-500 font-medium">all sources</span>
+              </div>
+            </Card>
+
+            <Card
+              onClick={() => setCustomerTimeframeFilter("today")}
+              className={`p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden cursor-pointer transition-all hover:border-emerald-500/50 ${
+                customerTimeframeFilter === "today" ? "ring-1 ring-emerald-500 border-emerald-500" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Today's Clients</span>
+                <div className="h-7 w-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <Calendar className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl sm:text-3xl font-black text-emerald-300">{customerStats.todayClients}</span>
+                <span className="text-[11px] text-zinc-500 font-medium">active today</span>
+              </div>
+            </Card>
+
+            <Card
+              onClick={() => setCustomerTimeframeFilter("week")}
+              className={`p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden cursor-pointer transition-all hover:border-cyan-500/50 ${
+                customerTimeframeFilter === "week" ? "ring-1 ring-cyan-500 border-cyan-500" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">This Week</span>
+                <div className="h-7 w-7 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                  <Clock className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl sm:text-3xl font-black text-cyan-300">{customerStats.weekClients}</span>
+                <span className="text-[11px] text-zinc-500 font-medium">last 7 days</span>
+              </div>
+            </Card>
+
+            <Card
+              onClick={() => setCustomerTimeframeFilter("month")}
+              className={`p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden cursor-pointer transition-all hover:border-amber-500/50 ${
+                customerTimeframeFilter === "month" ? "ring-1 ring-amber-500 border-amber-500" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">This Month</span>
+                <div className="h-7 w-7 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl sm:text-3xl font-black text-amber-300">{customerStats.monthClients}</span>
+                <span className="text-[11px] text-zinc-500 font-medium">this month</span>
+              </div>
+            </Card>
+          </div>
+
+          {/* SEARCH, TIMEFRAME, GENDER & SORT TOOLBAR */}
+          <div className="p-3 bg-zinc-900/90 border border-zinc-800/90 rounded-2xl flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 shadow-lg">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
               <input
                 type="text"
                 placeholder="Search by name, mobile, email, notes..."
                 value={customerSearchQuery}
                 onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                className="w-full h-9 pl-9 pr-3 text-xs bg-zinc-900 border border-zinc-800 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                className="w-full h-9 pl-9 pr-8 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
               />
               {customerSearchQuery && (
                 <button
                   type="button"
                   onClick={() => setCustomerSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white p-1"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto">
-              {[
-                { id: "all", label: "All Genders" },
-                { id: "female", label: "👩 Female" },
-                { id: "male", label: "👨 Male" },
-                { id: "other", label: "⚧ Other" },
-              ].map((g) => (
-                <button
-                  key={g.id}
-                  onClick={() => setCustomerGenderFilter(g.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                    customerGenderFilter === g.id
-                      ? "bg-purple-600 text-white font-bold"
-                      : "text-zinc-400 hover:text-white hover:bg-zinc-900"
-                  }`}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* TIMEFRAME FILTER CHIPS */}
+              <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 overflow-x-auto">
+                {[
+                  { id: "all", label: `All Time (${customerStats.totalClients})` },
+                  { id: "today", label: `📅 Today (${customerStats.todayClients})` },
+                  { id: "week", label: `🗓️ Week (${customerStats.weekClients})` },
+                  { id: "month", label: `🗓️ Month (${customerStats.monthClients})` },
+                ].map((tf) => (
+                  <button
+                    key={tf.id}
+                    type="button"
+                    onClick={() => setCustomerTimeframeFilter(tf.id as CustomerTimeframeFilter)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                      customerTimeframeFilter === tf.id
+                        ? "bg-purple-600 text-white shadow-sm font-black"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    {tf.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* GENDER TABS */}
+              <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800">
+                {[
+                  { id: "all", label: "All" },
+                  { id: "female", label: "👩 Female" },
+                  { id: "male", label: "👨 Male" },
+                  { id: "other", label: "⚧ Other" },
+                ].map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => setCustomerGenderFilter(g.id)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      customerGenderFilter === g.id
+                        ? "bg-purple-600 text-white shadow-sm font-black"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* SORT DROPDOWN */}
+              <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 h-9">
+                <ArrowUpDown className="h-3.5 w-3.5 text-zinc-500" />
+                <select
+                  value={customerSortBy}
+                  onChange={(e) => setCustomerSortBy(e.target.value as any)}
+                  className="bg-transparent text-xs text-zinc-200 font-bold focus:outline-none cursor-pointer"
                 >
-                  {g.label}
-                </button>
-              ))}
+                  <option value="recent">Recently Active</option>
+                  <option value="spent">Highest Spenders</option>
+                  <option value="visits">Most Frequent Visits</option>
+                  <option value="name">Name (A-Z)</option>
+                </select>
+              </div>
             </div>
           </div>
 
           {/* CUSTOMERS LIST / TABLE */}
           {(() => {
-            const filteredCustomers = unifiedCustomers.filter((c) => {
-              const q = customerSearchQuery.toLowerCase().trim();
-              const matchSearch =
-                !q ||
-                c.name.toLowerCase().includes(q) ||
-                c.phone.includes(q) ||
-                (c.email && c.email.toLowerCase().includes(q)) ||
-                (c.notes && c.notes.toLowerCase().includes(q));
+            const filteredCustomers = unifiedCustomers
+              .filter((c) => {
+                const q = customerSearchQuery.toLowerCase().trim();
+                const matchSearch =
+                  !q ||
+                  c.name.toLowerCase().includes(q) ||
+                  c.phone.includes(q) ||
+                  (c.email && c.email.toLowerCase().includes(q)) ||
+                  (c.notes && c.notes.toLowerCase().includes(q));
 
-              const matchGender =
-                customerGenderFilter === "all" ||
-                c.gender === customerGenderFilter;
+                const matchGender =
+                  customerGenderFilter === "all" ||
+                  c.gender === customerGenderFilter;
 
-              return matchSearch && matchGender;
-            });
+                const matchTimeframe = isCustomerInTimeframe(c, customerTimeframeFilter);
+
+                return matchSearch && matchGender && matchTimeframe;
+              })
+              .sort((a, b) => {
+                if (customerSortBy === "spent") return (b.total_spent || 0) - (a.total_spent || 0);
+                if (customerSortBy === "visits") return (b.total_visits || 0) - (a.total_visits || 0);
+                if (customerSortBy === "name") return a.name.localeCompare(b.name);
+                if (customerSortBy === "recent") {
+                  const dateA = a.last_visit ? new Date(a.last_visit).getTime() : 0;
+                  const dateB = b.last_visit ? new Date(b.last_visit).getTime() : 0;
+                  return dateB - dateA;
+                }
+                return 0;
+              });
 
             if (filteredCustomers.length === 0) {
               return (
@@ -922,7 +1082,7 @@ export function AdminPortal() {
                   <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto">
                     {customerSearchQuery
                       ? `No clients matched "${customerSearchQuery}".`
-                      : "You haven't added any clients yet."}
+                      : "No customers match the selected filter."}
                   </p>
                   <Button
                     variant="outline"
@@ -943,7 +1103,7 @@ export function AdminPortal() {
             return (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 {filteredCustomers.map((cust) => {
-                  const isVIP = cust.total_visits > 5;
+                  const isVIP = cust.total_visits >= 5;
                   const genderEmoji =
                     cust.gender === "female" ? "👩" : cust.gender === "male" ? "👨" : cust.gender === "other" ? "⚧" : "👤";
 
@@ -998,8 +1158,14 @@ export function AdminPortal() {
                         </div>
 
                         {/* EMAIL / BIRTHDAY / NOTES PREVIEWS */}
-                        {(cust.email || cust.birthday || cust.notes) && (
+                        {(cust.email || cust.birthday || cust.notes || cust.last_visit) && (
                           <div className="space-y-1 text-[11px] text-zinc-400 pt-1 border-t border-zinc-900">
+                            {cust.last_visit && (
+                              <div className="flex items-center gap-1.5 text-zinc-400">
+                                <Clock className="h-3 w-3 text-zinc-500 shrink-0" />
+                                <span>Last Visit: {formatDate(cust.last_visit)}</span>
+                              </div>
+                            )}
                             {cust.email && (
                               <div className="flex items-center gap-1.5 truncate">
                                 <Mail className="h-3 w-3 text-zinc-500 shrink-0" />
@@ -1037,6 +1203,18 @@ export function AdminPortal() {
                         </button>
 
                         <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedHistoryCustomer(cust);
+                              setIsHistoryModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+                            title="View past billing invoices & history"
+                          >
+                            <History className="h-3.5 w-3.5" />
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => {
@@ -2972,6 +3150,147 @@ export function AdminPortal() {
           setEditingCustomer(null);
         }}
       />
+
+      {/* CUSTOMER INVOICE HISTORY DIALOG (ADMIN) */}
+      {selectedHistoryCustomer && (
+        <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen} maxWidth="2xl">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <div className="h-10 w-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center font-bold">
+                <Receipt className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base flex items-center gap-2">
+                  <span>{selectedHistoryCustomer.name}</span>
+                  <Badge variant="purple" className="text-[10px] font-mono">
+                    {(() => {
+                      const custPhone = (selectedHistoryCustomer.phone || "").replace(/\D/g, "").slice(-10);
+                      const custInvs = invoices.filter((inv) => {
+                        const p = (inv.customer_phone || "").replace(/\D/g, "").slice(-10);
+                        if (custPhone.length >= 7 && p.length >= 7 && custPhone === p) return true;
+                        if (selectedHistoryCustomer.id && inv.customer_id === selectedHistoryCustomer.id) return true;
+                        return false;
+                      });
+                      return `${custInvs.length} Invoices`;
+                    })()}
+                  </Badge>
+                </DialogTitle>
+                <DialogDescription className="text-xs text-zinc-400">
+                  {selectedHistoryCustomer.phone || "No phone"} • Total Lifetime Spend:{" "}
+                  <span className="text-emerald-400 font-bold font-mono">
+                    {formatCurrency(selectedHistoryCustomer.total_spent || 0, settings.currency_symbol)}
+                  </span>
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 py-2">
+            {(() => {
+              const custPhone = (selectedHistoryCustomer.phone || "").replace(/\D/g, "").slice(-10);
+              const custInvoices = invoices
+                .filter((inv) => {
+                  const p = (inv.customer_phone || "").replace(/\D/g, "").slice(-10);
+                  if (custPhone.length >= 7 && p.length >= 7 && custPhone === p) return true;
+                  if (selectedHistoryCustomer.id && inv.customer_id === selectedHistoryCustomer.id) return true;
+                  return false;
+                })
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+              if (custInvoices.length === 0) {
+                return (
+                  <div className="p-8 text-center text-zinc-500 text-xs">
+                    No past invoices recorded for this customer yet.
+                  </div>
+                );
+              }
+
+              return custInvoices.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="p-3.5 rounded-2xl bg-zinc-950/90 border border-zinc-800 space-y-2 hover:border-zinc-700 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-purple-300">
+                        #{inv.invoice_number}
+                      </span>
+                      <span className="text-[11px] text-zinc-500">•</span>
+                      <span className="text-xs text-zinc-400">{formatDate(inv.created_at)}</span>
+                      <Badge
+                        variant={inv.status === "paid" ? "success" : inv.status === "void" ? "destructive" : "warning"}
+                        className="text-[9px] uppercase font-bold"
+                      >
+                        {inv.status}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-emerald-400 text-sm">
+                        {formatCurrency(inv.grand_total, settings.currency_symbol)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsHistoryModalOpen(false);
+                          setPrintInvoice(inv);
+                        }}
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 cursor-pointer"
+                        title="View / Print Receipt"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* LINE ITEMS */}
+                  <div className="text-[11px] text-zinc-400 bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60 space-y-1.5">
+                    <div className="font-semibold text-zinc-300">Items / Services ({inv.items?.length || 0}):</div>
+                    <div className="space-y-1.5">
+                      {inv.items?.map((it, idx) => {
+                        const primaryStaffName = staff.find((s) => s.id === it.primary_staff_id)?.name;
+                        return (
+                          <div
+                            key={idx}
+                            className="p-1.5 rounded-lg bg-zinc-950 border border-zinc-800/80 text-zinc-300 text-xs flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-zinc-200">
+                                {it.item_name} (x{it.quantity})
+                              </span>
+                              {primaryStaffName && (
+                                <span className="text-[10px] text-purple-400">
+                                  (Stylist: {primaryStaffName})
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-mono font-bold text-emerald-400">
+                              {formatCurrency(it.total_price, settings.currency_symbol)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => {
+                setIsHistoryModalOpen(false);
+                setSelectedHistoryCustomer(null);
+              }}
+            >
+              Close History
+            </Button>
+          </DialogFooter>
+        </Dialog>
+      )}
     </div>
   );
 }
