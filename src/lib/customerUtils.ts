@@ -76,8 +76,8 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
         matched.name = cust.name;
       }
 
-      // Preserve specific gender over 'unspecified'
-      if ((!matched.gender || matched.gender === "unspecified") && cust.gender && cust.gender !== "unspecified") {
+      // Preserve and update specific gender
+      if (cust.gender && cust.gender !== "unspecified") {
         matched.gender = cust.gender;
       }
 

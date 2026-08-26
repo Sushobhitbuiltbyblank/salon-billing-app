@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { calculateInvoiceTotals } from "@/lib/calculations";
 import { formatCurrency, generateInvoiceNumber, generateUUID } from "@/lib/utils";
+import { normalizePhoneNumber } from "@/lib/customerUtils";
 import { QRCodeSVG } from "qrcode.react";
 import confetti from "canvas-confetti";
 
@@ -42,6 +43,8 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
     createInvoice,
     setPrintInvoice,
     settings,
+    customers,
+    saveCustomer,
   } = useApp();
 
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("upi");
@@ -129,6 +132,32 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
     }
 
     const invoiceNumber = generateInvoiceNumber(settings.invoice_prefix);
+
+    // Save customer profile with updated gender
+    if (hasNamedCustomer || (draftCustomer?.phone && draftCustomer.phone.replace(/\D/g, "").length >= 7)) {
+      const cleanPhone = normalizePhoneNumber(draftCustomer?.phone);
+      const matchedCust = customers.find(
+        (c) =>
+          (draftCustomer?.id && c.id === draftCustomer.id) ||
+          (cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone)
+      );
+
+      saveCustomer({
+        id: matchedCust?.id || draftCustomer?.id || generateUUID(),
+        name: draftCustomer?.name?.trim() || matchedCust?.name || "Walk-in Guest",
+        phone: cleanPhone.length >= 7 ? cleanPhone : (draftCustomer?.phone || matchedCust?.phone || ""),
+        email: draftCustomer?.email || matchedCust?.email || undefined,
+        gender:
+          draftCustomer?.gender && draftCustomer.gender !== "unspecified"
+            ? draftCustomer.gender
+            : (matchedCust?.gender as any) || "female",
+        birthday: draftCustomer?.birthday || matchedCust?.birthday || undefined,
+        notes: draftCustomer?.notes || matchedCust?.notes || undefined,
+        total_visits: (matchedCust?.total_visits || 0) + 1,
+        total_spent: (matchedCust?.total_spent || 0) + totals.grandTotal,
+        last_visit: new Date().toISOString(),
+      });
+    }
 
     const newInvoice: Invoice = {
       id: generateUUID(),
@@ -238,10 +267,33 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
                   key={g.id}
                   type="button"
                   onClick={() => {
-                    if (!draftCustomer) {
-                      setDraftCustomer({ gender: g.id as any });
-                    } else {
-                      setDraftCustomer({ ...draftCustomer, gender: g.id as any });
+                    const newGender = g.id as any;
+                    const updatedDraft = draftCustomer ? { ...draftCustomer, gender: newGender } : { gender: newGender };
+                    setDraftCustomer(updatedDraft);
+
+                    if (
+                      draftCustomer?.name?.trim() &&
+                      draftCustomer?.phone &&
+                      draftCustomer.phone.replace(/\D/g, "").length >= 7
+                    ) {
+                      const cleanP = normalizePhoneNumber(draftCustomer.phone);
+                      const matched = customers.find(
+                        (c) =>
+                          (draftCustomer?.id && c.id === draftCustomer.id) ||
+                          (cleanP.length >= 7 && normalizePhoneNumber(c.phone) === cleanP)
+                      );
+                      saveCustomer({
+                        id: matched?.id || draftCustomer.id || generateUUID(),
+                        name: draftCustomer.name.trim(),
+                        phone: cleanP,
+                        gender: newGender,
+                        email: draftCustomer.email || matched?.email,
+                        birthday: draftCustomer.birthday || matched?.birthday,
+                        notes: draftCustomer.notes || matched?.notes,
+                        total_visits: matched?.total_visits || 1,
+                        total_spent: matched?.total_spent || totals.grandTotal,
+                        created_at: matched?.created_at || draftCustomer.created_at || new Date().toISOString(),
+                      });
                     }
                   }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${

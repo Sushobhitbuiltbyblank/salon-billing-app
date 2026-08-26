@@ -79,9 +79,16 @@ export function CustomerSelector() {
 
     setIsAddingDetails(true);
     if (!draftCustomer) {
-      setDraftCustomer({ [field]: cleanValue });
+      setDraftCustomer({
+        gender: field === "gender" ? (cleanValue as any) : "female",
+        [field]: cleanValue,
+      });
     } else {
-      setDraftCustomer({ ...draftCustomer, [field]: cleanValue });
+      setDraftCustomer({
+        ...draftCustomer,
+        gender: draftCustomer.gender || (field === "gender" ? (cleanValue as any) : "female"),
+        [field]: cleanValue,
+      });
     }
   };
 
@@ -307,10 +314,34 @@ export function CustomerSelector() {
                   <button
                     key={g.id}
                     type="button"
-                    onClick={() => handleFieldChange("gender", g.id)}
-                    className={`h-full flex items-center justify-center gap-1 rounded-lg text-xs sm:text-[11px] font-bold transition-all ${
+                    onClick={() => {
+                      handleFieldChange("gender", g.id);
+                      if (
+                        draftCustomer?.name?.trim() &&
+                        draftCustomer?.phone &&
+                        draftCustomer.phone.replace(/\D/g, "").length >= 7
+                      ) {
+                        const cleanP = normalizePhoneNumber(draftCustomer.phone);
+                        const matched = allAvailableCustomers.find(
+                          (c) => normalizePhoneNumber(c.phone) === cleanP
+                        );
+                        saveCustomer({
+                          id: matched?.id || draftCustomer.id || generateUUID(),
+                          name: draftCustomer.name.trim(),
+                          phone: cleanP,
+                          gender: g.id as any,
+                          email: draftCustomer.email || matched?.email,
+                          birthday: draftCustomer.birthday || matched?.birthday,
+                          notes: draftCustomer.notes || matched?.notes,
+                          total_visits: matched?.total_visits || 1,
+                          total_spent: matched?.total_spent || 0,
+                          created_at: matched?.created_at || draftCustomer.created_at || new Date().toISOString(),
+                        });
+                      }
+                    }}
+                    className={`h-full flex items-center justify-center gap-1 rounded-lg text-xs sm:text-[11px] font-bold transition-all cursor-pointer ${
                       isSelected
-                        ? "bg-purple-600 text-white shadow-sm font-black"
+                        ? "bg-purple-600 text-white shadow-sm font-black scale-102"
                         : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
                     }`}
                     title={`Select ${g.label}`}
