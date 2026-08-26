@@ -1158,146 +1158,140 @@ export function CartItemList() {
                 </div>
               </div>
             ) : (
-              /* ===================================================================
-                 ROW 3: DEDICATED STYLIST SELECTOR & PERSON / COMPANION SELECTOR
-                 =================================================================== */
               <div className="mt-3 pt-3 border-t border-zinc-900/80 space-y-2.5">
-                {/* 2-COLUMN GRID (STACKS RESPONSIVELY ON MOBILE) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {/* COL 1: STYLIST SELECTOR */}
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1">
-                      <User className={`h-3 w-3 ${isStylistMissing ? "text-amber-400" : "text-purple-400"}`} />
-                      {isService ? "Assigned Stylist *" : "Staff (Optional)"}
-                    </span>
+                {/* 1. STYLIST SELECTOR ROW */}
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1">
+                    <User className={`h-3 w-3 ${isStylistMissing ? "text-amber-400" : "text-purple-400"}`} />
+                    {isService ? "Assigned Stylist *" : "Staff (Optional)"}
+                  </span>
 
-                    {item.staff_splits && item.staff_splits.length > 1 ? (
-                      /* MULTI-STAFF SPLIT DISPLAY */
+                  {item.staff_splits && item.staff_splits.length > 1 ? (
+                    /* MULTI-STAFF SPLIT DISPLAY */
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSplit(item)}
+                      className="w-full flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold bg-purple-950/70 border-purple-600/80 text-purple-200 shadow-sm hover:bg-purple-900/70 transition-all cursor-pointer text-left"
+                      title="Click to modify staff split amounts"
+                    >
+                      <span className="flex items-center gap-1 min-w-0 truncate">
+                        <Users className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+                        <span className="font-bold shrink-0">Split ({item.staff_splits.length}):</span>
+                        <span className="font-mono text-zinc-300 truncate">
+                          {item.staff_splits
+                            .map((s) => {
+                              const st = staff.find((staffMember) => staffMember.id === s.staff_id);
+                              return `${st?.name || "Staff"} (₹${s.amount})`;
+                            })
+                            .join(" + ")}
+                        </span>
+                      </span>
+                    </button>
+                  ) : (
+                    /* SINGLE STYLIST DROPDOWN WITH SPLIT BUTTON */
+                    <div className="flex items-center gap-1.5 w-full">
+                      <select
+                        value={item.primary_staff_id || ""}
+                        onChange={(e) => {
+                          const newStaffId = e.target.value || undefined;
+                          const currentTotal = item.total_price || (item.unit_price * item.quantity);
+                          updateDraftItem(item.id, {
+                            primary_staff_id: newStaffId,
+                            staff_splits: newStaffId
+                              ? [{ staff_id: newStaffId, amount: currentTotal, ratio: 100 }]
+                              : undefined,
+                          });
+                        }}
+                        className={`h-8 px-2.5 text-xs rounded-xl font-medium flex-1 min-w-0 transition-all focus:outline-none focus:ring-1 truncate ${
+                          isStylistMissing
+                            ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
+                            : "bg-zinc-900 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
+                        }`}
+                      >
+                        <option value="">
+                          {isService ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
+                        </option>
+                        {staff.map((s) => (
+                          <option
+                            key={s.id}
+                            value={s.id}
+                            disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
+                          >
+                            {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* SPLIT BUTTON */}
                       <button
                         type="button"
                         onClick={() => handleOpenSplit(item)}
-                        className="w-full flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold bg-purple-950/70 border-purple-600/80 text-purple-200 shadow-sm hover:bg-purple-900/70 transition-all cursor-pointer text-left"
-                        title="Click to modify staff split amounts"
+                        className="h-8 px-2.5 rounded-xl border text-[11px] font-semibold transition-all bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-purple-300 hover:text-white shrink-0 flex items-center gap-1"
+                        title="Split commission between multiple staff"
                       >
-                        <span className="flex items-center gap-1 truncate">
-                          <Users className="h-3.5 w-3.5 text-purple-400 shrink-0" />
-                          <span className="font-bold">Split ({item.staff_splits.length}):</span>
-                          <span className="font-mono text-zinc-300 truncate">
-                            {item.staff_splits
-                              .map((s) => {
-                                const st = staff.find((staffMember) => staffMember.id === s.staff_id);
-                                return `${st?.name || "Staff"} (₹${s.amount})`;
-                              })
-                              .join(" + ")}
-                          </span>
-                        </span>
+                        <Users className="h-3 w-3" />
+                        <span>Split</span>
                       </button>
-                    ) : (
-                      /* SINGLE STYLIST DROPDOWN WITH SPLIT BUTTON */
-                      <div className="flex items-center gap-1.5">
-                        <select
-                          value={item.primary_staff_id || ""}
-                          onChange={(e) => {
-                            const newStaffId = e.target.value || undefined;
-                            const currentTotal = item.total_price || (item.unit_price * item.quantity);
-                            updateDraftItem(item.id, {
-                              primary_staff_id: newStaffId,
-                              staff_splits: newStaffId
-                                ? [{ staff_id: newStaffId, amount: currentTotal, ratio: 100 }]
-                                : undefined,
-                            });
-                          }}
-                          className={`h-8 px-2.5 text-xs rounded-xl font-medium flex-1 transition-all focus:outline-none focus:ring-1 ${
-                            isStylistMissing
-                              ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
-                              : "bg-zinc-900 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
-                          }`}
-                        >
-                          <option value="">
-                            {isService ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
-                          </option>
-                          {staff.map((s) => (
-                            <option
-                              key={s.id}
-                              value={s.id}
-                              disabled={s.status === "on_leave" || s.status === "weekly_off" || s.status === "inactive"}
-                            >
-                              {s.name} ({s.role}){s.status === "half_day" ? " [Half Day]" : s.status === "on_leave" ? " [On Leave]" : s.status === "weekly_off" ? " [Off]" : ""}
-                            </option>
-                          ))}
-                        </select>
+                    </div>
+                  )}
+                </div>
 
-                        {/* SPLIT BUTTON */}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSplit(item)}
-                          className="h-8 px-2.5 rounded-xl border text-[11px] font-semibold transition-all bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-purple-300 hover:text-white shrink-0 flex items-center gap-1"
-                          title="Split commission between multiple staff"
-                        >
-                          <Users className="h-3 w-3" />
-                          <span>Split</span>
-                        </button>
-                      </div>
+                {/* 2. PERSON / COMPANION SELECTOR ROW */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-cyan-300 flex items-center gap-1">
+                      <UserPlus className="h-3 w-3 text-cyan-400" />
+                      Person / Guest
+                    </span>
+                    {item.guest_name && (
+                      <button
+                        type="button"
+                        onClick={() => handleClearPerson(item.id)}
+                        className="text-[9.5px] text-rose-400 hover:text-rose-300 font-medium transition-colors"
+                      >
+                        Clear Person
+                      </button>
                     )}
                   </div>
 
-                  {/* COL 2: PERSON / COMPANION SELECTOR (MATCHES STYLIST ROW) */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-cyan-300 flex items-center gap-1">
-                        <UserPlus className="h-3 w-3 text-cyan-400" />
-                        Person / Guest
+                  {/* PERSON BUTTON TRIGGER */}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenPersonSelector(item)}
+                    className={`w-full h-8 px-2.5 text-xs rounded-xl font-semibold flex items-center justify-between transition-all border ${
+                      item.guest_name
+                        ? "bg-cyan-950/70 border-cyan-500/80 text-cyan-200 shadow-sm"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-cyan-500/50 hover:text-cyan-300"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 min-w-0 truncate">
+                      <User className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                      <span className="truncate">
+                        {item.guest_name ? (
+                          <>
+                            <strong className="text-white">{item.guest_name}</strong>
+                            {item.guest_gender && item.guest_gender !== "unspecified" && (
+                              <span className="text-[10px] text-cyan-300/80 ml-1 font-normal uppercase">
+                                ({item.guest_gender === "female" ? "F" : item.guest_gender === "male" ? "M" : "O"})
+                              </span>
+                            )}
+                            {item.guest_phone && (
+                              <span className="text-[10px] text-zinc-400 ml-1 font-mono font-normal">
+                                • {item.guest_phone}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          "+ Select / Add Person"
+                        )}
                       </span>
-                      {item.guest_name && (
-                        <button
-                          type="button"
-                          onClick={() => handleClearPerson(item.id)}
-                          className="text-[9.5px] text-rose-400 hover:text-rose-300 font-medium transition-colors"
-                        >
-                          Clear Person
-                        </button>
-                      )}
-                    </div>
-
-                    {/* PERSON BUTTON TRIGGER */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenPersonSelector(item)}
-                      className={`w-full h-8 px-2.5 text-xs rounded-xl font-semibold flex items-center justify-between transition-all border ${
-                        item.guest_name
-                          ? "bg-cyan-950/70 border-cyan-500/80 text-cyan-200 shadow-sm"
-                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-cyan-500/50 hover:text-cyan-300"
+                    </span>
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 text-cyan-400 shrink-0 ml-1 transition-transform ${
+                        isPersonOpen ? "rotate-180" : ""
                       }`}
-                    >
-                      <span className="flex items-center gap-1.5 truncate">
-                        <User className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-                        <span className="truncate">
-                          {item.guest_name ? (
-                            <>
-                              <strong className="text-white">{item.guest_name}</strong>
-                              {item.guest_gender && item.guest_gender !== "unspecified" && (
-                                <span className="text-[10px] text-cyan-300/80 ml-1 font-normal uppercase">
-                                  ({item.guest_gender === "female" ? "F" : item.guest_gender === "male" ? "M" : "O"})
-                                </span>
-                              )}
-                              {item.guest_phone && (
-                                <span className="text-[10px] text-zinc-400 ml-1 font-mono font-normal">
-                                  • {item.guest_phone}
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            "+ Select / Add Person"
-                          )}
-                        </span>
-                      </span>
-                      <ChevronDown
-                        className={`h-3.5 w-3.5 text-cyan-400 shrink-0 transition-transform ${
-                          isPersonOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-                  </div>
+                    />
+                  </button>
                 </div>
 
                 {/* EXPANDED PERSON FORM (MOBILE & DESKTOP ACCESSIBLE) */}
