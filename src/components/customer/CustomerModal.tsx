@@ -43,7 +43,11 @@ export function CustomerModal({
       if (customerToEdit) {
         setName(customerToEdit.name || "");
         setPhone(customerToEdit.phone || "");
-        setGender((customerToEdit.gender as any) || "female");
+        setGender(
+          customerToEdit.gender && customerToEdit.gender !== "unspecified"
+            ? (customerToEdit.gender as any)
+            : "female"
+        );
         setEmail(customerToEdit.email || "");
         setBirthday(customerToEdit.birthday || "");
         setAnniversary(customerToEdit.anniversary || "");
@@ -82,7 +86,7 @@ export function CustomerModal({
       id: customerToEdit?.id || generateUUID(),
       name: name.trim(),
       phone: cleanPhone,
-      gender,
+      gender: gender && (gender as string) !== "unspecified" ? gender : "female",
       email: email.trim() || undefined,
       birthday: birthday || undefined,
       anniversary: anniversary || undefined,

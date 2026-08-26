@@ -114,7 +114,7 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
         id: cust.id || generateUUID(),
         phone: cleanPhone,
         name: cust.name || `Guest (${cleanPhone})`,
-        gender: cust.gender || "unspecified",
+        gender: cust.gender && cust.gender !== "unspecified" ? cust.gender : "female",
         total_visits: Number(cust.total_visits) || 0,
         total_spent: Number(cust.total_spent) || 0,
         created_at: cust.created_at || new Date().toISOString(),

@@ -765,7 +765,12 @@ export const Storage = {
           ? existing.name
           : customer.name || existing?.name || `Guest (${cleanPhone})`,
       phone: cleanPhone.length === 10 ? cleanPhone : customer.phone || existing?.phone || "",
-      gender: customer.gender || existing?.gender || "unspecified",
+      gender:
+        customer.gender && customer.gender !== "unspecified"
+          ? customer.gender
+          : existing?.gender && existing.gender !== "unspecified"
+          ? existing.gender
+          : "female",
       email: customer.email !== undefined ? customer.email : existing?.email,
       birthday: customer.birthday !== undefined ? customer.birthday : existing?.birthday,
       anniversary: customer.anniversary !== undefined ? customer.anniversary : existing?.anniversary,

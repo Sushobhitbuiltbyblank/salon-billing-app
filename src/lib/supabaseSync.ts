@@ -670,7 +670,7 @@ export const SupabaseSync = {
         name: customer.name,
         phone: standardPhone,
         email: customer.email || null,
-        gender: customer.gender || "unspecified",
+        gender: customer.gender && customer.gender !== "unspecified" ? customer.gender : "female",
         birthday: customer.birthday || null,
         anniversary: customer.anniversary || null,
         total_visits: Number(customer.total_visits) || 1,
