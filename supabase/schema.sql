@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS customers (
     total_visits INTEGER DEFAULT 0,
     total_spent NUMERIC(12, 2) DEFAULT 0.00,
     last_visit TIMESTAMPTZ,
+    last_reminder_sent_at TIMESTAMPTZ,
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -150,12 +151,114 @@ CREATE TABLE IF NOT EXISTS expenses (
 
 -- INDEXES FOR HIGH-SPEED LOOKUPS
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+CREATE INDEX IF NOT EXISTS idx_customers_last_visit ON customers(last_visit);
+CREATE INDEX IF NOT EXISTS idx_customers_last_reminder ON customers(last_reminder_sent_at);
 CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON invoices(created_at);
 CREATE INDEX IF NOT EXISTS idx_invoices_customer_id ON invoices(customer_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_items_primary_staff ON invoice_items(primary_staff_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_items_secondary_staff ON invoice_items(secondary_staff_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);
+
+-- ==============================================================================
+-- CUSTOMER DUE REMINDERS VIEW & FUNCTIONS
+--   - Shave / Grooming: Overdue if last visit >= 7 days ago
+--   - Haircut / Spa / Other: Overdue if last visit >= 30 days ago
+-- ==============================================================================
+CREATE OR REPLACE VIEW customer_due_reminders AS
+WITH latest_customer_invoices AS (
+    SELECT DISTINCT ON (c.phone)
+        c.id AS customer_id,
+        c.name AS customer_name,
+        c.phone AS customer_phone,
+        c.gender AS customer_gender,
+        c.total_visits,
+        c.total_spent,
+        c.last_reminder_sent_at,
+        inv.id AS latest_invoice_id,
+        inv.created_at AS last_visit_date,
+        EXISTS (
+            SELECT 1 FROM invoice_items ii 
+            WHERE ii.invoice_id = inv.id 
+              AND (
+                  LOWER(ii.item_name) LIKE '%shave%' OR 
+                  LOWER(ii.item_name) LIKE '%beard%' OR 
+                  LOWER(ii.item_name) LIKE '%trim%' OR 
+                  LOWER(ii.item_name) LIKE '%mustache%' OR 
+                  LOWER(ii.item_name) LIKE '%threading%'
+              )
+        ) AS has_shave_service,
+        (
+            SELECT ii.item_name 
+            FROM invoice_items ii 
+            WHERE ii.invoice_id = inv.id 
+            ORDER BY ii.total_price DESC, ii.created_at ASC 
+            LIMIT 1
+        ) AS last_service_name
+    FROM customers c
+    JOIN invoices inv ON (
+        inv.customer_phone = c.phone OR 
+        inv.customer_id = c.id
+    )
+    WHERE inv.status != 'void' AND inv.status != 'cancelled'
+      AND c.phone IS NOT NULL AND LENGTH(c.phone) >= 7
+    ORDER BY c.phone, inv.created_at DESC
+)
+SELECT 
+    customer_id,
+    customer_name,
+    customer_phone,
+    customer_gender,
+    total_visits,
+    total_spent,
+    last_reminder_sent_at,
+    latest_invoice_id,
+    last_visit_date,
+    last_service_name,
+    CASE 
+        WHEN has_shave_service THEN 'grooming_shave'
+        ELSE 'haircut_spa'
+    END AS service_type,
+    CASE 
+        WHEN has_shave_service THEN 7
+        ELSE 30
+    END AS reminder_interval_days,
+    DATE_PART('day', NOW() - last_visit_date)::INTEGER AS days_elapsed,
+    CASE 
+        WHEN has_shave_service AND DATE_PART('day', NOW() - last_visit_date) >= 7 THEN true
+        WHEN NOT has_shave_service AND DATE_PART('day', NOW() - last_visit_date) >= 30 THEN true
+        ELSE false
+    END AS is_overdue,
+    CASE 
+        WHEN last_reminder_sent_at IS NOT NULL AND DATE(last_reminder_sent_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE THEN true
+        ELSE false
+    END AS reminder_sent_today
+FROM latest_customer_invoices
+ORDER BY days_elapsed DESC;
+
+CREATE OR REPLACE FUNCTION get_customer_due_reminders()
+RETURNS TABLE (
+    customer_id UUID,
+    customer_name VARCHAR,
+    customer_phone VARCHAR,
+    customer_gender VARCHAR,
+    total_visits INTEGER,
+    total_spent NUMERIC,
+    last_reminder_sent_at TIMESTAMPTZ,
+    latest_invoice_id UUID,
+    last_visit_date TIMESTAMPTZ,
+    last_service_name VARCHAR,
+    service_type TEXT,
+    reminder_interval_days INTEGER,
+    days_elapsed INTEGER,
+    is_overdue BOOLEAN,
+    reminder_sent_today BOOLEAN
+)
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT * FROM customer_due_reminders WHERE is_overdue = true;
+$$;
 
 -- ROW LEVEL SECURITY (RLS) POLICIES FOR POS
 ALTER TABLE app_users ENABLE ROW LEVEL SECURITY;

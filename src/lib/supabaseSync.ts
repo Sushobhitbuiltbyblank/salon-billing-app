@@ -666,6 +666,7 @@ export const SupabaseSync = {
         total_visits: Number(customer.total_visits) || 1,
         total_spent: Number(customer.total_spent) || 0,
         last_visit: customer.last_visit || new Date().toISOString(),
+        last_reminder_sent_at: customer.last_reminder_sent_at || null,
         notes: customer.notes || null,
         created_at: customer.created_at || new Date().toISOString(),
       };

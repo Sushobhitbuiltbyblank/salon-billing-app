@@ -85,9 +85,25 @@ export interface Customer {
   total_visits: number;
   total_spent: number;
   last_visit?: string;
+  last_reminder_sent_at?: string;
   notes?: string;
   created_at?: string;
 }
+
+export interface CustomerReminderInfo {
+  customer: Customer;
+  lastVisitDate: string;
+  daysElapsed: number;
+  serviceName: string;
+  serviceType: 'grooming_shave' | 'haircut_spa';
+  intervalDays: number;
+  isOverdue: boolean;
+  overdueDays: number;
+  lastReminderSentAt?: string;
+  reminderSentToday: boolean;
+}
+
+export type ReminderFilterType = 'all_due' | 'shave_due' | 'haircut_due' | 'sent_today' | 'pending';
 
 export interface StaffSplitAssignment {
   staff_id: string;

@@ -94,6 +94,11 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
           matched.last_visit = cust.last_visit;
         }
       }
+      if (cust.last_reminder_sent_at) {
+        if (!matched.last_reminder_sent_at || new Date(cust.last_reminder_sent_at) > new Date(matched.last_reminder_sent_at)) {
+          matched.last_reminder_sent_at = cust.last_reminder_sent_at;
+        }
+      }
       if (cust.created_at) {
         if (!matched.created_at || new Date(cust.created_at) < new Date(matched.created_at)) {
           matched.created_at = cust.created_at;

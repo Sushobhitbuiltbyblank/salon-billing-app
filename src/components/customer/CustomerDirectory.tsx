@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
-import { Customer, Invoice } from "@/types";
+import { Customer, Invoice, CustomerReminderInfo, ReminderFilterType } from "@/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,11 @@ import {
   normalizeCustomerName,
   isAnonymousCustomerName,
 } from "@/lib/customerUtils";
+import {
+  detectCustomerReminders,
+  generateWhatsAppReminderUrl,
+  wasReminderSentToday,
+} from "@/lib/reminderUtils";
 import {
   UserCheck,
   User,
@@ -48,6 +53,14 @@ import {
   Printer,
   CheckCircle2,
   RefreshCw,
+  MessageSquare,
+  BellRing,
+  AlertTriangle,
+  Send,
+  Check,
+  CalendarClock,
+  Scissors,
+  CheckCheck,
 } from "lucide-react";
 
 export function CustomerDirectory() {
@@ -64,10 +77,11 @@ export function CustomerDirectory() {
     staff,
   } = useApp();
 
+  const [activeCrmTab, setActiveCrmTab] = useState<"all" | "reminders" | "vip">("all");
+  const [reminderSubFilter, setReminderSubFilter] = useState<ReminderFilterType>("all_due");
   const [searchQuery, setSearchQuery] = useState("");
   const [genderFilter, setGenderFilter] = useState<string>("all");
-  const [vipFilterOnly, setVipFilterOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<"spent" | "visits" | "name" | "recent">("spent");
+  const [sortBy, setSortBy] = useState<"spent" | "visits" | "name" | "recent">("recent");
 
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -82,6 +96,30 @@ export function CustomerDirectory() {
   const unifiedCustomers = useMemo(() => {
     return unifyCustomerList(customers, invoices);
   }, [customers, invoices]);
+
+  // DETECT REMINDER INFORMATION FOR ALL UNIFIED CUSTOMERS
+  const reminderData = useMemo(() => {
+    const list = detectCustomerReminders(unifiedCustomers, invoices);
+    const map = new Map<string, CustomerReminderInfo>();
+    list.forEach((r) => map.set(r.customer.id, r));
+
+    const overdueList = list.filter((r) => r.isOverdue);
+    const shaveDueList = overdueList.filter((r) => r.serviceType === "grooming_shave");
+    const haircutDueList = overdueList.filter((r) => r.serviceType === "haircut_spa");
+    const sentTodayList = list.filter((r) => r.reminderSentToday);
+    const pendingDueList = overdueList.filter((r) => !r.reminderSentToday);
+
+    return {
+      allReminders: list,
+      reminderMap: map,
+      overdueList,
+      totalDueCount: overdueList.length,
+      shaveDueCount: shaveDueList.length,
+      haircutDueCount: haircutDueList.length,
+      sentTodayCount: sentTodayList.length,
+      pendingDueCount: pendingDueList.length,
+    };
+  }, [unifiedCustomers, invoices]);
 
   // COMPUTED STATS ACROSS UNIFIED CUSTOMERS
   const stats = useMemo(() => {
@@ -99,11 +137,44 @@ export function CustomerDirectory() {
     };
   }, [unifiedCustomers]);
 
-  // FILTERED & SORTED CUSTOMERS
-  const filteredCustomers = useMemo(() => {
+  // FILTERED & SORTED CUSTOMERS / REMINDERS
+  const displayItems = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+
+    if (activeCrmTab === "reminders") {
+      return reminderData.allReminders.filter((rem) => {
+        const c = rem.customer;
+        const matchSearch =
+          !q ||
+          c.name.toLowerCase().includes(q) ||
+          c.phone.includes(q) ||
+          rem.serviceName.toLowerCase().includes(q) ||
+          (c.email && c.email.toLowerCase().includes(q)) ||
+          (c.notes && c.notes.toLowerCase().includes(q));
+
+        const matchGender = genderFilter === "all" || c.gender === genderFilter;
+
+        // Sub-filter inside Reminders tab
+        let matchSubFilter = true;
+        if (reminderSubFilter === "all_due") {
+          matchSubFilter = rem.isOverdue;
+        } else if (reminderSubFilter === "shave_due") {
+          matchSubFilter = rem.isOverdue && rem.serviceType === "grooming_shave";
+        } else if (reminderSubFilter === "haircut_due") {
+          matchSubFilter = rem.isOverdue && rem.serviceType === "haircut_spa";
+        } else if (reminderSubFilter === "sent_today") {
+          matchSubFilter = rem.reminderSentToday;
+        } else if (reminderSubFilter === "pending") {
+          matchSubFilter = rem.isOverdue && !rem.reminderSentToday;
+        }
+
+        return matchSearch && matchGender && matchSubFilter;
+      });
+    }
+
+    // ALL CLIENTS OR VIP TAB
     return unifiedCustomers
       .filter((c) => {
-        const q = searchQuery.toLowerCase().trim();
         const matchSearch =
           !q ||
           c.name.toLowerCase().includes(q) ||
@@ -112,7 +183,7 @@ export function CustomerDirectory() {
           (c.notes && c.notes.toLowerCase().includes(q));
 
         const matchGender = genderFilter === "all" || c.gender === genderFilter;
-        const matchVip = !vipFilterOnly || (c.total_visits || 0) >= 5;
+        const matchVip = activeCrmTab !== "vip" || (c.total_visits || 0) >= 5;
 
         return matchSearch && matchGender && matchVip;
       })
@@ -126,8 +197,32 @@ export function CustomerDirectory() {
           return dateB - dateA;
         }
         return 0;
+      })
+      .map((cust) => {
+        return reminderData.reminderMap.get(cust.id) || {
+          customer: cust,
+          lastVisitDate: cust.last_visit || cust.created_at || new Date().toISOString(),
+          daysElapsed: cust.last_visit
+            ? Math.floor((Date.now() - new Date(cust.last_visit).getTime()) / (1000 * 60 * 60 * 24))
+            : 0,
+          serviceName: "Salon Service",
+          serviceType: "haircut_spa" as const,
+          intervalDays: 30,
+          isOverdue: false,
+          overdueDays: 0,
+          lastReminderSentAt: cust.last_reminder_sent_at,
+          reminderSentToday: wasReminderSentToday(cust.last_reminder_sent_at),
+        };
       });
-  }, [unifiedCustomers, searchQuery, genderFilter, vipFilterOnly, sortBy]);
+  }, [
+    activeCrmTab,
+    reminderSubFilter,
+    reminderData,
+    unifiedCustomers,
+    searchQuery,
+    genderFilter,
+    sortBy,
+  ]);
 
   // SYNC ALL INVOICE CUSTOMERS INTO PERMANENT DATABASE
   const handleSyncAllCustomersToDB = () => {
@@ -147,6 +242,21 @@ export function CustomerDirectory() {
   const handleStartBill = (customer: Customer) => {
     setDraftCustomer(customer);
     setActiveTab("pos");
+  };
+
+  // SEND WHATSAPP REMINDER ACTION TRIGGER
+  const handleSendWhatsAppReminder = (cust: Customer, info: CustomerReminderInfo) => {
+    const url = generateWhatsAppReminderUrl(cust, info, settings.salon_name || "Belezia Salon");
+    window.open(url, "_blank");
+
+    const updatedCust: Customer = {
+      ...cust,
+      last_reminder_sent_at: new Date().toISOString(),
+    };
+    saveCustomer(updatedCust);
+
+    setSyncMessage(`✓ WhatsApp reminder launched for ${cust.name}! Marked as sent today.`);
+    setTimeout(() => setSyncMessage(null), 4000);
   };
 
   const handleEdit = (customer: Customer) => {
@@ -171,10 +281,9 @@ export function CustomerDirectory() {
     const cleanPhone = normalizePhoneNumber(selectedHistoryCustomer.phone);
 
     return invoices.filter((inv) => {
-      if (inv.status === "void") return false;
+      if (inv.status === "void" || (inv.status as string) === "cancelled") return false;
       const invPhone = normalizePhoneNumber(inv.customer_phone);
 
-      // Strict matching: by mobile number or explicit customer_id
       if (cleanPhone.length >= 7 && invPhone.length >= 7) return cleanPhone === invPhone;
       if (selectedHistoryCustomer.id && inv.customer_id) return selectedHistoryCustomer.id === inv.customer_id;
       return false;
@@ -199,7 +308,7 @@ export function CustomerDirectory() {
               </Badge>
             </h2>
             <p className="text-xs text-zinc-400">
-              Unified database combining registered CRM profiles and past invoice records.
+              Unified client database with intelligent follow-up reminders & 1-click WhatsApp triggers.
             </p>
           </div>
         </div>
@@ -237,50 +346,152 @@ export function CustomerDirectory() {
         </div>
       )}
 
-      {/* TOP KPI STATS SUMMARY CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* TOTAL CLIENTS */}
-        <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Total Clients</span>
-            <div className="h-7 w-7 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
-              <Users className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black text-white">{stats.totalClients}</span>
-            <span className="text-[11px] text-zinc-500 font-medium">all sources</span>
-          </div>
-        </Card>
+      {/* CRM TOP LEVEL NAVIGATION TABS */}
+      <div className="flex items-center gap-2 border-b border-zinc-800/80 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveCrmTab("all")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeCrmTab === "all"
+              ? "bg-purple-600 text-white shadow-md shadow-purple-600/30 font-black"
+              : "bg-zinc-900/80 text-zinc-400 hover:text-white hover:bg-zinc-850 border border-zinc-800/80"
+          }`}
+        >
+          <Users className="h-3.5 w-3.5" />
+          <span>All Clients ({unifiedCustomers.length})</span>
+        </button>
 
-        {/* VIP CLIENTS */}
-        <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-400">VIP Repeat Clients</span>
-            <div className="h-7 w-7 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
-              <Sparkles className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black text-amber-300">{stats.vipClients}</span>
-            <span className="text-[11px] text-zinc-500 font-medium">5+ visits</span>
-          </div>
-        </Card>
+        <button
+          type="button"
+          onClick={() => setActiveCrmTab("reminders")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeCrmTab === "reminders"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-black"
+              : "bg-zinc-900/80 text-emerald-300 hover:text-white hover:bg-zinc-850 border border-emerald-900/50"
+          }`}
+        >
+          <BellRing className="h-3.5 w-3.5 text-emerald-400" />
+          <span>Follow-up Reminders</span>
+          {reminderData.totalDueCount > 0 && (
+            <Badge className="bg-amber-500 text-black font-black text-[10px] px-1.5 py-0 rounded-md animate-pulse">
+              {reminderData.totalDueCount} Due
+            </Badge>
+          )}
+        </button>
 
-        {/* AVG VISITS */}
-        <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Avg Visits / Client</span>
-            <div className="h-7 w-7 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
-              <TrendingUp className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black text-indigo-300">{stats.avgVisits}</span>
-            <span className="text-[11px] text-zinc-500 font-medium">visits</span>
-          </div>
-        </Card>
+        <button
+          type="button"
+          onClick={() => setActiveCrmTab("vip")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeCrmTab === "vip"
+              ? "bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/30 font-black"
+              : "bg-zinc-900/80 text-amber-300 hover:text-white hover:bg-zinc-850 border border-zinc-800/80"
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+          <span>VIP Clients ({stats.vipClients})</span>
+        </button>
       </div>
+
+      {/* KPI SUMMARY CARDS */}
+      {activeCrmTab === "reminders" ? (
+        /* REMINDERS KPI CARDS */
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Card className="p-3.5 bg-zinc-950/80 border-amber-500/30 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">Total Due</span>
+              <div className="h-7 w-7 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <BellRing className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-amber-300">{reminderData.totalDueCount}</span>
+              <span className="text-[11px] text-zinc-500 font-medium">customers</span>
+            </div>
+          </Card>
+
+          <Card className="p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-orange-400">🪒 Shave / Beard (7d+)</span>
+              <div className="h-7 w-7 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center font-mono text-xs">
+                7d
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-orange-300">{reminderData.shaveDueCount}</span>
+              <span className="text-[11px] text-zinc-500 font-medium">due</span>
+            </div>
+          </Card>
+
+          <Card className="p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400">✂️ Haircut & Spa (30d+)</span>
+              <div className="h-7 w-7 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-mono text-xs">
+                30d
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-purple-300">{reminderData.haircutDueCount}</span>
+              <span className="text-[11px] text-zinc-500 font-medium">due</span>
+            </div>
+          </Card>
+
+          <Card className="p-3.5 bg-zinc-950/80 border-emerald-500/30 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Sent Today</span>
+              <div className="h-7 w-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <CheckCheck className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-emerald-300">{reminderData.sentTodayCount}</span>
+              <span className="text-[11px] text-zinc-500 font-medium">dispatched</span>
+            </div>
+          </Card>
+        </div>
+      ) : (
+        /* STANDARD CRM KPI CARDS */
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Total Clients</span>
+              <div className="h-7 w-7 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                <Users className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-white">{stats.totalClients}</span>
+              <span className="text-[11px] text-zinc-500 font-medium">all sources</span>
+            </div>
+          </Card>
+
+          <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-400">VIP Repeat Clients</span>
+              <div className="h-7 w-7 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <Sparkles className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-amber-300">{stats.vipClients}</span>
+              <span className="text-[11px] text-zinc-500 font-medium">5+ visits</span>
+            </div>
+          </Card>
+
+          <Card className="p-4 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Avg Visits / Client</span>
+              <div className="h-7 w-7 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl sm:text-3xl font-black text-indigo-300">{stats.avgVisits}</span>
+              <span className="text-[11px] text-zinc-500 font-medium">visits</span>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* SEARCH, GENDER FILTER & SORT TOOLBAR */}
       <div className="p-3 bg-zinc-900/90 border border-zinc-800/90 rounded-2xl flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 shadow-lg">
@@ -289,7 +500,7 @@ export function CustomerDirectory() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
           <input
             type="text"
-            placeholder="Search by customer name, 10-digit mobile, email, allergy notes..."
+            placeholder="Search by customer name, mobile, service, notes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full h-10 pl-9 pr-8 text-xs sm:text-sm bg-zinc-950/90 border border-zinc-800 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
@@ -307,6 +518,32 @@ export function CustomerDirectory() {
 
         {/* FILTERS AND SORT */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* REMINDER SUB-FILTER CHIPS (ONLY IN REMINDERS TAB) */}
+          {activeCrmTab === "reminders" && (
+            <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 overflow-x-auto">
+              {[
+                { id: "all_due", label: `All Due (${reminderData.totalDueCount})` },
+                { id: "shave_due", label: `🪒 Shave 7d+ (${reminderData.shaveDueCount})` },
+                { id: "haircut_due", label: `✂️ Haircut 30d+ (${reminderData.haircutDueCount})` },
+                { id: "sent_today", label: `✓ Sent Today (${reminderData.sentTodayCount})` },
+                { id: "pending", label: `⏳ Pending (${reminderData.pendingDueCount})` },
+              ].map((rf) => (
+                <button
+                  key={rf.id}
+                  type="button"
+                  onClick={() => setReminderSubFilter(rf.id as ReminderFilterType)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    reminderSubFilter === rf.id
+                      ? "bg-emerald-600 text-white shadow-sm font-black"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {rf.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* GENDER TABS */}
           <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800">
             {[
@@ -329,44 +566,36 @@ export function CustomerDirectory() {
             ))}
           </div>
 
-          {/* VIP ONLY TOGGLE */}
-          <button
-            type="button"
-            onClick={() => setVipFilterOnly(!vipFilterOnly)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
-              vipFilterOnly
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm"
-                : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white"
-            }`}
-          >
-            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-            <span>VIP Only</span>
-          </button>
-
-          {/* SORT DROPDOWN */}
-          <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 h-10">
-            <ArrowUpDown className="h-3.5 w-3.5 text-zinc-500" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-transparent text-xs text-zinc-200 font-bold focus:outline-none cursor-pointer"
-            >
-              <option value="spent">Highest Spenders</option>
-              <option value="visits">Most Frequent Visits</option>
-              <option value="recent">Recently Active</option>
-              <option value="name">Name (A-Z)</option>
-            </select>
-          </div>
+          {/* SORT DROPDOWN (ONLY IN ALL/VIP TAB) */}
+          {activeCrmTab !== "reminders" && (
+            <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-800 h-10">
+              <ArrowUpDown className="h-3.5 w-3.5 text-zinc-500" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-transparent text-xs text-zinc-200 font-bold focus:outline-none cursor-pointer"
+              >
+                <option value="recent">Recently Active</option>
+                <option value="spent">Highest Spenders</option>
+                <option value="visits">Most Frequent Visits</option>
+                <option value="name">Name (A-Z)</option>
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
       {/* CUSTOMER DIRECTORY LIST / GRID */}
-      {filteredCustomers.length === 0 ? (
+      {displayItems.length === 0 ? (
         <Card className="p-12 text-center bg-zinc-950/40 border-zinc-800">
           <UserCheck className="h-12 w-12 text-zinc-600 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-zinc-200">No Customers Found</h3>
+          <h3 className="text-base font-bold text-zinc-200">
+            {activeCrmTab === "reminders" ? "No Overdue Follow-up Reminders" : "No Customers Found"}
+          </h3>
           <p className="text-xs text-zinc-400 mt-1 max-w-md mx-auto">
-            {searchQuery
+            {activeCrmTab === "reminders"
+              ? "All returning customers are up to date with their service intervals! 🎉"
+              : searchQuery
               ? `No clients matching "${searchQuery}".`
               : "No customers match the current filter selection."}
           </p>
@@ -385,7 +614,8 @@ export function CustomerDirectory() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-          {filteredCustomers.map((cust) => {
+          {displayItems.map((remInfo) => {
+            const cust = remInfo.customer;
             const isVIP = (cust.total_visits || 0) >= 5;
             const genderLabel =
               cust.gender === "female"
@@ -399,17 +629,27 @@ export function CustomerDirectory() {
             return (
               <Card
                 key={cust.id}
-                className="p-4 bg-zinc-950/80 border-zinc-800/90 hover:border-purple-500/40 transition-all flex flex-col justify-between group shadow-lg shadow-black/20"
+                className={`p-4 bg-zinc-950/80 transition-all flex flex-col justify-between group shadow-lg shadow-black/20 ${
+                  remInfo.isOverdue
+                    ? "border-amber-500/40 hover:border-amber-400/80"
+                    : "border-zinc-800/90 hover:border-purple-500/40"
+                }`}
               >
                 <div className="space-y-3">
                   {/* HEADER: AVATAR, NAME, GENDER, AND PHONE */}
                   <div className="flex items-start justify-between gap-2.5">
                     <div className="flex items-center gap-3">
-                      <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-purple-600/30 to-pink-600/20 border border-purple-500/30 text-purple-300 flex items-center justify-center font-black text-base shrink-0 shadow-md">
+                      <div
+                        className={`h-11 w-11 rounded-2xl border text-base font-black flex items-center justify-center shrink-0 shadow-md ${
+                          remInfo.isOverdue
+                            ? "bg-amber-950/40 border-amber-500/40 text-amber-300"
+                            : "bg-gradient-to-tr from-purple-600/30 to-pink-600/20 border-purple-500/30 text-purple-300"
+                        }`}
+                      >
                         {cust.name ? cust.name.charAt(0).toUpperCase() : "G"}
                       </div>
                       <div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <h3 className="text-sm font-bold text-white group-hover:text-purple-300 transition-colors">
                             {cust.name}
                           </h3>
@@ -430,6 +670,58 @@ export function CustomerDirectory() {
                           )}
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* REMINDER & LAST SERVICE STATUS BANNER */}
+                  <div
+                    className={`p-2.5 rounded-xl border text-xs space-y-1.5 ${
+                      remInfo.isOverdue
+                        ? remInfo.serviceType === "grooming_shave"
+                          ? "bg-amber-950/30 border-amber-500/40 text-amber-200"
+                          : "bg-rose-950/30 border-rose-500/40 text-rose-200"
+                        : "bg-zinc-900/90 border-zinc-800/80 text-zinc-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-bold flex items-center gap-1 text-[11px] truncate">
+                        <span>{remInfo.serviceType === "grooming_shave" ? "🪒" : "✂️"}</span>
+                        <span className="truncate">{remInfo.serviceName}</span>
+                      </span>
+
+                      {remInfo.isOverdue ? (
+                        <Badge
+                          className={`text-[9px] font-bold px-1.5 py-0 shrink-0 ${
+                            remInfo.serviceType === "grooming_shave"
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/50"
+                              : "bg-rose-500/20 text-rose-300 border border-rose-500/50"
+                          }`}
+                        >
+                          {remInfo.overdueDays === 0
+                            ? `Due today (${remInfo.intervalDays}d cycle)`
+                            : `${remInfo.overdueDays}d overdue (${remInfo.intervalDays}d cycle)`}
+                        </Badge>
+                      ) : (
+                        <span className="text-[10px] text-zinc-400">
+                          {remInfo.daysElapsed} days ago
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-800/60">
+                      <span>Last Visit: {formatDate(remInfo.lastVisitDate)} ({remInfo.daysElapsed}d ago)</span>
+                      {remInfo.reminderSentToday ? (
+                        <span className="text-emerald-400 font-bold flex items-center gap-0.5">
+                          <CheckCheck className="h-3 w-3" />
+                          <span>Sent Today</span>
+                        </span>
+                      ) : remInfo.lastReminderSentAt ? (
+                        <span className="text-zinc-400">
+                          Sent: {formatDate(remInfo.lastReminderSentAt)}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-500">No reminder sent</span>
+                      )}
                     </div>
                   </div>
 
@@ -460,8 +752,8 @@ export function CustomerDirectory() {
                     </div>
                   </div>
 
-                  {/* DETAILS: EMAIL, BIRTHDAY, ANNIVERSARY, PREFERENCES */}
-                  {(cust.email || cust.birthday || cust.anniversary || cust.notes || cust.last_visit) && (
+                  {/* DETAILS: EMAIL, BIRTHDAY, ANNIVERSARY, NOTES */}
+                  {(cust.email || cust.birthday || cust.anniversary || cust.notes) && (
                     <div className="space-y-1.5 text-xs text-zinc-400 pt-1.5 border-t border-zinc-900">
                       {cust.email && (
                         <div className="flex items-center gap-1.5 truncate">
@@ -481,12 +773,6 @@ export function CustomerDirectory() {
                           <span>Anniversary: {cust.anniversary}</span>
                         </div>
                       )}
-                      {cust.last_visit && (
-                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-                          <Clock className="h-3 w-3 shrink-0" />
-                          <span>Last Visit: {formatDate(cust.last_visit)}</span>
-                        </div>
-                      )}
                       {cust.notes && (
                         <p className="text-[11px] text-zinc-300 bg-zinc-900/70 p-2 rounded-xl border border-zinc-800/60 italic line-clamp-2">
                           "{cust.notes}"
@@ -497,46 +783,67 @@ export function CustomerDirectory() {
                 </div>
 
                 {/* CARD FOOTER ACTIONS */}
-                <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-zinc-800/80">
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      size="sm"
-                      onClick={() => handleStartBill(cust)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md shadow-purple-600/30 cursor-pointer"
-                    >
-                      <ShoppingCart className="h-3.5 w-3.5" />
-                      <span>Bill Client</span>
-                    </Button>
+                <div className="flex flex-col gap-2 pt-3 mt-3 border-t border-zinc-800/80">
+                  {/* WHATSAPP TRIGGER BUTTON */}
+                  <Button
+                    size="sm"
+                    onClick={() => handleSendWhatsAppReminder(cust, remInfo)}
+                    className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl font-bold text-xs transition-all shadow-md cursor-pointer ${
+                      remInfo.reminderSentToday
+                        ? "bg-zinc-800 hover:bg-zinc-700 text-emerald-300 border border-emerald-500/40"
+                        : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
+                    }`}
+                    title="Send customized WhatsApp follow-up reminder in a new tab"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5 text-emerald-200" />
+                    <span>
+                      {remInfo.reminderSentToday
+                        ? "Resend WhatsApp Reminder"
+                        : "Send WhatsApp Reminder"}
+                    </span>
+                  </Button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleOpenHistory(cust)}
-                      className="px-2.5 py-1.5 rounded-xl text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                      title="View all past invoices for this client"
-                    >
-                      <Receipt className="h-3 w-3 text-purple-400" />
-                      <span>History</span>
-                    </button>
-                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        onClick={() => handleStartBill(cust)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-md shadow-purple-600/30 cursor-pointer"
+                      >
+                        <ShoppingCart className="h-3.5 w-3.5" />
+                        <span>Bill Client</span>
+                      </Button>
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(cust)}
-                      className="p-2 rounded-xl text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer"
-                      title="Edit Customer Profile"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenHistory(cust)}
+                        className="px-2.5 py-1.5 rounded-xl text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                        title="View all past invoices for this client"
+                      >
+                        <Receipt className="h-3 w-3 text-purple-400" />
+                        <span>History</span>
+                      </button>
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(cust)}
-                      className="p-2 rounded-xl text-zinc-400 hover:text-rose-400 bg-zinc-900 hover:bg-rose-950/40 border border-zinc-800 hover:border-rose-900 transition-colors cursor-pointer"
-                      title="Delete Customer Profile"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(cust)}
+                        className="p-2 rounded-xl text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer"
+                        title="Edit Customer Profile"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(cust)}
+                        className="p-2 rounded-xl text-zinc-400 hover:text-rose-400 bg-zinc-900 hover:bg-rose-950/40 border border-zinc-800 hover:border-rose-900 transition-colors cursor-pointer"
+                        title="Delete Customer Profile"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </Card>
