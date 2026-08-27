@@ -203,7 +203,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.saveCatalog(cloudData.catalog);
         }
         if (cloudData.customers) {
-          const deduplicatedCloud = deduplicateCustomerArray(cloudData.customers);
+          const cloudList = deduplicateCustomerArray(cloudData.customers);
+          const localList = Storage.getCustomers();
+
+          // Preserve any very recent customer created in the last 60 seconds that might be in-flight
+          const nowTime = Date.now();
+          const inFlightLocal = localList.filter((c) => {
+            const createdTime = c.created_at ? new Date(c.created_at).getTime() : 0;
+            return nowTime - createdTime < 60000;
+          });
+
+          const deduplicatedCloud = deduplicateCustomerArray([...cloudList, ...inFlightLocal]);
           setCustomers((prev) =>
             JSON.stringify(prev) !== JSON.stringify(deduplicatedCloud) ? deduplicatedCloud : prev
           );

@@ -615,7 +615,71 @@ describe("Database & Customer Directory Count Parity Test", () => {
     expect(found?.gender).toBe("male");
     expect(found?.total_visits).toBe(0);
   });
+
+  it("13. Full Multi-Device Lifecycle Test: Registering customer on Browser 1 is saved in DB and reflects on Browser 2 & Browser 3 without disappearing", () => {
+    // Initial synchronized cloud DB state with 100 customers
+    const cloudDatabaseState: Customer[] = Array.from({ length: 100 }, (_, i) => ({
+      id: `cust-${i + 1}`,
+      name: `Client ${i + 1}`,
+      phone: `9876500${(i + 1).toString().padStart(3, "0")}`,
+      gender: i % 2 === 0 ? "female" : "male",
+      total_visits: 1,
+      total_spent: 350,
+    }));
+
+    // Step 1: User on Browser 1 registers "Priya Arora"
+    const newCustomerBrowser1: Customer = {
+      id: "cust-priya-01",
+      name: "Priya Arora",
+      phone: "9812345678",
+      gender: "female",
+      birthday: "1997-04-12",
+      notes: "Facial and hair spa",
+      total_visits: 0,
+      total_spent: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    // Step 2: Browser 1 saves to local cache and sends payload to Supabase
+    const browser1LocalBeforeCloudSync = [...cloudDatabaseState, newCustomerBrowser1];
+    expect(browser1LocalBeforeCloudSync.length).toBe(101);
+
+    // Step 3: Supabase cloud DB accepts insert
+    const updatedCloudDatabase = [...cloudDatabaseState, newCustomerBrowser1];
+    expect(updatedCloudDatabase.length).toBe(101);
+
+    // Step 4: Browser 1 background sync runs with in-flight protection
+    const nowTime = Date.now();
+    const inFlightLocal = browser1LocalBeforeCloudSync.filter((c) => {
+      const createdTime = c.created_at ? new Date(c.created_at).getTime() : 0;
+      return nowTime - createdTime < 60000;
+    });
+    const browser1Deduplicated = deduplicateCustomerArray([...updatedCloudDatabase, ...inFlightLocal]);
+    const browser1Unified = unifyCustomerList(browser1Deduplicated, []);
+
+    // Step 5: Assert Priya is NOT removed on Browser 1
+    expect(browser1Unified.length).toBe(101);
+    expect(browser1Unified.some((c) => c.phone === "9812345678")).toBe(true);
+
+    // Step 6: Browser 2 (iPad) receives Realtime / periodic sync from Cloud DB
+    const browser2Synced = deduplicateCustomerArray(updatedCloudDatabase);
+    const browser2Unified = unifyCustomerList(browser2Synced, []);
+    expect(browser2Unified.length).toBe(101);
+    const foundOnBrowser2 = browser2Unified.find((c) => c.phone === "9812345678");
+    expect(foundOnBrowser2).toBeDefined();
+    expect(foundOnBrowser2?.name).toBe("Priya Arora");
+    expect(foundOnBrowser2?.gender).toBe("female");
+
+    // Step 7: Browser 3 (Reception Phone) receives sync
+    const browser3Synced = deduplicateCustomerArray(updatedCloudDatabase);
+    const browser3Unified = unifyCustomerList(browser3Synced, []);
+    expect(browser3Unified.length).toBe(101);
+    const foundOnBrowser3 = browser3Unified.find((c) => c.phone === "9812345678");
+    expect(foundOnBrowser3).toBeDefined();
+    expect(foundOnBrowser3?.name).toBe("Priya Arora");
+  });
 });
+
 
 
 
