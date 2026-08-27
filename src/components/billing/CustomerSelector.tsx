@@ -145,6 +145,14 @@ export function CustomerSelector() {
     return null;
   }, [draftCustomer, allAvailableCustomers]);
 
+  const hasNamedCustomer = useMemo(() => {
+    return Boolean(
+      draftCustomer?.name &&
+      draftCustomer.name.trim() !== "" &&
+      !isAnonymousCustomerName(draftCustomer.name)
+    );
+  }, [draftCustomer?.name]);
+
   const [isSavedSuccess, setIsSavedSuccess] = useState(false);
 
   const handleSaveCurrentCustomer = async () => {
@@ -225,13 +233,13 @@ export function CustomerSelector() {
           </div>
         </div>
 
-        {/* ALWAYS-EXPANDED CORE FIELDS: NAME, MOBILE, AND MANDATORY GENDER */}
+        {/* ALWAYS-EXPANDED CORE FIELDS: NAME, MOBILE, AND GENDER */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
           {/* CUSTOMER NAME (5 COLS) */}
           <div className="sm:col-span-5">
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs sm:text-[11px] font-medium text-zinc-400">
-                Customer Name <span className="text-rose-400 font-bold">*</span>
+                Customer Name {!hasNamedCustomer && <span className="text-zinc-500 font-normal">(Optional)</span>}
               </label>
               {isExistingNameEdited && matchedCustomerByPhone && (
                 <span className="text-[9px] text-amber-400 font-bold bg-amber-950/90 border border-amber-700/60 px-1.5 py-0.2 rounded-md">
@@ -291,14 +299,18 @@ export function CustomerSelector() {
             </div>
           </div>
 
-          {/* MANDATORY GENDER SELECTION (3 COLS) */}
+          {/* GENDER SELECTION (3 COLS) */}
           <div className="sm:col-span-3">
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs sm:text-[11px] font-medium text-zinc-400">
-                Gender <span className="text-rose-400 font-bold">*</span>
+                Gender {hasNamedCustomer ? <span className="text-rose-400 font-bold">*</span> : <span className="text-zinc-500 font-normal">(Optional)</span>}
               </label>
               {!draftCustomer?.gender || draftCustomer.gender === "unspecified" ? (
-                <span className="text-[10px] text-amber-400 font-bold animate-pulse">Required *</span>
+                hasNamedCustomer ? (
+                  <span className="text-[10px] text-amber-400 font-bold animate-pulse">Required *</span>
+                ) : (
+                  <span className="text-[10px] text-zinc-500">Optional</span>
+                )
               ) : (
                 <span className="text-[10px] text-emerald-400 font-medium">✓ {draftCustomer.gender.toUpperCase()}</span>
               )}

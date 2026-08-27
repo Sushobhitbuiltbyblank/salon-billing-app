@@ -68,9 +68,10 @@ export function generateInvoiceNumber(prefix: string = "BZ-"): string {
 }
 
 export function getReceiptPublicUrl(invoice: Invoice): string {
-  const baseUrl = typeof window !== "undefined" && window.location.origin
-    ? window.location.origin
-    : "https://belezia-salon-billing-app.vercel.app";
+  const baseUrl =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "https://belezia-salon-billing-app.vercel.app";
 
   const identifier = invoice.invoice_number || invoice.id;
   return `${baseUrl}/receipt/${encodeURIComponent(identifier)}`;

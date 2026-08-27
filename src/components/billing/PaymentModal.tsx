@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { calculateInvoiceTotals } from "@/lib/calculations";
 import { formatCurrency, generateInvoiceNumber, generateUUID } from "@/lib/utils";
-import { normalizePhoneNumber } from "@/lib/customerUtils";
+import { normalizePhoneNumber, isAnonymousCustomerName } from "@/lib/customerUtils";
 import { QRCodeSVG } from "qrcode.react";
 import confetti from "canvas-confetti";
 
@@ -90,7 +90,7 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
   const hasNamedCustomer = Boolean(
     draftCustomer?.name &&
     draftCustomer.name.trim() !== "" &&
-    draftCustomer.name.toLowerCase() !== "walk-in guest"
+    !isAnonymousCustomerName(draftCustomer.name)
   );
 
   const handleCheckout = async () => {
@@ -125,17 +125,20 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
       return;
     }
 
-    // VALIDATE GENDER MANDATORY FOR EVERY BILL
-    if (!draftCustomer?.gender || draftCustomer.gender === "unspecified") {
+    // VALIDATE GENDER MANDATORY ONLY FOR SPECIFIC NAMED / REGISTERED CUSTOMERS (OPTIONAL FOR GUEST / WALK-IN)
+    if (hasNamedCustomer && (!draftCustomer?.gender || draftCustomer.gender === "unspecified")) {
       alert(
-        "⚠️ Customer Gender Required\n\nPlease select the customer gender (👩 Female, 👨 Male, or ⚧ Other) before completing payment."
+        "⚠️ Customer Gender Required\n\nPlease select the customer gender (👩 Female, 👨 Male, or ⚧ Other) for this customer profile before completing payment."
       );
       return;
     }
 
     const invoiceNumber = generateInvoiceNumber(settings.invoice_prefix);
 
-    const chosenGender = draftCustomer?.gender || "female";
+    const chosenGender: "female" | "male" | "other" | "unspecified" =
+      draftCustomer?.gender && draftCustomer.gender !== "unspecified"
+        ? draftCustomer.gender
+        : "unspecified";
 
     const cleanPhone = normalizePhoneNumber(draftCustomer?.phone);
     let savedCustomerId = draftCustomer?.id;
@@ -153,7 +156,7 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
         name: draftCustomer?.name?.trim() || matchedCust?.name || `Guest (${cleanPhone})`,
         phone: cleanPhone.length === 10 ? cleanPhone : (draftCustomer?.phone || matchedCust?.phone || ""),
         email: draftCustomer?.email || matchedCust?.email || undefined,
-        gender: chosenGender,
+        gender: chosenGender !== "unspecified" ? chosenGender : "female",
         birthday: draftCustomer?.birthday || matchedCust?.birthday || undefined,
         notes: draftCustomer?.notes || matchedCust?.notes || undefined,
         total_visits: (matchedCust?.total_visits || 0) + 1,
@@ -237,24 +240,30 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
         </div>
       </DialogHeader>
 
-      {/* GENDER & CLIENT SELECTOR BANNER - MANDATORY FOR EVERY BILL */}
+      {/* GENDER & CLIENT SELECTOR BANNER */}
       <div
         className={`mt-3 p-3 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 ${
-          !isGenderSet
+          !isGenderSet && hasNamedCustomer
             ? "bg-amber-950/40 border-amber-500/60 shadow-lg shadow-amber-900/20"
             : "bg-zinc-950/80 border-zinc-800"
         }`}
       >
         <div className="flex items-center gap-2">
-          <span className="text-base">{!isGenderSet ? "⚠️" : "👤"}</span>
+          <span className="text-base">{!isGenderSet && hasNamedCustomer ? "⚠️" : "👤"}</span>
           <div>
             <div className="text-xs font-bold text-white flex items-center gap-1.5">
               <span>Customer Gender</span>
-              <span className="text-rose-400 font-bold">* (Mandatory)</span>
+              {hasNamedCustomer ? (
+                <span className="text-rose-400 font-bold">* (Required for Client Profile)</span>
+              ) : (
+                <span className="text-zinc-500 font-normal">(Optional for Guest)</span>
+              )}
             </div>
             <div className="text-[11px] text-zinc-400">
               {!isGenderSet
-                ? "Please select gender before proceeding with payment"
+                ? hasNamedCustomer
+                  ? "Please select gender for client profile"
+                  : "Optional for Walk-in / Guest"
                 : `Selected: ${draftCustomer?.gender?.toUpperCase()}`}
             </div>
           </div>
