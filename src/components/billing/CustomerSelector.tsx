@@ -220,7 +220,10 @@ export function CustomerSelector() {
               {showAdvanced ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             </button>
 
-            {draftCustomer && (draftCustomer.name || draftCustomer.phone) && (
+            {draftCustomer &&
+              (draftCustomer.name ||
+                draftCustomer.phone ||
+                (draftCustomer.gender && draftCustomer.gender !== "unspecified")) && (
               <button
                 type="button"
                 onClick={handleResetToWalkIn}

@@ -597,6 +597,73 @@ describe("Billing Without Person Selection", () => {
     expect(isAnonymousCustomerName("Aditi Rao")).toBe(false);
     expect(isAnonymousCustomerName("Rahul Sharma")).toBe(false);
   });
+
+  it("12. Allows creating invoice when gender is selected by mistake without customer name or phone number", () => {
+    // Simulate draft customer state where only gender was clicked
+    const draftCustomer = {
+      gender: "female" as const,
+      name: "",
+      phone: "",
+    };
+
+    const hasNamedCustomer = Boolean(
+      draftCustomer.name &&
+      draftCustomer.name.trim() !== "" &&
+      !isAnonymousCustomerName(draftCustomer.name)
+    );
+
+    // Gender should NOT block checkout because this is a walk-in guest
+    expect(hasNamedCustomer).toBe(false);
+
+    const initialCustomersCount = Storage.getCustomers().length;
+
+    const invoice: Invoice = {
+      id: "inv-walkin-gender-only",
+      invoice_number: "BZ-112",
+      customer_name: draftCustomer.name?.trim() || "Walk-in Guest",
+      customer_phone: draftCustomer.phone || "",
+      customer_gender: draftCustomer.gender,
+      subtotal: 500,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 500,
+      payment_mode: "cash",
+      status: "paid",
+      created_at: new Date().toISOString(),
+      items: [
+        {
+          id: "it-1",
+          item_name: "Hair Spa",
+          item_type: "service",
+          quantity: 1,
+          unit_price: 500,
+          discount: 0,
+          total_price: 500,
+          primary_staff_id: "staff-1",
+        },
+      ],
+    };
+
+    const saved = Storage.createInvoice(invoice);
+    expect(saved).toBeDefined();
+    expect(saved.customer_name).toBe("Walk-in Guest");
+    expect(saved.customer_gender).toBe("female");
+    expect(saved.customer_phone).toBe("");
+
+    // Verify no unwanted ghost customer was added to CRM
+    const afterCustomersCount = Storage.getCustomers().length;
+    expect(afterCustomersCount).toBe(initialCustomersCount);
+
+    // Verify stored invoice is retrievable
+    const stored = Storage.getInvoices().find((i) => i.id === "inv-walkin-gender-only");
+    expect(stored).toBeDefined();
+    expect(stored?.customer_name).toBe("Walk-in Guest");
+    expect(stored?.customer_gender).toBe("female");
+  });
 });
+
 
 
