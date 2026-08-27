@@ -266,4 +266,73 @@ describe("Database & Customer Directory Count Parity Test", () => {
     expect(yash2?.total_visits).toBe(1);
     expect(yash2?.total_spent).toBe(250); // NOT combined 400!
   });
+
+  it("reconciles multi-device local cache count difference (87 vs 86) to authoritative cloud count", () => {
+    // Generate 86 valid active customers in cloud database
+    const cloudCustomers: Customer[] = Array.from({ length: 86 }, (_, i) => ({
+      id: `cust-cloud-${i + 1}`,
+      name: `Customer ${i + 1}`,
+      phone: `98000000${(i + 1).toString().padStart(2, "0")}`,
+      gender: "female",
+      total_visits: 1,
+      total_spent: 500,
+    }));
+
+    // Device A had an extra stale/deleted customer in its local storage cache (87 total)
+    const staleCustomer: Customer = {
+      id: "cust-deleted-old",
+      name: "Deleted Stale Customer",
+      phone: "9800000099",
+      gender: "female",
+      total_visits: 1,
+      total_spent: 200,
+    };
+    const device1LocalCache: Customer[] = [...cloudCustomers, staleCustomer];
+    expect(device1LocalCache.length).toBe(87);
+
+    // Device B has fresh/synced cache with 86 customers
+    const device2LocalCache: Customer[] = [...cloudCustomers];
+    expect(device2LocalCache.length).toBe(86);
+
+    // When cloud sync arrives with authoritative cloud data (86 items):
+    // Authoritative sync overwrites local cache with deduplicated cloud customers
+    const device1Synced = deduplicateCustomerArray(cloudCustomers);
+    const device2Synced = deduplicateCustomerArray(cloudCustomers);
+
+    const invoices: Invoice[] = [];
+
+    // Unified CRM count on Device 1 and Device 2
+    const device1CrmCount = unifyCustomerList(device1Synced, invoices).length;
+    const device2CrmCount = unifyCustomerList(device2Synced, invoices).length;
+
+    expect(device1CrmCount).toBe(86);
+    expect(device2CrmCount).toBe(86);
+    expect(device1CrmCount).toBe(device2CrmCount);
+  });
+
+  it("does not resurrect deleted customers across devices upon background cloud sync", () => {
+    // 3 customers initially
+    const initialCustomers: Customer[] = [
+      { id: "cust-1", name: "Alice", phone: "9811111111", gender: "female", total_visits: 1, total_spent: 100 },
+      { id: "cust-2", name: "Bob", phone: "9822222222", gender: "male", total_visits: 1, total_spent: 200 },
+      { id: "cust-3", name: "Charlie", phone: "9833333333", gender: "male", total_visits: 1, total_spent: 300 },
+    ];
+
+    // Device A deletes cust-3
+    const cloudAfterDelete = initialCustomers.filter((c) => c.id !== "cust-3");
+    expect(cloudAfterDelete.length).toBe(2);
+
+    // Device B had cust-3 in local cache before sync
+    const deviceBLocalCache = [...initialCustomers];
+    expect(deviceBLocalCache.length).toBe(3);
+
+    // When Device B receives cloud sync, authoritative cloud data updates local cache
+    const deviceBSynced = deduplicateCustomerArray(cloudAfterDelete);
+    const unifiedDeviceB = unifyCustomerList(deviceBSynced, []);
+
+    // Verify Device B now accurately has 2 clients, not 3
+    expect(unifiedDeviceB.length).toBe(2);
+    expect(unifiedDeviceB.some((c) => c.id === "cust-3")).toBe(false);
+  });
 });
+

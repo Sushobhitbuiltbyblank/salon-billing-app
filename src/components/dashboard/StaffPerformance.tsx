@@ -138,7 +138,9 @@ export function StaffPerformance() {
     updateStaff({
       ...editingStaff,
       commission_rate: Number(editingStaff.commission_rate) || 0,
+      commission_type: editingStaff.commission_type || "percent",
       product_commission_rate: Number(editingStaff.product_commission_rate) || 0,
+      product_commission_type: editingStaff.product_commission_type || "percent",
     });
     setIsModalOpen(false);
     setEditingStaff(null);

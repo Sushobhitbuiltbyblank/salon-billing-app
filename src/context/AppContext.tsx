@@ -169,18 +169,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setInvoices(Storage.getInvoices());
       setExpenses(Storage.getExpenses());
       setAttendance(Storage.getAttendance());
-
-      if (resetResult.didReset && isSupabaseConfigured()) {
-        resetResult.staff.forEach((st) => SupabaseSync.saveStaff(st));
-      }
     } else {
       // Check if day rolled over while app was running or tab was idle
       const resetResult = Storage.checkAndResetDailyStaffStatus();
       if (resetResult.didReset) {
         setStaff(resetResult.staff);
-        if (isSupabaseConfigured()) {
-          resetResult.staff.forEach((st) => SupabaseSync.saveStaff(st));
-        }
       }
     }
 
@@ -210,10 +203,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.saveCatalog(cloudData.catalog);
         }
         if (cloudData.customers) {
-          const localCusts = Storage.getCustomers();
-          const mergedCusts = deduplicateCustomerArray([...localCusts, ...cloudData.customers]);
-          setCustomers(mergedCusts);
-          Storage.saveCustomers(mergedCusts);
+          const deduplicatedCloud = deduplicateCustomerArray(cloudData.customers);
+          setCustomers((prev) =>
+            JSON.stringify(prev) !== JSON.stringify(deduplicatedCloud) ? deduplicatedCloud : prev
+          );
+          Storage.saveCustomers(deduplicatedCloud);
         }
         if (cloudData.invoices) {
           setInvoices((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.invoices) ? cloudData.invoices : prev));

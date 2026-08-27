@@ -112,11 +112,17 @@ export const SupabaseSync = {
           let floorStatus = s.status || "active";
 
           try {
-            if (s.notes && s.notes.startsWith("{")) {
+            if (s.notes && typeof s.notes === "string" && s.notes.startsWith("{")) {
               const meta = JSON.parse(s.notes);
-              commission_type = meta.commission_type || "percent";
-              product_commission_rate = meta.product_commission_rate !== undefined ? Number(meta.product_commission_rate) : (Number(s.commission_rate) || 0);
-              product_commission_type = meta.product_commission_type || "percent";
+              if (meta.commission_type === "fixed" || meta.commission_type === "percent") {
+                commission_type = meta.commission_type;
+              }
+              if (meta.product_commission_rate !== undefined) {
+                product_commission_rate = Number(meta.product_commission_rate) || 0;
+              }
+              if (meta.product_commission_type === "fixed" || meta.product_commission_type === "percent") {
+                product_commission_type = meta.product_commission_type;
+              }
               if (meta.floor_status) {
                 floorStatus = meta.floor_status;
               }
@@ -510,21 +516,27 @@ export const SupabaseSync = {
   async saveStaff(staffMember: Staff) {
     if (!isSupabaseConfigured() || !supabase) return null;
     try {
+      const validStatus =
+        staffMember.status === "half_day" ||
+        staffMember.status === "on_leave" ||
+        staffMember.status === "weekly_off" ||
+        staffMember.status === "inactive"
+          ? staffMember.status
+          : "active";
+
+      const todayStr = new Date().toLocaleDateString("en-CA");
+
       const incentiveMeta = {
         commission_type: staffMember.commission_type || "percent",
-        product_commission_rate: staffMember.product_commission_rate ?? staffMember.commission_rate,
+        product_commission_rate:
+          staffMember.product_commission_rate !== undefined
+            ? Number(staffMember.product_commission_rate)
+            : (Number(staffMember.commission_rate) || 0),
         product_commission_type: staffMember.product_commission_type || "percent",
-        floor_status: staffMember.status || "active",
+        floor_status: validStatus,
+        status_date: todayStr,
         custom_notes: staffMember.notes || "",
       };
-
-      // Ensure status is valid for any legacy DB constraints ('active', 'on_leave', 'inactive')
-      const safePgStatus =
-        staffMember.status === "inactive"
-          ? "inactive"
-          : staffMember.status === "on_leave" || staffMember.status === "weekly_off"
-          ? "on_leave"
-          : "active";
 
       const payload = {
         id: staffMember.id,
@@ -532,14 +544,37 @@ export const SupabaseSync = {
         phone: staffMember.phone || null,
         role: staffMember.role,
         commission_rate: Number(staffMember.commission_rate) || 0,
-        status: staffMember.status === "half_day" || staffMember.status === "weekly_off" ? safePgStatus : (staffMember.status || "active"),
+        status: validStatus,
         color: staffMember.color || null,
         notes: JSON.stringify(incentiveMeta),
       };
 
       const { data, error } = await supabase.from("staff").upsert(payload).select().single();
       if (error) {
-        console.error("Supabase saveStaff error:", error);
+        // Fallback for legacy DB constraints where 'half_day' or 'weekly_off' might trigger a check constraint
+        const safePgStatus =
+          validStatus === "inactive"
+            ? "inactive"
+            : validStatus === "on_leave" || validStatus === "weekly_off"
+            ? "on_leave"
+            : "active";
+
+        const fallbackPayload = {
+          ...payload,
+          status: safePgStatus,
+        };
+
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("staff")
+          .upsert(fallbackPayload)
+          .select()
+          .single();
+
+        if (fallbackError) {
+          console.error("Supabase saveStaff error:", fallbackError);
+          return null;
+        }
+        return fallbackData;
       }
       return data;
     } catch (err) {
