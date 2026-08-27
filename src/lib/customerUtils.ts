@@ -185,26 +185,6 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
           matched.last_visit = inv.created_at;
         }
       }
-    } else {
-      // Create new customer entry discovered from invoice with distinct mobile number
-      const newCust: Customer = {
-        id: inv.customer_id || generateUUID(),
-        name: rawName || `Guest (${cleanPhone})`,
-        phone: cleanPhone,
-        email: inv.customer_email || undefined,
-        gender:
-          inv.customer_gender && inv.customer_gender !== "unspecified"
-            ? inv.customer_gender
-            : "female",
-        total_visits: 0,
-        total_spent: 0,
-        last_visit: inv.created_at,
-        created_at: inv.created_at || new Date().toISOString(),
-      };
-
-      unifiedList.push(newCust);
-      if (newCust.id) idMap.set(newCust.id, newCust);
-      phoneMap.set(cleanPhone, newCust);
     }
   });
 

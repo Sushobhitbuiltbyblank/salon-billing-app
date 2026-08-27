@@ -145,13 +145,23 @@ describe("Customer CRM & Phone Normalization Utils", () => {
       expect(unified[0].total_spent).toBe(250);
     });
 
-    it("discovers unregistered clients from invoices and calculates visits & spend", () => {
-      const registered: Customer[] = [];
+    it("maintains strict CRM count parity with registered DB customers while accurately computing visits & spend from invoices", () => {
+      const registered: Customer[] = [
+        {
+          id: "cust-rohan",
+          name: "Rohan",
+          phone: "9811122233",
+          gender: "male",
+          total_visits: 0,
+          total_spent: 0,
+        },
+      ];
 
       const invoices: Invoice[] = [
         {
           id: "inv-1",
           invoice_number: "BZ-1001",
+          customer_id: "cust-rohan",
           customer_name: "Rohan",
           customer_phone: "9811122233",
           customer_gender: "male",
@@ -170,6 +180,7 @@ describe("Customer CRM & Phone Normalization Utils", () => {
         {
           id: "inv-2",
           invoice_number: "BZ-1002",
+          customer_id: "cust-rohan",
           customer_name: "Rohan",
           customer_phone: "+91 9811122233",
           customer_gender: "male",

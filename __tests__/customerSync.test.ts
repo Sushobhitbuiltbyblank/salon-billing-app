@@ -445,6 +445,68 @@ describe("Database & Customer Directory Count Parity Test", () => {
     expect(foundOnDeviceC?.total_visits).toBe(1);
     expect(foundOnDeviceC?.total_spent).toBe(1500);
   });
+
+  it("9. Exact User Scenario: When Supabase DB has 100 customer records, Customer Directory shows exactly 100 (strict parity)", () => {
+    // 100 real customer records in Supabase DB
+    const dbCustomers: Customer[] = Array.from({ length: 100 }, (_, i) => ({
+      id: `cust-${i + 1}`,
+      name: `Client ${i + 1}`,
+      phone: `9876500${(i + 1).toString().padStart(3, "0")}`,
+      gender: i % 2 === 0 ? "female" : "male",
+      total_visits: 1,
+      total_spent: 350,
+    }));
+
+    // Invoices containing transactions (both for these 100 clients and any anonymous/walk-in bills)
+    const invoices: Invoice[] = [
+      {
+        id: "inv-walkin-anon",
+        invoice_number: "BZ-900",
+        customer_name: "Walk-in Guest",
+        customer_phone: "",
+        subtotal: 200,
+        discount_amount: 0,
+        discount_type: "flat",
+        discount_value: 0,
+        tax_amount: 0,
+        tax_rate: 0,
+        grand_total: 200,
+        payment_mode: "cash",
+        status: "paid",
+        created_at: new Date().toISOString(),
+        items: [],
+      },
+      {
+        id: "inv-old-log",
+        invoice_number: "BZ-901",
+        customer_name: "Old Deleted Client",
+        customer_phone: "9899999999", // Deleted from customers table
+        subtotal: 500,
+        discount_amount: 0,
+        discount_type: "flat",
+        discount_value: 0,
+        tax_amount: 0,
+        tax_rate: 0,
+        grand_total: 500,
+        payment_mode: "upi",
+        status: "paid",
+        created_at: new Date().toISOString(),
+        items: [],
+      },
+    ];
+
+    // Deduplicate cloud data
+    const deduplicatedCloud = deduplicateCustomerArray(dbCustomers);
+    expect(deduplicatedCloud.length).toBe(100);
+
+    // Unify CRM Directory list
+    const unifiedDirectory = unifyCustomerList(deduplicatedCloud, invoices);
+
+    // Assert exact 100 count parity: Must be exactly 100, not 107 or 101
+    expect(unifiedDirectory.length).toBe(100);
+    expect(unifiedDirectory.length).toBe(dbCustomers.length);
+  });
 });
+
 
 
