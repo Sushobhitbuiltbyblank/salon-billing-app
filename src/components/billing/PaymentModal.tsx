@@ -141,9 +141,9 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
         : "unspecified";
 
     const cleanPhone = normalizePhoneNumber(draftCustomer?.phone);
-    let savedCustomerId = draftCustomer?.id;
+    let savedCustomerId: string | undefined = undefined;
 
-    // Save customer profile with updated gender
+    // Save customer profile with updated gender ONLY if a valid mobile number is present (>= 7 digits)
     if (cleanPhone && cleanPhone.length >= 7) {
       const matchedCust = customers.find(
         (c) =>
@@ -165,6 +165,12 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
         created_at: matchedCust?.created_at || draftCustomer?.created_at || new Date().toISOString(),
       });
       if (savedCust?.id) savedCustomerId = savedCust.id;
+    } else if (draftCustomer?.id) {
+      // Only attach customer_id if this customer already exists in registered CRM
+      const existingInCrm = customers.find((c) => c.id === draftCustomer.id);
+      if (existingInCrm) {
+        savedCustomerId = existingInCrm.id;
+      }
     }
 
     const newInvoice: Invoice = {

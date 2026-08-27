@@ -663,7 +663,104 @@ describe("Billing Without Person Selection", () => {
     expect(stored?.customer_name).toBe("Walk-in Guest");
     expect(stored?.customer_gender).toBe("female");
   });
+
+  it("13. User exact scenario: gender set to male only, package combo selected with stylists, shave service selected with stylist, submit invoice -> invoice is properly saved and appears in invoices list", () => {
+    // 1. Simulating draft state: user clicked gender "male", but did not enter name or phone
+    const draftCustomer = {
+      gender: "male" as const,
+      name: "",
+      phone: "",
+    };
+
+    // 2. Draft items: Package Combo + Shave service with assigned stylists
+    const draftItems: InvoiceItem[] = [
+      {
+        id: "draft-pkg-item",
+        item_id: "cat-pkg-groom",
+        item_name: "Men Grooming Package",
+        item_type: "package",
+        quantity: 1,
+        unit_price: 1200,
+        discount: 0,
+        total_price: 1200,
+        package_services: [
+          {
+            service_id: "svc-haircut",
+            service_name: "Hair Cut",
+            price: 600,
+            primary_staff_id: "staff-1", // Aamir
+          },
+          {
+            service_id: "svc-facial",
+            service_name: "Clean-up",
+            price: 600,
+            primary_staff_id: "staff-2", // Subhaan
+          },
+        ],
+      },
+      {
+        id: "draft-shave-item",
+        item_id: "cat-svc-shave",
+        item_name: "Shave",
+        item_type: "service",
+        quantity: 1,
+        unit_price: 250,
+        discount: 0,
+        total_price: 250,
+        primary_staff_id: "staff-1", // Aamir
+      },
+    ];
+
+    // 3. Totals calculation
+    const totals = calculateInvoiceTotals({
+      items: draftItems,
+      discountType: "flat",
+      discountValue: 0,
+      taxEnabled: false,
+      taxRate: 0,
+    });
+
+    expect(totals.grandTotal).toBe(1450);
+
+    // 4. Construct Invoice as PaymentModal does
+    const newInvoice: Invoice = {
+      id: "d9999999-9999-9999-9999-999999999999",
+      invoice_number: "BZ-2026",
+      customer_id: undefined, // Safely undefined for walk-in to prevent foreign key issues
+      customer_name: draftCustomer.name?.trim() || "Walk-in Guest",
+      customer_phone: draftCustomer.phone || "",
+      customer_gender: draftCustomer.gender || "male",
+      subtotal: totals.subtotal,
+      discount_amount: totals.discountAmount,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: totals.taxAmount,
+      tax_rate: 0,
+      grand_total: totals.grandTotal,
+      payment_mode: "cash",
+      status: "paid",
+      created_at: new Date().toISOString(),
+      items: draftItems,
+    };
+
+    // 5. Save invoice
+    const saved = Storage.createInvoice(newInvoice);
+    expect(saved).toBeDefined();
+    expect(saved.grand_total).toBe(1450);
+    expect(saved.customer_name).toBe("Walk-in Guest");
+    expect(saved.customer_gender).toBe("male");
+    expect(saved.items.length).toBe(2);
+
+    // 6. Verify invoice shows in invoice list
+    const invoices = Storage.getInvoices();
+    const foundInvoice = invoices.find((inv) => inv.id === "d9999999-9999-9999-9999-999999999999");
+    expect(foundInvoice).toBeDefined();
+    expect(foundInvoice?.items.length).toBe(2);
+    expect(foundInvoice?.items[0].item_name).toBe("Men Grooming Package");
+    expect(foundInvoice?.items[1].item_name).toBe("Shave");
+  });
 });
+
 
 
 

@@ -284,7 +284,7 @@ export const SupabaseSync = {
       });
 
       // Ensure customer profile is recorded in Supabase customers table with correct gender
-      let finalCustomerId = isValidUUID(invoice.customer_id) ? invoice.customer_id : null;
+      let finalCustomerId: string | null = null;
       const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
       if (cleanPhone && cleanPhone.length >= 7) {
         const standardPhone = cleanPhone.length === 10 ? cleanPhone : (invoice.customer_phone || "");
@@ -313,7 +313,7 @@ export const SupabaseSync = {
           Number(invoice.grand_total || 0);
 
         const customerPayload = {
-          id: existingCust?.id || finalCustomerId || undefined,
+          id: existingCust?.id || (isValidUUID(invoice.customer_id) ? invoice.customer_id : undefined),
           name: invoice.customer_name || `Guest (${standardPhone})`,
           phone: standardPhone,
           email: invoice.customer_email || null,
@@ -332,6 +332,17 @@ export const SupabaseSync = {
 
         if (upsertedCust?.id) {
           finalCustomerId = upsertedCust.id;
+        }
+      } else if (isValidUUID(invoice.customer_id)) {
+        // Verify customer_id actually exists in Supabase customers table to prevent foreign key error
+        const { data: custExists } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("id", invoice.customer_id)
+          .maybeSingle();
+
+        if (custExists?.id) {
+          finalCustomerId = custExists.id;
         }
       }
 
@@ -421,9 +432,21 @@ export const SupabaseSync = {
       });
 
       // 1. Update invoice header
+      let finalCustomerId: string | null = null;
+      if (isValidUUID(invoice.customer_id)) {
+        const { data: custExists } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("id", invoice.customer_id)
+          .maybeSingle();
+        if (custExists?.id) {
+          finalCustomerId = custExists.id;
+        }
+      }
+
       const invoiceHeader = {
         invoice_number: invoice.invoice_number,
-        customer_id: isValidUUID(invoice.customer_id) ? invoice.customer_id : null,
+        customer_id: finalCustomerId,
         customer_name: invoice.customer_name || "Walk-in Guest",
         customer_phone: invoice.customer_phone || null,
         subtotal: Number(invoice.subtotal) || 0,

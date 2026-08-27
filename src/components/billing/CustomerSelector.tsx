@@ -333,7 +333,7 @@ export function CustomerSelector() {
                       const newGender = g.id as any;
                       const nextCustomer: Partial<Customer> = {
                         ...(draftCustomer || {}),
-                        id: draftCustomer?.id || generateUUID(),
+                        id: draftCustomer?.id,
                         name: draftCustomer?.name || "",
                         phone: draftCustomer?.phone || "",
                         gender: newGender,
