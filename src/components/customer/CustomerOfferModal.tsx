@@ -141,37 +141,16 @@ export function CustomerOfferModal({
     document.body.removeChild(link);
   };
 
-  // 4. Main Send on WhatsApp Action
+  // 4. Main Send on WhatsApp Action (Direct WhatsApp Chat matching Reminder behavior)
   const handleSendWhatsApp = async () => {
     if (!customer) return;
     setIsProcessing(true);
 
     const cleanPhone = normalizePhoneNumber(customer.phone);
-    const standardPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
     const textToSend = includeText ? customText.trim() : "";
 
     try {
-      // Step A: Attempt Native Share on Mobile / iPad if supported
-      const originalBlob = await getImageBlob(false);
-      if (originalBlob && typeof navigator !== "undefined" && navigator.canShare) {
-        const file = new File([originalBlob], "Belezia_Raksha_Bandhan_Offer.jpg", {
-          type: originalBlob.type || "image/jpeg",
-        });
-
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: `Happy Raksha Bandhan Offer - ${salonName}`,
-            text: textToSend || undefined,
-          });
-          showToast("✅ Shared offer image successfully!");
-          setIsProcessing(false);
-          return;
-        }
-      }
-
-      // Step B: Desktop / WhatsApp Web workflow
-      // 1. Copy image to clipboard for instant pasting (Ctrl+V / Cmd+V)
+      // 1. Copy offer image to clipboard for instant pasting (Ctrl+V / Cmd+V / Tap Paste)
       const pngBlob = await getImageBlob(true);
       if (pngBlob && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
         try {
@@ -179,26 +158,26 @@ export function CustomerOfferModal({
           setCopiedImage(true);
           setTimeout(() => setCopiedImage(false), 3000);
         } catch (clipErr) {
-          console.warn("Clipboard write failed:", clipErr);
+          console.warn("Clipboard write skipped:", clipErr);
         }
       }
 
-      // 2. Open WhatsApp Web / App
-      const encodedText = encodeURIComponent(textToSend);
-      const waUrl = standardPhone
-        ? `https://api.whatsapp.com/send?phone=${standardPhone}&text=${encodedText}`
-        : `https://api.whatsapp.com/send?text=${encodedText}`;
+      // 2. Open Direct WhatsApp Chat with the customer (Identical to WhatsApp Reminder URL format)
+      const waUrl = cleanPhone
+        ? textToSend
+          ? `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(textToSend)}`
+          : `https://wa.me/91${cleanPhone}`
+        : `https://wa.me/?text=${encodeURIComponent(textToSend)}`;
 
       window.open(waUrl, "_blank", "noopener,noreferrer");
 
-      if (includeText) {
-        showToast("📋 Offer image copied to clipboard! Paste (Ctrl+V) in WhatsApp to attach the photo.");
-      } else {
-        showToast("📋 Offer image copied to clipboard! Paste (Ctrl+V) in WhatsApp to send.");
-      }
+      showToast("✓ WhatsApp opened! Press Ctrl+V (or Paste) to attach the offer photo.");
     } catch (err) {
       console.error("WhatsApp share error:", err);
-      showToast("Opened WhatsApp chat.");
+      // Fallback
+      if (cleanPhone) {
+        window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(textToSend)}`, "_blank");
+      }
     } finally {
       setIsProcessing(false);
     }

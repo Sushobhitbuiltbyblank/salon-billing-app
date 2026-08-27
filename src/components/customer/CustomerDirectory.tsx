@@ -27,6 +27,7 @@ import {
 import {
   detectCustomerReminders,
   generateWhatsAppReminderUrl,
+  generateWhatsAppRakhiOfferUrl,
   wasReminderSentToday,
 } from "@/lib/reminderUtils";
 import {
@@ -276,6 +277,46 @@ export function CustomerDirectory() {
 
     setSyncMessage(`✓ WhatsApp reminder launched for ${cust.name}! Marked as sent today.`);
     setTimeout(() => setSyncMessage(null), 4000);
+  };
+
+  // SEND RAKHI OFFER DIRECT 1-CLICK WHATSAPP TRIGGER
+  const handleDirectSendRakhiOffer = async (cust: Customer) => {
+    const cleanPhone = normalizePhoneNumber(cust.phone);
+    if (!cleanPhone || cleanPhone.length < 7) {
+      alert("No valid mobile number found for this customer.");
+      return;
+    }
+
+    // 1. Copy image to clipboard for instant pasting
+    try {
+      const response = await fetch("/offers/raksha-bandhan-offer.jpg");
+      const originalBlob = await response.blob();
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob((pngBlob) => {
+            if (pngBlob && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+              navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+            }
+          }, "image/png");
+        }
+      };
+      img.src = "/offers/raksha-bandhan-offer.jpg";
+    } catch (e) {
+      console.warn("Direct image copy skipped:", e);
+    }
+
+    // 2. Open Direct WhatsApp Chat with the customer pre-filled with the Rakhi wish & offer
+    const url = generateWhatsAppRakhiOfferUrl(cust, settings.salon_name || "Belezia Salon");
+    window.open(url, "_blank", "noopener,noreferrer");
+    setSyncMessage(`✓ Rakhi Offer WhatsApp opened for ${cust.name}! (Offer image copied to clipboard - press Ctrl+V to attach)`);
+    setTimeout(() => setSyncMessage(null), 5000);
   };
 
   const handleEdit = (customer: Customer) => {
@@ -897,16 +938,28 @@ export function CustomerDirectory() {
 
                 {/* CARD FOOTER ACTIONS */}
                 <div className="flex flex-col gap-2 pt-3 mt-3 border-t border-zinc-800/80">
-                  {/* SEND RAKSHA BANDHAN OFFER BUTTON */}
-                  <Button
-                    size="sm"
-                    onClick={() => handleOpenOffer(cust)}
-                    className="w-full flex items-center justify-center gap-2 py-2 rounded-xl font-bold text-xs bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:via-pink-500 hover:to-amber-500 text-white shadow-md shadow-rose-600/30 cursor-pointer transition-all border border-rose-400/30"
-                    title="Send Happy Raksha Bandhan special offer image on WhatsApp"
-                  >
-                    <Gift className="h-3.5 w-3.5 text-amber-200" />
-                    <span>Send Rakhi Offer (Image & Text)</span>
-                  </Button>
+                  {/* SEND RAKSHA BANDHAN OFFER (DIRECT 1-CLICK & CUSTOMIZE) */}
+                  <div className="flex items-center gap-1.5 w-full">
+                    <Button
+                      size="sm"
+                      onClick={() => handleDirectSendRakhiOffer(cust)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:via-pink-500 hover:to-amber-500 text-white shadow-md shadow-rose-600/30 cursor-pointer transition-all border border-rose-400/30"
+                      title="Directly open customer's WhatsApp chat with Raksha Bandhan offer & wish"
+                    >
+                      <Gift className="h-3.5 w-3.5 text-amber-200" />
+                      <span>Send Rakhi Offer</span>
+                    </Button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenOffer(cust)}
+                      className="px-2.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-rose-300 hover:text-white border border-rose-500/30 transition-colors cursor-pointer shrink-0 text-xs font-bold flex items-center gap-1"
+                      title="Preview offer banner, edit message text, or download image"
+                    >
+                      <Sparkles className="h-3 w-3 text-amber-400" />
+                      <span>Preview</span>
+                    </button>
+                  </div>
 
                   {/* WHATSAPP TRIGGER BUTTON */}
                   <Button
