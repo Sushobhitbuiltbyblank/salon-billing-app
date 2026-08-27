@@ -81,15 +81,19 @@ export function CustomerModal({
       alert("A valid 10-digit mobile number is required to save customer profile in CRM.");
       return;
     }
+    if (!gender || (gender as string) === "unspecified") {
+      alert("⚠️ Customer Gender Required\n\nPlease select the customer gender (👩 Female, 👨 Male, or ⚧ Other) before saving.");
+      return;
+    }
 
     const customerData: Customer = {
       id: customerToEdit?.id || generateUUID(),
       name: name.trim(),
       phone: cleanPhone,
-      gender: gender && (gender as string) !== "unspecified" ? gender : "female",
+      gender: gender,
       email: email.trim() || undefined,
-      birthday: birthday || undefined,
-      anniversary: anniversary || undefined,
+      birthday: birthday?.trim() || undefined,
+      anniversary: anniversary?.trim() || undefined,
       notes: notes.trim() || undefined,
       total_visits: customerToEdit?.total_visits || 0,
       total_spent: customerToEdit?.total_spent || 0,

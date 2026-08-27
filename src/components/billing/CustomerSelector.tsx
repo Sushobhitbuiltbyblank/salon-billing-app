@@ -157,7 +157,7 @@ export function CustomerSelector() {
 
   const handleSaveCurrentCustomer = async () => {
     if (!draftCustomer?.name?.trim()) {
-      alert("Customer Name is required to save customer.");
+      alert("Customer Name is required to save customer profile.");
       return;
     }
     const cleanPhone = normalizePhoneNumber(draftCustomer?.phone);
@@ -165,14 +165,20 @@ export function CustomerSelector() {
       alert("A valid 10-digit mobile number is required to save customer profile in CRM.");
       return;
     }
+    if (!draftCustomer?.gender || draftCustomer.gender === "unspecified") {
+      alert(
+        "⚠️ Customer Gender Required\n\nPlease select the customer gender (👩 Female, 👨 Male, or ⚧ Other) before saving the client profile."
+      );
+      return;
+    }
     const saved = await saveCustomer({
       id: draftCustomer.id || generateUUID(),
       name: draftCustomer.name.trim(),
       phone: cleanPhone,
-      gender: draftCustomer.gender || "female",
-      email: draftCustomer.email,
-      birthday: draftCustomer.birthday,
-      notes: draftCustomer.notes,
+      gender: draftCustomer.gender,
+      email: draftCustomer.email?.trim() || undefined,
+      birthday: draftCustomer.birthday?.trim() || undefined,
+      notes: draftCustomer.notes?.trim() || undefined,
       total_visits: draftCustomer.total_visits || 0,
       total_spent: draftCustomer.total_spent || 0,
       created_at: draftCustomer.created_at || new Date().toISOString(),

@@ -804,21 +804,55 @@ export const SupabaseSync = {
         created_at: customer.created_at || new Date().toISOString(),
       };
 
-      if (customerId) {
-        payload.id = customerId;
+      let resultData = null;
+
+      if (existingCust?.id) {
+        // Customer already exists in Supabase: Update by primary key ID
+        const { data: updated, error: updateErr } = await supabase
+          .from("customers")
+          .update(payload)
+          .eq("id", existingCust.id)
+          .select()
+          .maybeSingle();
+
+        if (updateErr) {
+          console.error("Supabase update customer error:", updateErr);
+        } else {
+          resultData = updated;
+        }
+      } else {
+        // Customer is new: Insert new customer record
+        const insertPayload = {
+          ...payload,
+          id: isValidUUID(customer.id) ? customer.id : undefined,
+        };
+
+        const { data: inserted, error: insertErr } = await supabase
+          .from("customers")
+          .insert(insertPayload)
+          .select()
+          .maybeSingle();
+
+        if (insertErr) {
+          console.warn("Supabase customer insert error, attempting update by phone:", insertErr);
+          const { data: fallbackUpdated, error: fallbackErr } = await supabase
+            .from("customers")
+            .update(payload)
+            .eq("phone", standardPhone)
+            .select()
+            .maybeSingle();
+
+          if (fallbackErr) {
+            console.error("Supabase fallback update error:", fallbackErr);
+          } else {
+            resultData = fallbackUpdated;
+          }
+        } else {
+          resultData = inserted;
+        }
       }
 
-      const { data, error } = await supabase
-        .from("customers")
-        .upsert(payload, { onConflict: "phone" })
-        .select()
-        .maybeSingle();
-
-      if (error) {
-        console.error("Supabase saveCustomer error:", error);
-        return null;
-      }
-      return data;
+      return resultData;
     } catch (err) {
       console.error("Supabase saveCustomer error:", err);
       return null;

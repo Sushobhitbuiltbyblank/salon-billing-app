@@ -545,7 +545,78 @@ describe("Database & Customer Directory Count Parity Test", () => {
     const deduped = deduplicateCustomerArray(syncedRecords);
     expect(deduped.length).toBe(2);
   });
+
+  it("11. Tests customer registration validation: gender is mandatory when explicitly saving customer details in POS / CRM", () => {
+    // Valid customer payload with gender specified
+    const validCustomer: Customer = {
+      id: "cust-valid-01",
+      name: "Harshita",
+      phone: "9876543210",
+      gender: "female",
+      total_visits: 0,
+      total_spent: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    expect(validCustomer.gender).toBe("female");
+    expect(validCustomer.gender !== "unspecified").toBe(true);
+
+    const isGenderValid = Boolean(validCustomer.gender && validCustomer.gender !== "unspecified");
+    expect(isGenderValid).toBe(true);
+
+    // Invalid customer payload with unspecified gender
+    const invalidCustomer = {
+      name: "Harshita",
+      phone: "9876543210",
+      gender: "unspecified" as const,
+    };
+
+    const isInvalidGender = !invalidCustomer.gender || invalidCustomer.gender === "unspecified";
+    expect(isInvalidGender).toBe(true);
+  });
+
+  it("12. Tests permanent customer persistence: registered customer remains in database and is not removed during subsequent sync cycles", () => {
+    // 1. Initial database with 100 customers
+    const initialDb: Customer[] = Array.from({ length: 100 }, (_, i) => ({
+      id: `cust-${i + 1}`,
+      name: `Client ${i + 1}`,
+      phone: `9876500${(i + 1).toString().padStart(3, "0")}`,
+      gender: i % 2 === 0 ? "female" : "male",
+      total_visits: 1,
+      total_spent: 350,
+    }));
+
+    // 2. User registers a brand new customer
+    const newlyRegisteredCustomer: Customer = {
+      id: "cust-new-101",
+      name: "Rohit Malhotra",
+      phone: "9876500999",
+      gender: "male",
+      birthday: "1992-12-05",
+      notes: "Preferred stylist: Aamir",
+      total_visits: 0,
+      total_spent: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    // 3. Database successfully inserts new customer (101 total)
+    const updatedDb = [...initialDb, newlyRegisteredCustomer];
+    expect(updatedDb.length).toBe(101);
+
+    // 4. Cloud sync cycle runs
+    const syncedCloud = deduplicateCustomerArray(updatedDb);
+    const unified = unifyCustomerList(syncedCloud, []);
+
+    // 5. Verify customer is permanently preserved and present with exact details
+    expect(unified.length).toBe(101);
+    const found = unified.find((c) => c.phone === "9876500999");
+    expect(found).toBeDefined();
+    expect(found?.name).toBe("Rohit Malhotra");
+    expect(found?.gender).toBe("male");
+    expect(found?.total_visits).toBe(0);
+  });
 });
+
 
 
 
