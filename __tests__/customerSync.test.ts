@@ -733,7 +733,46 @@ describe("Database & Customer Directory Count Parity Test", () => {
     expect(payload.anniversary).toBeNull();
     expect(payload.notes).toBe("VIP Client");
   });
+
+  it("15. Tests Customer Directory Recent Sorting: Newly registered customer with 0 visits and no last_visit is sorted immediately to the top based on created_at timestamp", () => {
+    const existingOlderCustomer: Customer = {
+      id: "cust-old-1",
+      name: "Old Client",
+      phone: "9811111111",
+      gender: "female",
+      total_visits: 3,
+      total_spent: 1200,
+      last_visit: "2026-08-20T10:00:00Z",
+      created_at: "2026-08-15T10:00:00Z",
+    };
+
+    const newlyRegisteredCustomer: Customer = {
+      id: "cust-new-now",
+      name: "Just Registered VIP",
+      phone: "9822222222",
+      gender: "male",
+      total_visits: 0,
+      total_spent: 0,
+      last_visit: null,
+      created_at: new Date().toISOString(), // Created right now
+    };
+
+    const list: Customer[] = [existingOlderCustomer, newlyRegisteredCustomer];
+
+    // Directory "recent" sort logic
+    const sorted = [...list].sort((a, b) => {
+      const dateA = a.last_visit || a.created_at ? new Date(a.last_visit || a.created_at!).getTime() : 0;
+      const dateB = b.last_visit || b.created_at ? new Date(b.last_visit || b.created_at!).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    // Newly registered customer MUST be at index 0 (top of the directory)
+    expect(sorted[0].name).toBe("Just Registered VIP");
+    expect(sorted[0].phone).toBe("9822222222");
+    expect(sorted[1].name).toBe("Old Client");
+  });
 });
+
 
 
 

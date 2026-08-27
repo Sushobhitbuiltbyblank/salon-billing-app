@@ -212,8 +212,8 @@ export function CustomerDirectory() {
         if (sortBy === "visits") return (b.total_visits || 0) - (a.total_visits || 0);
         if (sortBy === "name") return a.name.localeCompare(b.name);
         if (sortBy === "recent") {
-          const dateA = a.last_visit ? new Date(a.last_visit).getTime() : 0;
-          const dateB = b.last_visit ? new Date(b.last_visit).getTime() : 0;
+          const dateA = a.last_visit || a.created_at ? new Date(a.last_visit || a.created_at!).getTime() : 0;
+          const dateB = b.last_visit || b.created_at ? new Date(b.last_visit || b.created_at!).getTime() : 0;
           return dateB - dateA;
         }
         return 0;

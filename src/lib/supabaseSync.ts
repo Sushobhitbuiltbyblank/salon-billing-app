@@ -93,13 +93,13 @@ export const SupabaseSync = {
         usersRes,
       ] = await Promise.all([
         supabase.from("salon_settings").select("*").single(),
-        supabase.from("staff").select("*").order("name"),
-        supabase.from("categories").select("*").order("name"),
-        supabase.from("catalog_items").select("*").order("name"),
-        supabase.from("customers").select("*").order("total_visits", { ascending: false }),
-        supabase.from("invoices").select("*, invoice_items(*)").order("created_at", { ascending: false }),
-        supabase.from("expenses").select("*").order("expense_date", { ascending: false }),
-        supabase.from("app_users").select("*").order("role"),
+        supabase.from("staff").select("*").order("name").limit(500),
+        supabase.from("categories").select("*").order("name").limit(500),
+        supabase.from("catalog_items").select("*").order("name").limit(2000),
+        supabase.from("customers").select("*").order("created_at", { ascending: false }).limit(5000),
+        supabase.from("invoices").select("*, invoice_items(*)").order("created_at", { ascending: false }).limit(5000),
+        supabase.from("expenses").select("*").order("expense_date", { ascending: false }).limit(5000),
+        supabase.from("app_users").select("*").order("role").limit(100),
       ]);
 
       return {
