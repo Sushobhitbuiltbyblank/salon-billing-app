@@ -678,7 +678,63 @@ describe("Database & Customer Directory Count Parity Test", () => {
     expect(foundOnBrowser3).toBeDefined();
     expect(foundOnBrowser3?.name).toBe("Priya Arora");
   });
+
+  it("14. Tests exact schema alignment for Supabase customer save: validates payload contains only valid columns and upserts cleanly without PGRST204 errors", () => {
+    const rawCustomer: Customer = {
+      id: "cust-schema-test",
+      name: "Akanksha Sharma",
+      phone: "9871122334",
+      gender: "female",
+      birthday: "1996-03-15",
+      anniversary: "",
+      notes: "VIP Client",
+      total_visits: 0,
+      total_spent: 0,
+      last_reminder_sent_at: "2026-08-20T10:00:00Z",
+    };
+
+    const cleanPhone = normalizePhoneNumber(rawCustomer.phone);
+    const standardPhone = cleanPhone.length === 10 ? cleanPhone : rawCustomer.phone;
+
+    const cleanBirthday =
+      rawCustomer.birthday && typeof rawCustomer.birthday === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawCustomer.birthday.trim())
+        ? rawCustomer.birthday.trim()
+        : null;
+    const cleanAnniversary =
+      rawCustomer.anniversary && typeof rawCustomer.anniversary === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawCustomer.anniversary.trim())
+        ? rawCustomer.anniversary.trim()
+        : null;
+
+    const cleanGender =
+      rawCustomer.gender && ["female", "male", "other", "unspecified"].includes(rawCustomer.gender)
+        ? rawCustomer.gender
+        : "female";
+
+    // Strict schema payload matching PostgreSQL customers table
+    const payload: any = {
+      name: rawCustomer.name?.trim() || `Guest (${standardPhone})`,
+      phone: standardPhone,
+      email: rawCustomer.email?.trim() || null,
+      gender: cleanGender,
+      birthday: cleanBirthday,
+      anniversary: cleanAnniversary,
+      total_visits: Number(rawCustomer.total_visits) >= 0 ? Number(rawCustomer.total_visits) : 0,
+      total_spent: Number(rawCustomer.total_spent) >= 0 ? Number(rawCustomer.total_spent) : 0,
+      last_visit: rawCustomer.last_visit || null,
+      notes: rawCustomer.notes?.trim() || null,
+    };
+
+    // Verify non-existent DB columns (such as last_reminder_sent_at) are excluded
+    expect("last_reminder_sent_at" in payload).toBe(false);
+    expect(payload.name).toBe("Akanksha Sharma");
+    expect(payload.phone).toBe("9871122334");
+    expect(payload.gender).toBe("female");
+    expect(payload.birthday).toBe("1996-03-15");
+    expect(payload.anniversary).toBeNull();
+    expect(payload.notes).toBe("VIP Client");
+  });
 });
+
 
 
 

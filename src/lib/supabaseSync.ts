@@ -762,18 +762,7 @@ export const SupabaseSync = {
       return null;
     }
     try {
-      const isValidUUID = (str?: string | null) =>
-        Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
-
-      // Resolve existing customer ID in Supabase to avoid primary key vs unique phone conflict
       const standardPhone = cleanPhone.length === 10 ? cleanPhone : customer.phone;
-      const { data: existingCust } = await supabase
-        .from("customers")
-        .select("id")
-        .eq("phone", standardPhone)
-        .maybeSingle();
-
-      const customerId = existingCust?.id || (isValidUUID(customer.id) ? customer.id : undefined);
 
       const cleanBirthday =
         customer.birthday && typeof customer.birthday === "string" && /^\d{4}-\d{2}-\d{2}$/.test(customer.birthday.trim())
@@ -799,62 +788,23 @@ export const SupabaseSync = {
         total_visits: Number(customer.total_visits) >= 0 ? Number(customer.total_visits) : 0,
         total_spent: Number(customer.total_spent) >= 0 ? Number(customer.total_spent) : 0,
         last_visit: customer.last_visit || null,
-        last_reminder_sent_at: customer.last_reminder_sent_at || null,
         notes: customer.notes?.trim() || null,
-        created_at: customer.created_at || new Date().toISOString(),
       };
 
-      let resultData = null;
+      const { data, error } = await supabase
+        .from("customers")
+        .upsert(payload, { onConflict: "phone" })
+        .select();
 
-      if (existingCust?.id) {
-        // Customer already exists in Supabase: Update by primary key ID
-        const { data: updated, error: updateErr } = await supabase
-          .from("customers")
-          .update(payload)
-          .eq("id", existingCust.id)
-          .select()
-          .maybeSingle();
-
-        if (updateErr) {
-          console.error("Supabase update customer error:", updateErr);
-        } else {
-          resultData = updated;
-        }
-      } else {
-        // Customer is new: Insert new customer record
-        const insertPayload = {
-          ...payload,
-          id: isValidUUID(customer.id) ? customer.id : undefined,
-        };
-
-        const { data: inserted, error: insertErr } = await supabase
-          .from("customers")
-          .insert(insertPayload)
-          .select()
-          .maybeSingle();
-
-        if (insertErr) {
-          console.warn("Supabase customer insert error, attempting update by phone:", insertErr);
-          const { data: fallbackUpdated, error: fallbackErr } = await supabase
-            .from("customers")
-            .update(payload)
-            .eq("phone", standardPhone)
-            .select()
-            .maybeSingle();
-
-          if (fallbackErr) {
-            console.error("Supabase fallback update error:", fallbackErr);
-          } else {
-            resultData = fallbackUpdated;
-          }
-        } else {
-          resultData = inserted;
-        }
+      if (error) {
+        console.error("Supabase saveCustomer error:", error);
+        return null;
       }
 
-      return resultData;
+      const savedCust = Array.isArray(data) ? data[0] : data;
+      return savedCust || null;
     } catch (err) {
-      console.error("Supabase saveCustomer error:", err);
+      console.error("Supabase saveCustomer exception:", err);
       return null;
     }
   },
