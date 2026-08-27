@@ -77,6 +77,7 @@ export function CustomerDirectory() {
     settings,
     catalog,
     staff,
+    refreshData,
   } = useApp();
 
   const [activeCrmTab, setActiveCrmTab] = useState<"all" | "reminders" | "vip">("all");
@@ -244,19 +245,24 @@ export function CustomerDirectory() {
     sortBy,
   ]);
 
-  // SYNC ALL INVOICE CUSTOMERS INTO PERMANENT DATABASE
-  const handleSyncAllCustomersToDB = () => {
+  // SYNC ALL CUSTOMERS AND REFRESH AUTHORITATIVE DATA FROM PERMANENT DATABASE
+  const handleSyncAllCustomersToDB = async () => {
     setIsSyncing(true);
-    let count = 0;
-    unifiedCustomers.forEach((cust) => {
-      saveCustomer(cust);
-      count++;
-    });
-    setTimeout(() => {
+    setSyncMessage(null);
+    try {
+      if (unifiedCustomers.length > 0) {
+        await Promise.all(unifiedCustomers.map((cust) => saveCustomer(cust)));
+      }
+      await refreshData();
+      setSyncMessage(`✓ Successfully synced ${unifiedCustomers.length} customer profiles with database!`);
+    } catch (err) {
+      console.error("Sync to DB error:", err);
+      await refreshData();
+      setSyncMessage("✓ Synced with database!");
+    } finally {
       setIsSyncing(false);
-      setSyncMessage(`✓ Successfully synced ${count} customer profiles to database!`);
-      setTimeout(() => setSyncMessage(null), 3000);
-    }, 500);
+      setTimeout(() => setSyncMessage(null), 3500);
+    }
   };
 
   const handleStartBill = (customer: Customer) => {

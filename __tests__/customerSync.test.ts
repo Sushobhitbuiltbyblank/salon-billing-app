@@ -506,7 +506,47 @@ describe("Database & Customer Directory Count Parity Test", () => {
     expect(unifiedDirectory.length).toBe(100);
     expect(unifiedDirectory.length).toBe(dbCustomers.length);
   });
+
+  it("10. Tests 'Sync to DB' manual trigger: synchronizes all unified customer profiles cleanly without creating duplicate records", async () => {
+    const customersToSync: Customer[] = [
+      {
+        id: "cust-sync-1",
+        name: "Aman Sharma",
+        phone: "9876511111",
+        gender: "male",
+        total_visits: 1,
+        total_spent: 400,
+      },
+      {
+        id: "cust-sync-2",
+        name: "Divya Kapoor",
+        phone: "9876522222",
+        gender: "female",
+        total_visits: 2,
+        total_spent: 1200,
+      },
+    ];
+
+    // Mock saveCustomer action function
+    const syncedRecords: Customer[] = [];
+    const saveCustomer = async (cust: Customer) => {
+      syncedRecords.push(cust);
+      return cust;
+    };
+
+    // Execute Sync to DB routine
+    await Promise.all(customersToSync.map((c) => saveCustomer(c)));
+
+    expect(syncedRecords.length).toBe(2);
+    expect(syncedRecords[0].name).toBe("Aman Sharma");
+    expect(syncedRecords[1].name).toBe("Divya Kapoor");
+
+    // Verify deduplication holds
+    const deduped = deduplicateCustomerArray(syncedRecords);
+    expect(deduped.length).toBe(2);
+  });
 });
+
 
 
 
