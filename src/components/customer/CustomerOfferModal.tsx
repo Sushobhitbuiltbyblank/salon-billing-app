@@ -95,18 +95,22 @@ export function CustomerOfferModal({
     }
   };
 
-  // 1. Copy Image to Clipboard
+  // 1. Copy Image to Clipboard (Optimized for iOS Safari, Mac & PC)
   const handleCopyImage = async () => {
     try {
       setIsProcessing(true);
-      const blob = await getImageBlob(true);
-      if (blob && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        const item = new ClipboardItem({
+          "image/png": fetch("/offers/raksha-bandhan-offer.png").then((res) => {
+            if (!res.ok) throw new Error("Image load failed");
+            return res.blob();
+          }),
+        });
+        await navigator.clipboard.write([item]);
         setCopiedImage(true);
         setTimeout(() => setCopiedImage(false), 3000);
-        showToast("📋 Offer image copied to clipboard!");
+        showToast("📋 Offer image copied to clipboard! (Tap Paste in WhatsApp)");
       } else {
-        // Fallback: Download
         handleDownloadImage();
         showToast("📥 Image downloaded to your device!");
       }
@@ -141,46 +145,39 @@ export function CustomerOfferModal({
     document.body.removeChild(link);
   };
 
-  // 4. Main Send on WhatsApp Action (Direct WhatsApp Chat matching Reminder behavior)
-  const handleSendWhatsApp = async () => {
+  // 4. Main Send on WhatsApp Action (Direct WhatsApp Chat matching Reminder behavior + iOS/Desktop Image Copy)
+  const handleSendWhatsApp = () => {
     if (!customer) return;
-    setIsProcessing(true);
 
     const cleanPhone = normalizePhoneNumber(customer.phone);
     const textToSend = includeText ? customText.trim() : "";
 
-    try {
-      // 1. Copy offer image to clipboard for instant pasting (Ctrl+V / Cmd+V / Tap Paste)
-      const pngBlob = await getImageBlob(true);
-      if (pngBlob && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-        try {
-          await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+    // 1. Copy offer image to clipboard for instant pasting on iPhone / Mac / PC
+    if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+      try {
+        const item = new ClipboardItem({
+          "image/png": fetch("/offers/raksha-bandhan-offer.png").then((res) => res.blob()),
+        });
+        navigator.clipboard.write([item]).then(() => {
           setCopiedImage(true);
           setTimeout(() => setCopiedImage(false), 3000);
-        } catch (clipErr) {
+        }).catch((clipErr) => {
           console.warn("Clipboard write skipped:", clipErr);
-        }
+        });
+      } catch (clipErr) {
+        console.warn("Clipboard write not permitted:", clipErr);
       }
-
-      // 2. Open Direct WhatsApp Chat with the customer (Identical to WhatsApp Reminder URL format)
-      const waUrl = cleanPhone
-        ? textToSend
-          ? `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(textToSend)}`
-          : `https://wa.me/91${cleanPhone}`
-        : `https://wa.me/?text=${encodeURIComponent(textToSend)}`;
-
-      window.open(waUrl, "_blank", "noopener,noreferrer");
-
-      showToast("✓ WhatsApp opened! Press Ctrl+V (or Paste) to attach the offer photo.");
-    } catch (err) {
-      console.error("WhatsApp share error:", err);
-      // Fallback
-      if (cleanPhone) {
-        window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(textToSend)}`, "_blank");
-      }
-    } finally {
-      setIsProcessing(false);
     }
+
+    // 2. Open Direct WhatsApp Chat with the customer (Identical to WhatsApp Reminder URL format)
+    const waUrl = cleanPhone
+      ? textToSend
+        ? `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(textToSend)}`
+        : `https://wa.me/91${cleanPhone}`
+      : `https://wa.me/?text=${encodeURIComponent(textToSend)}`;
+
+    window.open(waUrl, "_blank", "noopener,noreferrer");
+    showToast("✓ WhatsApp opened! Tap Paste in WhatsApp to attach the offer photo.");
   };
 
   if (!customer) return null;

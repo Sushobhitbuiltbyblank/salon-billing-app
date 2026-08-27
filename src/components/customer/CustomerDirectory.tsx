@@ -279,43 +279,35 @@ export function CustomerDirectory() {
     setTimeout(() => setSyncMessage(null), 4000);
   };
 
-  // SEND RAKHI OFFER DIRECT 1-CLICK WHATSAPP TRIGGER
-  const handleDirectSendRakhiOffer = async (cust: Customer) => {
+  // SEND RAKHI OFFER DIRECT 1-CLICK WHATSAPP TRIGGER (OPTIMIZED FOR IPHONE, MAC & PC)
+  const handleDirectSendRakhiOffer = (cust: Customer) => {
     const cleanPhone = normalizePhoneNumber(cust.phone);
     if (!cleanPhone || cleanPhone.length < 7) {
       alert("No valid mobile number found for this customer.");
       return;
     }
 
-    // 1. Copy image to clipboard for instant pasting
-    try {
-      const response = await fetch("/offers/raksha-bandhan-offer.jpg");
-      const originalBlob = await response.blob();
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0);
-          canvas.toBlob((pngBlob) => {
-            if (pngBlob && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-              navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
-            }
-          }, "image/png");
-        }
-      };
-      img.src = "/offers/raksha-bandhan-offer.jpg";
-    } catch (e) {
-      console.warn("Direct image copy skipped:", e);
+    // 1. Copy PNG offer image to clipboard using synchronous ClipboardItem Promise (supported by iOS Safari & Desktop)
+    if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+      try {
+        const item = new ClipboardItem({
+          "image/png": fetch("/offers/raksha-bandhan-offer.png").then((res) => {
+            if (!res.ok) throw new Error("Failed to fetch image");
+            return res.blob();
+          }),
+        });
+        navigator.clipboard.write([item]).catch((err) => {
+          console.warn("Clipboard copy skipped:", err);
+        });
+      } catch (clipErr) {
+        console.warn("Clipboard write not permitted:", clipErr);
+      }
     }
 
     // 2. Open Direct WhatsApp Chat with the customer pre-filled with the Rakhi wish & offer
     const url = generateWhatsAppRakhiOfferUrl(cust, settings.salon_name || "Belezia Salon");
     window.open(url, "_blank", "noopener,noreferrer");
-    setSyncMessage(`✓ Rakhi Offer WhatsApp opened for ${cust.name}! (Offer image copied to clipboard - press Ctrl+V to attach)`);
+    setSyncMessage(`✓ Rakhi Offer WhatsApp opened for ${cust.name}! (Offer image copied to clipboard - tap Paste in WhatsApp to send image)`);
     setTimeout(() => setSyncMessage(null), 5000);
   };
 
