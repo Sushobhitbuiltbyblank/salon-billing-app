@@ -334,5 +334,31 @@ describe("Database & Customer Directory Count Parity Test", () => {
     expect(unifiedDeviceB.length).toBe(2);
     expect(unifiedDeviceB.some((c) => c.id === "cust-3")).toBe(false);
   });
+
+  it("successfully registers new client and makes it immediately available in unified customer directory", () => {
+    const newCustomer: Customer = {
+      id: "cust-new-999",
+      name: "Deepak Verma",
+      phone: "9876500001",
+      gender: "male",
+      birthday: "1995-05-15",
+      notes: "First time haircut",
+      total_visits: 0,
+      total_spent: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    const initialList: Customer[] = [];
+    const deduped = deduplicateCustomerArray([...initialList, newCustomer]);
+    expect(deduped.length).toBe(1);
+    expect(deduped[0].name).toBe("Deepak Verma");
+    expect(deduped[0].phone).toBe("9876500001");
+    expect(deduped[0].gender).toBe("male");
+
+    const unified = unifyCustomerList(deduped, []);
+    expect(unified.length).toBe(1);
+    expect(unified[0].name).toBe("Deepak Verma");
+    expect(unified[0].phone).toBe("9876500001");
+  });
 });
 

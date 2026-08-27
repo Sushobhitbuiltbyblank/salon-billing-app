@@ -775,29 +775,49 @@ export const SupabaseSync = {
 
       const customerId = existingCust?.id || (isValidUUID(customer.id) ? customer.id : undefined);
 
-      const payload = {
-        id: customerId,
-        name: customer.name,
+      const cleanBirthday =
+        customer.birthday && typeof customer.birthday === "string" && /^\d{4}-\d{2}-\d{2}$/.test(customer.birthday.trim())
+          ? customer.birthday.trim()
+          : null;
+      const cleanAnniversary =
+        customer.anniversary && typeof customer.anniversary === "string" && /^\d{4}-\d{2}-\d{2}$/.test(customer.anniversary.trim())
+          ? customer.anniversary.trim()
+          : null;
+
+      const cleanGender =
+        customer.gender && ["female", "male", "other", "unspecified"].includes(customer.gender)
+          ? customer.gender
+          : "female";
+
+      const payload: any = {
+        name: customer.name?.trim() || `Guest (${standardPhone})`,
         phone: standardPhone,
-        email: customer.email || null,
-        gender: customer.gender && customer.gender !== "unspecified" ? customer.gender : "female",
-        birthday: customer.birthday || null,
-        anniversary: customer.anniversary || null,
-        total_visits: Number(customer.total_visits) || 1,
-        total_spent: Number(customer.total_spent) || 0,
-        last_visit: customer.last_visit || new Date().toISOString(),
+        email: customer.email?.trim() || null,
+        gender: cleanGender,
+        birthday: cleanBirthday,
+        anniversary: cleanAnniversary,
+        total_visits: Number(customer.total_visits) >= 0 ? Number(customer.total_visits) : 0,
+        total_spent: Number(customer.total_spent) >= 0 ? Number(customer.total_spent) : 0,
+        last_visit: customer.last_visit || null,
         last_reminder_sent_at: customer.last_reminder_sent_at || null,
-        notes: customer.notes || null,
+        notes: customer.notes?.trim() || null,
         created_at: customer.created_at || new Date().toISOString(),
       };
+
+      if (customerId) {
+        payload.id = customerId;
+      }
 
       const { data, error } = await supabase
         .from("customers")
         .upsert(payload, { onConflict: "phone" })
         .select()
-        .single();
+        .maybeSingle();
 
-      if (error) console.error("Supabase saveCustomer error:", error);
+      if (error) {
+        console.error("Supabase saveCustomer error:", error);
+        return null;
+      }
       return data;
     } catch (err) {
       console.error("Supabase saveCustomer error:", err);

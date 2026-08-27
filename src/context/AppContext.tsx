@@ -203,7 +203,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.saveCatalog(cloudData.catalog);
         }
         if (cloudData.customers) {
-          const deduplicatedCloud = deduplicateCustomerArray(cloudData.customers);
+          const localCusts = Storage.getCustomers();
+          const deduplicatedCloud = deduplicateCustomerArray([...cloudData.customers, ...localCusts]);
           setCustomers((prev) =>
             JSON.stringify(prev) !== JSON.stringify(deduplicatedCloud) ? deduplicatedCloud : prev
           );
