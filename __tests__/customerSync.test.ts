@@ -359,6 +359,92 @@ describe("Database & Customer Directory Count Parity Test", () => {
     expect(unified.length).toBe(1);
     expect(unified[0].name).toBe("Deepak Verma");
     expect(unified[0].phone).toBe("9876500001");
+    expect(unified[0].total_visits).toBe(0);
+    expect(unified[0].total_spent).toBe(0);
+  });
+
+  it("Multi-Device Live Sync: Client registered on Device A is propagated to Device B and Device C accurately", () => {
+    // 1. Device A registers new customer
+    const registeredOnDeviceA: Customer = {
+      id: "cust-cross-dev-01",
+      name: "Kavita Singhal",
+      phone: "9876543219",
+      gender: "female",
+      birthday: "1998-10-25",
+      notes: "VIP referral",
+      total_visits: 0,
+      total_spent: 0,
+      created_at: new Date().toISOString(),
+    };
+
+    // 2. Mock Cloud DB state after Device A saves
+    const cloudDatabaseState: Customer[] = [
+      {
+        id: "cust-1",
+        name: "Existing Client",
+        phone: "9811111111",
+        gender: "female",
+        total_visits: 2,
+        total_spent: 800,
+      },
+      registeredOnDeviceA,
+    ];
+
+    // 3. Device B (Reception iPad) receives cloud sync
+    const deviceBInitialCache: Customer[] = [
+      {
+        id: "cust-1",
+        name: "Existing Client",
+        phone: "9811111111",
+        gender: "female",
+        total_visits: 2,
+        total_spent: 800,
+      },
+    ];
+
+    const deviceBSynced = deduplicateCustomerArray([...cloudDatabaseState, ...deviceBInitialCache]);
+    const deviceBUnified = unifyCustomerList(deviceBSynced, []);
+
+    expect(deviceBUnified.length).toBe(2);
+    const foundOnDeviceB = deviceBUnified.find((c) => c.phone === "9876543219");
+    expect(foundOnDeviceB).toBeDefined();
+    expect(foundOnDeviceB?.name).toBe("Kavita Singhal");
+    expect(foundOnDeviceB?.gender).toBe("female");
+    expect(foundOnDeviceB?.total_visits).toBe(0);
+
+    // 4. Device B bills this customer with an invoice
+    const newInvoiceOnDeviceB: Invoice = {
+      id: "inv-devb-01",
+      invoice_number: "BZ-5001",
+      customer_id: "cust-cross-dev-01",
+      customer_name: "Kavita Singhal",
+      customer_phone: "9876543219",
+      customer_gender: "female",
+      subtotal: 1500,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 1500,
+      payment_mode: "upi",
+      status: "paid",
+      created_at: new Date().toISOString(),
+      items: [],
+    };
+
+    // 5. Device C (Manager Laptop) receives both customers & invoices from Cloud
+    const deviceCInvoices = [newInvoiceOnDeviceB];
+    const deviceCSynced = deduplicateCustomerArray(cloudDatabaseState);
+    const deviceCUnified = unifyCustomerList(deviceCSynced, deviceCInvoices);
+
+    expect(deviceCUnified.length).toBe(2);
+    const foundOnDeviceC = deviceCUnified.find((c) => c.phone === "9876543219");
+    expect(foundOnDeviceC).toBeDefined();
+    expect(foundOnDeviceC?.name).toBe("Kavita Singhal");
+    expect(foundOnDeviceC?.total_visits).toBe(1);
+    expect(foundOnDeviceC?.total_spent).toBe(1500);
   });
 });
+
 

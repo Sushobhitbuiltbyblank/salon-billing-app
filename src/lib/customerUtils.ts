@@ -247,8 +247,18 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
       return {
         ...cust,
         // If invoices exist for this phone number, use the exact invoice count & spend
-        total_visits: invoiceVisits > 0 ? invoiceVisits : (cust.total_visits || 1),
-        total_spent: invoiceSpent > 0 ? invoiceSpent : (cust.total_spent || 0),
+        total_visits:
+          invoiceVisits > 0
+            ? invoiceVisits
+            : Number(cust.total_visits) >= 0
+            ? Number(cust.total_visits)
+            : 0,
+        total_spent:
+          invoiceSpent > 0
+            ? invoiceSpent
+            : Number(cust.total_spent) >= 0
+            ? Number(cust.total_spent)
+            : 0,
         last_visit: latestVisit,
       };
     });
