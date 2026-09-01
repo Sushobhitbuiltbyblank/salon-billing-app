@@ -291,34 +291,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           });
           Storage.saveInvoices(mergedInvoices);
 
-          // Auto-reconciliation: ensure any local invoice not yet recorded in cloud is enqueued for sync
+          // Authoritative Cloud Truth Check:
           const cloudIds = new Set(cloudData.invoices.map((c) => c.id).filter(Boolean));
           const cloudNumbers = new Set(cloudData.invoices.map((c) => c.invoice_number).filter(Boolean));
-          mergedInvoices.forEach((m) => {
+
+          // Find invoices that genuinely do not exist in the cloud yet
+          const genuinelyUnsynced = mergedInvoices.filter((m) => {
             const inCloud =
               (m.id && cloudIds.has(m.id)) || (m.invoice_number && cloudNumbers.has(m.invoice_number));
-            if (!inCloud) {
-              Storage.addToInvoiceSyncQueue(m.id);
-            }
+            return !inCloud;
           });
 
-          // Queue cleanup: purge any item from the sync queue that is ALREADY safely recorded in the cloud
-          const currentQueue = Storage.getPendingInvoiceSyncQueue();
-          currentQueue.forEach((qId) => {
-            const localInv = mergedInvoices.find((m) => m.id === qId || m.invoice_number === qId);
-            const isAlreadyInCloud =
-              cloudIds.has(qId) ||
-              cloudNumbers.has(qId) ||
-              (localInv &&
-                ((localInv.id && cloudIds.has(localInv.id)) ||
-                  (localInv.invoice_number && cloudNumbers.has(localInv.invoice_number))));
-            if (isAlreadyInCloud) {
-              Storage.removeFromInvoiceSyncQueue(qId);
-            }
-          });
-
-          const currentQueueLen = Storage.getPendingInvoiceSyncQueue().length;
-          setPendingSyncCount((prev) => (prev !== currentQueueLen ? currentQueueLen : prev));
+          // Sync queue contains strictly and only genuinely unsynced invoices (purging any orphans)
+          const validQueue = genuinelyUnsynced.map((u) => u.id);
+          Storage.savePendingInvoiceSyncQueue(validQueue);
+          setPendingSyncCount(validQueue.length);
         }
         if (cloudData.expenses) {
           setExpenses((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.expenses) ? cloudData.expenses : prev));

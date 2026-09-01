@@ -993,12 +993,21 @@ export const Storage = {
       if (inv.id) existingLocalMap.set(inv.id, inv);
       if (inv.invoice_number) existingLocalMap.set(inv.invoice_number, inv);
     });
+    const cloudIds = new Set(validCloud.map((c) => c.id).filter(Boolean));
+    const cloudNumbers = new Set(validCloud.map((c) => c.invoice_number).filter(Boolean));
+
     archive.forEach((archivedInv) => {
-      const exists =
+      const existsInLocal =
         (archivedInv.id && existingLocalMap.has(archivedInv.id)) ||
         (archivedInv.invoice_number && existingLocalMap.has(archivedInv.invoice_number));
-      if (!exists) {
+      const existsInCloud =
+        (archivedInv.id && cloudIds.has(archivedInv.id)) ||
+        (archivedInv.invoice_number && cloudNumbers.has(archivedInv.invoice_number));
+
+      if (!existsInLocal) {
         activeLocal.push(archivedInv);
+      }
+      if (!existsInCloud) {
         this.addToInvoiceSyncQueue(archivedInv.id);
       }
     });
