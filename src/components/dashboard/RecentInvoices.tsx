@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { Invoice } from "@/types";
-import { formatCurrency, formatDate, generateWhatsAppReceiptUrl } from "@/lib/utils";
+import { formatCurrency, formatDate, generateWhatsAppReceiptUrl, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -144,11 +144,21 @@ export function RecentInvoices() {
             onClick={() => {
               syncPendingInvoices().then(() => refreshData());
             }}
-            className="gap-1.5 text-xs text-zinc-300 hover:text-white border-zinc-700/80 hover:bg-zinc-800/80 h-9 px-3 cursor-pointer shrink-0"
+            className={cn(
+              "gap-1.5 text-xs h-9 px-3 cursor-pointer shrink-0 transition-colors",
+              pendingSyncCount > 0
+                ? "text-amber-300 border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20"
+                : "text-zinc-300 hover:text-white border-zinc-700/80 hover:bg-zinc-800/80"
+            )}
             title="Sync all pending invoices and refresh database"
           >
             <RefreshCw className="h-3.5 w-3.5 text-purple-400" />
             <span>Sync DB</span>
+            {pendingSyncCount > 0 && (
+              <Badge className="bg-amber-500/30 text-amber-200 text-[10px] px-1.5 py-0 h-4 border-none font-bold">
+                {pendingSyncCount}
+              </Badge>
+            )}
           </Button>
 
           {currentUser?.role === "admin" && (
@@ -223,33 +233,6 @@ export function RecentInvoices() {
         </Card>
       </div>
 
-      {/* OFFLINE SYNC ALERT BANNER */}
-      {pendingSyncCount > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/60 shadow-lg shadow-amber-950/20 text-amber-200">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-9 w-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 text-amber-400">
-              <CloudOff className="h-4 w-4 animate-pulse" />
-            </div>
-            <div className="text-xs">
-              <div className="font-bold text-amber-200">
-                {pendingSyncCount} Invoice{pendingSyncCount > 1 ? "s" : ""} Saved in Offline Queue
-              </div>
-              <div className="text-[11px] text-amber-300/80">
-                All bills are safely preserved in local storage and will sync to the cloud automatically once internet connects.
-              </div>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            variant="glow"
-            onClick={() => syncPendingInvoices()}
-            className="text-xs shrink-0 h-8 px-3"
-          >
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Sync to Cloud Now
-          </Button>
-        </div>
-      )}
 
       {/* SEARCH AND FILTER BAR */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800">
