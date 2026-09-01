@@ -819,6 +819,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // 1. Instantly delete from local state, archive & storage for immediate UI response
     Storage.deleteInvoice(invoiceId);
     setInvoices(Storage.getInvoices());
+    setCustomers(Storage.getCustomers());
     setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
 
     // 2. Delete from Supabase PostgreSQL

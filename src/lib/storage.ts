@@ -381,6 +381,19 @@ export function initStorage() {
       // Explicitly purge BZ-20260901-4311 requested by admin
       Storage.deleteInvoice("BZ-20260901-4311");
       Storage.deleteInvoice("463fceae-a7b5-4d57-98bf-6bbb47933198");
+
+      // Reconcile 8802809679 customer spend and visits
+      const custs = Storage.getCustomers();
+      const sushobhit = custs.find((c) => normalizePhoneNumber(c.phone) === "8802809679");
+      if (sushobhit) {
+        const remaining = Storage.getInvoices().filter(
+          (inv) => inv.status !== "void" && normalizePhoneNumber(inv.customer_phone) === "8802809679"
+        );
+        sushobhit.total_visits = remaining.length;
+        sushobhit.total_spent = remaining.reduce((sum, inv) => sum + (Number(inv.grand_total) || 0), 0);
+        sushobhit.last_visit = remaining[0]?.created_at || undefined;
+        Storage.saveCustomers(custs);
+      }
     }
   } catch (err) {
     console.error("initStorage error:", err);
@@ -969,6 +982,43 @@ export const Storage = {
     this.addDeletedInvoice(targetId);
     if (targetNum) {
       this.addDeletedInvoice(targetNum);
+    }
+
+    // 5. Recompute customer visit & spend statistics after deletion
+    const targetCustPhone = normalizePhoneNumber(target?.customer_phone);
+    const targetCustId = target?.customer_id;
+    if (targetCustPhone || targetCustId) {
+      const customers = this.getCustomers();
+      const matchedCust = customers.find((c) => {
+        const cPhone = normalizePhoneNumber(c.phone);
+        if (targetCustPhone && cPhone && targetCustPhone === cPhone) return true;
+        if (targetCustId && c.id === targetCustId) return true;
+        return false;
+      });
+
+      if (matchedCust) {
+        const remainingInvoices = filtered.filter((inv) => {
+          if (inv.status === "void") return false;
+          const invPhone = normalizePhoneNumber(inv.customer_phone);
+          if (targetCustPhone && invPhone && targetCustPhone === invPhone) return true;
+          if (targetCustId && inv.customer_id === targetCustId) return true;
+          return false;
+        });
+
+        matchedCust.total_visits = remainingInvoices.length;
+        matchedCust.total_spent = remainingInvoices.reduce(
+          (sum, inv) => sum + (Number(inv.grand_total) || 0),
+          0
+        );
+        let latest: string | undefined = undefined;
+        remainingInvoices.forEach((inv) => {
+          if (inv.created_at && (!latest || new Date(inv.created_at) > new Date(latest))) {
+            latest = inv.created_at;
+          }
+        });
+        matchedCust.last_visit = latest;
+        this.saveCustomers(customers);
+      }
     }
   },
 

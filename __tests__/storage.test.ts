@@ -150,4 +150,45 @@ describe("Storage Layer & Local Data Operations", () => {
     const resurrected = Storage.mergeInvoices([], [invoice]);
     expect(resurrected.some((i) => i.invoice_number === "BZ-20260901-4311")).toBe(false);
   });
+
+  it("recomputes customer total_spent and total_visits to 0 when all customer invoices are deleted", () => {
+    const cust: Customer = {
+      id: "cust-test-8802",
+      name: "Sushobhit",
+      phone: "8802809679",
+      gender: "male",
+      total_visits: 0,
+      total_spent: 0,
+    };
+    Storage.saveCustomer(cust);
+
+    const invoice: Invoice = {
+      id: "inv-cust-8802",
+      invoice_number: "BZ-TEST-8802",
+      customer_id: "cust-test-8802",
+      customer_name: "Sushobhit",
+      customer_phone: "8802809679",
+      subtotal: 1700,
+      discount_amount: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 1700,
+      payment_mode: "upi",
+      status: "paid",
+      created_at: new Date().toISOString(),
+      items: [],
+    };
+    Storage.createInvoice(invoice);
+
+    const savedAfterInvoice = Storage.getCustomers().find((c) => c.phone === "8802809679");
+    expect(savedAfterInvoice?.total_visits).toBe(1);
+    expect(savedAfterInvoice?.total_spent).toBe(1700);
+
+    // Delete invoice
+    Storage.deleteInvoice("inv-cust-8802");
+
+    const savedAfterDeletion = Storage.getCustomers().find((c) => c.phone === "8802809679");
+    expect(savedAfterDeletion?.total_visits).toBe(0);
+    expect(savedAfterDeletion?.total_spent).toBe(0);
+  });
 });

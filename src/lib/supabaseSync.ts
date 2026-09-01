@@ -664,7 +664,7 @@ export const SupabaseSync = {
 
       const { data: inv } = await supabase
         .from("invoices")
-        .select("id, invoice_number")
+        .select("id, invoice_number, customer_id, customer_phone")
         .or(`id.eq.${targetId || "00000000-0000-0000-0000-000000000000"},invoice_number.eq.${invoiceId}`)
         .maybeSingle();
 
@@ -679,6 +679,39 @@ export const SupabaseSync = {
       }
       if (targetNum) {
         await supabase.from("invoices").delete().eq("invoice_number", targetNum);
+      }
+
+      // Recompute customer visits & spend in Supabase
+      const custPhone = inv?.customer_phone;
+      const custId = inv?.customer_id;
+      if (custPhone || custId) {
+        let query = supabase.from("invoices").select("grand_total, created_at").neq("status", "void");
+        if (custPhone && isValidUUID(custId)) {
+          query = query.or(`customer_phone.eq.${custPhone},customer_id.eq.${custId}`);
+        } else if (custPhone) {
+          query = query.eq("customer_phone", custPhone);
+        } else if (custId) {
+          query = query.eq("customer_id", custId);
+        }
+        const { data: remainingInvs } = await query;
+        const remaining = remainingInvs || [];
+        const accurateVisits = remaining.length;
+        const accurateSpent = remaining.reduce((sum: number, i: any) => sum + (Number(i.grand_total) || 0), 0);
+        const lastVisit = remaining.length > 0 ? remaining[0].created_at : null;
+
+        if (custId && isValidUUID(custId)) {
+          await supabase.from("customers").update({
+            total_visits: accurateVisits,
+            total_spent: accurateSpent,
+            last_visit: lastVisit,
+          }).eq("id", custId);
+        } else if (custPhone) {
+          await supabase.from("customers").update({
+            total_visits: accurateVisits,
+            total_spent: accurateSpent,
+            last_visit: lastVisit,
+          }).eq("phone", custPhone);
+        }
       }
       return true;
     } catch (err) {

@@ -224,22 +224,28 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
         }
       });
 
+      // If invoice records exist in the application, customer visit counts and spend
+      // strictly reflect their active settled invoices. If invoices were deleted or voided,
+      // visits and spent reset cleanly to 0.
+      const hasAnyInvoices = Array.isArray(invoices) && invoices.length > 0;
+
       return {
         ...cust,
-        // If invoices exist for this phone number, use the exact invoice count & spend
-        total_visits:
-          invoiceVisits > 0
-            ? invoiceVisits
-            : Number(cust.total_visits) >= 0
-            ? Number(cust.total_visits)
-            : 0,
-        total_spent:
-          invoiceSpent > 0
-            ? invoiceSpent
-            : Number(cust.total_spent) >= 0
-            ? Number(cust.total_spent)
-            : 0,
-        last_visit: latestVisit,
+        total_visits: hasAnyInvoices
+          ? invoiceVisits
+          : invoiceVisits > 0
+          ? invoiceVisits
+          : Number(cust.total_visits) >= 0
+          ? Number(cust.total_visits)
+          : 0,
+        total_spent: hasAnyInvoices
+          ? invoiceSpent
+          : invoiceSpent > 0
+          ? invoiceSpent
+          : Number(cust.total_spent) >= 0
+          ? Number(cust.total_spent)
+          : 0,
+        last_visit: hasAnyInvoices ? latestVisit : (latestVisit || cust.last_visit),
       };
     });
 }
