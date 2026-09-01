@@ -168,7 +168,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const allLocalInvoices = Storage.getInvoices();
 
       for (const invoiceId of queue) {
-        const inv = allLocalInvoices.find((i) => i.id === invoiceId);
+        const inv = allLocalInvoices.find((i) => i.id === invoiceId || i.invoice_number === invoiceId);
         if (!inv) {
           // If invoice no longer exists, discard from queue
           Storage.removeFromInvoiceSyncQueue(invoiceId);
@@ -176,7 +176,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (inv.status === "void") {
-          const res = await SupabaseSync.voidInvoice(invoiceId);
+          const res = await SupabaseSync.voidInvoice(inv.id);
           if (res) {
             Storage.removeFromInvoiceSyncQueue(invoiceId);
           }
@@ -299,6 +299,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               (m.id && cloudIds.has(m.id)) || (m.invoice_number && cloudNumbers.has(m.invoice_number));
             if (!inCloud) {
               Storage.addToInvoiceSyncQueue(m.id);
+            }
+          });
+
+          // Queue cleanup: purge any item from the sync queue that is ALREADY safely recorded in the cloud
+          const currentQueue = Storage.getPendingInvoiceSyncQueue();
+          currentQueue.forEach((qId) => {
+            const localInv = mergedInvoices.find((m) => m.id === qId || m.invoice_number === qId);
+            const isAlreadyInCloud =
+              cloudIds.has(qId) ||
+              cloudNumbers.has(qId) ||
+              (localInv &&
+                ((localInv.id && cloudIds.has(localInv.id)) ||
+                  (localInv.invoice_number && cloudNumbers.has(localInv.invoice_number))));
+            if (isAlreadyInCloud) {
+              Storage.removeFromInvoiceSyncQueue(qId);
             }
           });
 

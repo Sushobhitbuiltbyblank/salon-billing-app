@@ -399,20 +399,41 @@ export const SupabaseSync = {
       let createdInv: any = null;
       const { data: directInv, error: invError } = await supabase
         .from("invoices")
-        .upsert(invoiceHeader)
+        .upsert(invoiceHeader, { onConflict: "invoice_number" })
         .select()
         .single();
 
       if (invError) {
+        if (invError.code === "23505" || invError.message?.includes("duplicate key")) {
+          const { data: existingInv } = await supabase
+            .from("invoices")
+            .select()
+            .eq("invoice_number", invoice.invoice_number)
+            .maybeSingle();
+          if (existingInv) {
+            return existingInv;
+          }
+        }
+
         console.warn("Primary invoice upsert encountered error; retrying with customer_id=null fallback:", invError);
         const fallbackHeader = { ...invoiceHeader, customer_id: null };
         const { data: retryInv, error: retryError } = await supabase
           .from("invoices")
-          .upsert(fallbackHeader)
+          .upsert(fallbackHeader, { onConflict: "invoice_number" })
           .select()
           .single();
 
         if (retryError) {
+          if (retryError.code === "23505" || retryError.message?.includes("duplicate key")) {
+            const { data: existingInv } = await supabase
+              .from("invoices")
+              .select()
+              .eq("invoice_number", invoice.invoice_number)
+              .maybeSingle();
+            if (existingInv) {
+              return existingInv;
+            }
+          }
           console.error("Supabase createInvoice fatal error:", retryError);
           throw retryError;
         }
