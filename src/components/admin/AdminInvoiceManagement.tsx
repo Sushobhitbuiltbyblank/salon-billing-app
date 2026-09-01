@@ -53,6 +53,7 @@ export function AdminInvoiceManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMode, setSelectedMode] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedSaleType, setSelectedSaleType] = useState<string>("all");
   const [datePreset, setDatePreset] = useState<"all" | "today" | "yesterday" | "week" | "month" | "custom">("all");
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
@@ -60,7 +61,7 @@ export function AdminInvoiceManagement() {
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // FILTERED INVOICES BASED ON DATE, PAYMENT MODE, STATUS, & SEARCH
+  // FILTERED INVOICES BASED ON DATE, PAYMENT MODE, STATUS, SALE TYPE & SEARCH
   const filteredInvoices = useMemo(() => {
     const now = new Date();
 
@@ -106,17 +107,28 @@ export function AdminInvoiceManagement() {
           }
         }
 
-        // 2. PAYMENT MODE FILTER
+        // 2. SALE TYPE FILTER (Product Sale vs Service Sale)
+        if (selectedSaleType !== "all") {
+          const hasProduct = inv.items?.some((it) => it.item_type === "product");
+          const hasService = inv.items?.some((it) => it.item_type !== "product");
+
+          if (selectedSaleType === "product" && !hasProduct) return false;
+          if (selectedSaleType === "service" && !hasService) return false;
+          if (selectedSaleType === "product_only" && (!hasProduct || hasService)) return false;
+          if (selectedSaleType === "service_only" && (!hasService || hasProduct)) return false;
+        }
+
+        // 3. PAYMENT MODE FILTER
         if (selectedMode !== "all" && inv.payment_mode !== selectedMode) {
           return false;
         }
 
-        // 3. STATUS FILTER
+        // 4. STATUS FILTER
         if (selectedStatus !== "all" && inv.status !== selectedStatus) {
           return false;
         }
 
-        // 4. SEARCH QUERY
+        // 5. SEARCH QUERY
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase().trim();
           const matchesInv = inv.invoice_number?.toLowerCase().includes(q);
@@ -130,7 +142,7 @@ export function AdminInvoiceManagement() {
         return false;
       }
     });
-  }, [invoices, datePreset, customStartDate, customEndDate, selectedMode, selectedStatus, searchQuery]);
+  }, [invoices, datePreset, customStartDate, customEndDate, selectedSaleType, selectedMode, selectedStatus, searchQuery]);
 
   // DYNAMIC KPIS ACCORDING TO CURRENT FILTER
   const settledInvoices = filteredInvoices.filter((i) => i.status !== "void");
@@ -157,6 +169,7 @@ export function AdminInvoiceManagement() {
     setCustomEndDate("");
     setSelectedMode("all");
     setSelectedStatus("all");
+    setSelectedSaleType("all");
     setSearchQuery("");
   };
 
@@ -316,7 +329,7 @@ export function AdminInvoiceManagement() {
             </button>
           </div>
 
-          {(datePreset !== "all" || selectedMode !== "all" || selectedStatus !== "all" || searchQuery) && (
+          {(datePreset !== "all" || selectedMode !== "all" || selectedStatus !== "all" || selectedSaleType !== "all" || searchQuery) && (
             <button
               onClick={handleResetFilters}
               className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-rose-400 transition-all cursor-pointer self-start lg:self-center"
@@ -438,7 +451,19 @@ export function AdminInvoiceManagement() {
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={selectedSaleType}
+            onChange={(e) => setSelectedSaleType(e.target.value)}
+            className="h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-300 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+          >
+            <option value="all">All Sales (All Items)</option>
+            <option value="service">Service Sale</option>
+            <option value="product">Product Sale</option>
+            <option value="service_only">Service Only</option>
+            <option value="product_only">Product Only</option>
+          </select>
+
           <select
             value={selectedMode}
             onChange={(e) => setSelectedMode(e.target.value)}

@@ -50,6 +50,7 @@ export function RecentInvoices() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMode, setSelectedMode] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedSaleType, setSelectedSaleType] = useState<string>("all");
 
   const todayDateFormatted = useMemo(() => {
     return new Date().toLocaleDateString("en-IN", {
@@ -78,6 +79,17 @@ export function RecentInvoices() {
         // Ensure all today invoices AND any pending sync invoices remain visible
         if (!isToday && !isPending && !hasTodayNumber) return false;
 
+        // Sale Type filter (Product Sale vs Service Sale)
+        if (selectedSaleType !== "all") {
+          const hasProduct = inv.items?.some((it) => it.item_type === "product");
+          const hasService = inv.items?.some((it) => it.item_type !== "product");
+
+          if (selectedSaleType === "product" && !hasProduct) return false;
+          if (selectedSaleType === "service" && !hasService) return false;
+          if (selectedSaleType === "product_only" && (!hasProduct || hasService)) return false;
+          if (selectedSaleType === "service_only" && (!hasService || hasProduct)) return false;
+        }
+
         // Mode filter
         if (selectedMode !== "all" && inv.payment_mode !== selectedMode) {
           return false;
@@ -99,7 +111,7 @@ export function RecentInvoices() {
         return false;
       }
     });
-  }, [invoices, selectedMode, selectedStatus, searchQuery, isInvoicePendingSync]);
+  }, [invoices, selectedMode, selectedStatus, selectedSaleType, searchQuery, isInvoicePendingSync]);
 
   // TODAY STATS WITH SEPARATE SERVICES & RETAIL PRODUCT SALES
   const todaySettled = todaysInvoices.filter((i) => i.status !== "void");
@@ -248,8 +260,20 @@ export function RecentInvoices() {
           />
         </div>
 
-        {/* PAYMENT MODE & STATUS FILTER */}
-        <div className="flex items-center gap-2">
+        {/* SALE TYPE, PAYMENT MODE & STATUS FILTER */}
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={selectedSaleType}
+            onChange={(e) => setSelectedSaleType(e.target.value)}
+            className="h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-300 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+          >
+            <option value="all">All Sales (All Items)</option>
+            <option value="service">Service Sale</option>
+            <option value="product">Product Sale</option>
+            <option value="service_only">Service Only</option>
+            <option value="product_only">Product Only</option>
+          </select>
+
           <select
             value={selectedMode}
             onChange={(e) => setSelectedMode(e.target.value)}

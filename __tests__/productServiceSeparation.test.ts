@@ -161,4 +161,84 @@ describe("Product and Service Sales Separation", () => {
     expect(text).toContain("Hair Cut");
     expect(text).toContain("*Grand Total:* *₹200.00*");
   });
+
+  it("filters invoices correctly by product sale vs service sale", () => {
+    const invProductOnly: Invoice = {
+      id: "inv-p-only",
+      invoice_number: "BEL-101",
+      customer_name: "Customer P",
+      customer_phone: "9999999991",
+      subtotal: 500,
+      grand_total: 500,
+      status: "paid",
+      payment_mode: "upi",
+      created_at: new Date().toISOString(),
+      items: [{ id: "p1", item_name: "Serum", item_type: "product", quantity: 1, unit_price: 500, total_price: 500 }],
+    };
+
+    const invServiceOnly: Invoice = {
+      id: "inv-s-only",
+      invoice_number: "BEL-102",
+      customer_name: "Customer S",
+      customer_phone: "9999999992",
+      subtotal: 400,
+      grand_total: 400,
+      status: "paid",
+      payment_mode: "cash",
+      created_at: new Date().toISOString(),
+      items: [{ id: "s1", item_name: "Beard Trim", item_type: "service", quantity: 1, unit_price: 400, total_price: 400 }],
+    };
+
+    const invMixed: Invoice = {
+      id: "inv-mixed",
+      invoice_number: "BEL-103",
+      customer_name: "Customer M",
+      customer_phone: "9999999993",
+      subtotal: 900,
+      grand_total: 900,
+      status: "paid",
+      payment_mode: "card",
+      created_at: new Date().toISOString(),
+      items: [
+        { id: "s2", item_name: "Hair Cut", item_type: "service", quantity: 1, unit_price: 400, total_price: 400 },
+        { id: "p2", item_name: "Wax", item_type: "product", quantity: 1, unit_price: 500, total_price: 500 },
+      ],
+    };
+
+    const allInvoices = [invProductOnly, invServiceOnly, invMixed];
+
+    const filterBySaleType = (invoices: Invoice[], saleType: string) => {
+      return invoices.filter((inv) => {
+        if (saleType === "all") return true;
+        const hasProduct = inv.items?.some((it) => it.item_type === "product");
+        const hasService = inv.items?.some((it) => it.item_type !== "product");
+
+        if (saleType === "product" && !hasProduct) return false;
+        if (saleType === "service" && !hasService) return false;
+        if (saleType === "product_only" && (!hasProduct || hasService)) return false;
+        if (saleType === "service_only" && (!hasService || hasProduct)) return false;
+        return true;
+      });
+    };
+
+    // 1. All sales returns all 3
+    expect(filterBySaleType(allInvoices, "all").length).toBe(3);
+
+    // 2. Product sale returns invoices with product (Product Only + Mixed)
+    const productSales = filterBySaleType(allInvoices, "product");
+    expect(productSales.map((i) => i.id)).toEqual(["inv-p-only", "inv-mixed"]);
+
+    // 3. Service sale returns invoices with service (Service Only + Mixed)
+    const serviceSales = filterBySaleType(allInvoices, "service");
+    expect(serviceSales.map((i) => i.id)).toEqual(["inv-s-only", "inv-mixed"]);
+
+    // 4. Product only returns only invProductOnly
+    const productOnly = filterBySaleType(allInvoices, "product_only");
+    expect(productOnly.map((i) => i.id)).toEqual(["inv-p-only"]);
+
+    // 5. Service only returns only invServiceOnly
+    const serviceOnly = filterBySaleType(allInvoices, "service_only");
+    expect(serviceOnly.map((i) => i.id)).toEqual(["inv-s-only"]);
+  });
 });
+
