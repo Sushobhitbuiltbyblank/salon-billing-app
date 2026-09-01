@@ -392,8 +392,17 @@ export function initStorage() {
         sushobhit.total_visits = remaining.length;
         sushobhit.total_spent = remaining.reduce((sum, inv) => sum + (Number(inv.grand_total) || 0), 0);
         sushobhit.last_visit = remaining[0]?.created_at || undefined;
-        Storage.saveCustomers(custs);
       }
+
+      // Explicitly purge typo duplicate customers
+      const cleanCusts = custs.filter(
+        (c) =>
+          c.id !== "00082bcc-7e03-428b-9bc6-ca7eccfbd112" &&
+          c.id !== "5d9a9338-b39c-478c-98c5-7dc2d0a610a6" &&
+          normalizePhoneNumber(c.phone) !== "9250755665" &&
+          normalizePhoneNumber(c.phone) !== "6092153532"
+      );
+      Storage.saveCustomers(cleanCusts);
     }
   } catch (err) {
     console.error("initStorage error:", err);

@@ -62,12 +62,15 @@ import {
   CalendarClock,
   Scissors,
   CheckCheck,
+  Trash2,
 } from "lucide-react";
 
 export function CustomerDirectory() {
   const {
     customers,
     saveCustomer,
+    deleteCustomer,
+    currentUser,
     invoices,
     setPrintInvoice,
     setDraftCustomer,
@@ -904,14 +907,31 @@ export function CustomerDirectory() {
                       </button>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(cust)}
-                      className="p-2 rounded-xl text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer"
-                      title="Edit Customer Profile"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(cust)}
+                        className="p-2 rounded-xl text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer"
+                        title="Edit Customer Profile"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+
+                      {currentUser?.role === "admin" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Permanently delete client ${cust.name} (${cust.phone})?`)) {
+                              deleteCustomer(cust.id);
+                            }
+                          }}
+                          className="p-2 rounded-xl text-zinc-500 hover:text-rose-400 bg-zinc-900 hover:bg-rose-950/40 border border-zinc-800 hover:border-rose-800/50 transition-colors cursor-pointer"
+                          title="Delete Client Record (Admin Only)"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </Card>
