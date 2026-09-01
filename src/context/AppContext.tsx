@@ -275,27 +275,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // SAFE TWO-WAY MERGE: Never overwrite local unsynced invoices!
           const localInvoices = Storage.getInvoices();
           const mergedInvoices = Storage.mergeInvoices(localInvoices, cloudData.invoices);
-          setInvoices((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedInvoices) ? mergedInvoices : prev));
+          setInvoices((prev) => {
+            if (
+              prev.length === mergedInvoices.length &&
+              prev.every(
+                (inv, i) =>
+                  inv.id === mergedInvoices[i]?.id &&
+                  inv.status === mergedInvoices[i]?.status &&
+                  inv.grand_total === mergedInvoices[i]?.grand_total
+              )
+            ) {
+              return prev;
+            }
+            return mergedInvoices;
+          });
           Storage.saveInvoices(mergedInvoices);
 
           // Auto-reconciliation: ensure any local invoice not yet recorded in cloud is enqueued for sync
           const cloudIds = new Set(cloudData.invoices.map((c) => c.id).filter(Boolean));
           const cloudNumbers = new Set(cloudData.invoices.map((c) => c.invoice_number).filter(Boolean));
-          let hasUnsyncedInvoices = false;
           mergedInvoices.forEach((m) => {
             const inCloud =
               (m.id && cloudIds.has(m.id)) || (m.invoice_number && cloudNumbers.has(m.invoice_number));
             if (!inCloud) {
               Storage.addToInvoiceSyncQueue(m.id);
-              hasUnsyncedInvoices = true;
             }
           });
 
-          // If there are pending invoices in the queue, trigger processing
-          if (hasUnsyncedInvoices || Storage.getPendingInvoiceSyncQueue().length > 0) {
-            setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
-            syncPendingInvoices();
-          }
+          const currentQueueLen = Storage.getPendingInvoiceSyncQueue().length;
+          setPendingSyncCount((prev) => (prev !== currentQueueLen ? currentQueueLen : prev));
         }
         if (cloudData.expenses) {
           setExpenses((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.expenses) ? cloudData.expenses : prev));
@@ -307,14 +315,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
-  }, [syncPendingInvoices]);
+  }, []);
 
   // NETWORK CONNECTIVITY & BACKGROUND SYNC LISTENERS
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     setIsOnline(navigator.onLine);
-    setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
+    const initialQueueCount = Storage.getPendingInvoiceSyncQueue().length;
+    setPendingSyncCount((prev) => (prev !== initialQueueCount ? initialQueueCount : prev));
 
     const handleOnline = () => {
       setIsOnline(true);
@@ -341,13 +350,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loadAllData();
     });
 
-    // 2. Multi-device 4-second heartbeat polling: sync pending queue and load cloud updates
+    // 2. Multi-device 30-second heartbeat polling: sync pending queue and load cloud updates
     const interval = setInterval(() => {
       if (Storage.getPendingInvoiceSyncQueue().length > 0) {
         syncPendingInvoices();
       }
       loadAllData();
-    }, 4000);
+    }, 30000);
 
     // 3. Instant sync on window focus or screen unlock / tab switch
     const onVisibilityChange = () => {
