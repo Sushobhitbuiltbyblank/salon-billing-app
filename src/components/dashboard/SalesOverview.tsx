@@ -51,32 +51,28 @@ export function SalesOverview() {
   }, [invoices, expenses, timeframe]);
 
   // Compute Cost of Goods Sold (COGS) and Retail Product breakdown
+  // Note: MRP is not purchase price. Since actual purchase price is not tracked yet,
+  // retail markup is 2x of purchase cost (i.e. COGS is 50% of the sale price).
   const { totalCOGS, retailRevenue, retailProfit, servicesRevenue } = useMemo(() => {
     let cogs = 0;
     let retRev = 0;
     let srvRev = 0;
 
-    const catalogMap = new Map<string, number>();
-    catalog.forEach((item) => {
-      catalogMap.set(item.name.toLowerCase().trim(), item.cost_price || 0);
-      if (item.id) catalogMap.set(item.id, item.cost_price || 0);
-    });
-
     filteredInvoices.forEach((inv) => {
       inv.items.forEach((item) => {
         if (item.item_type === "product") {
-          retRev += item.total_price;
-          const unitCost = catalogMap.get(item.item_id || "") ?? catalogMap.get(item.item_name.toLowerCase().trim()) ?? 0;
-          cogs += unitCost * item.quantity;
+          const itemPrice = item.total_price || (item.unit_price || 0) * (item.quantity || 1);
+          retRev += itemPrice;
+          cogs += itemPrice / 2; // Sale price is 2x purchase cost -> COGS = 50%
         } else {
-          srvRev += item.total_price;
+          srvRev += item.total_price || (item.unit_price || 0) * (item.quantity || 1);
         }
       });
     });
 
     const retProfit = retRev - cogs;
     return { totalCOGS: cogs, retailRevenue: retRev, retailProfit: retProfit, servicesRevenue: srvRev };
-  }, [filteredInvoices, catalog]);
+  }, [filteredInvoices]);
 
   // Compute KPIs
   const grossSales = filteredInvoices.reduce((sum, inv) => sum + inv.grand_total, 0);
@@ -248,7 +244,7 @@ export function SalesOverview() {
               -{formatCurrency(totalCOGS, settings.currency_symbol)}
             </span>
             <span className="text-[10px] text-zinc-500 block mt-0.5">
-              Purchase MRP cost of items sold
+              Est. purchase cost (50% of retail sales, 2x markup)
             </span>
           </div>
 

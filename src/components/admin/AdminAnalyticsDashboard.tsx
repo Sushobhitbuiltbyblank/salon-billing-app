@@ -103,24 +103,20 @@ export function AdminAnalyticsDashboard() {
     const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
 
     // COGS & Retail vs Services Breakdown
+    // Note: MRP is not purchase price. Since actual purchase price is not tracked yet,
+    // retail markup is 2x of purchase cost (i.e. COGS is 50% of the sale price).
     let totalCOGS = 0;
     let servicesRevenue = 0;
     let retailRevenue = 0;
 
-    const catalogMap = new Map<string, number>();
-    catalog.forEach((item) => {
-      if (item.name) catalogMap.set(item.name.toLowerCase().trim(), item.cost_price || 0);
-      if (item.id) catalogMap.set(item.id, item.cost_price || 0);
-    });
-
     filteredInvoices.forEach((inv) => {
       inv.items?.forEach((it) => {
         if (it.item_type === "product") {
-          retailRevenue += it.total_price || 0;
-          const cost = catalogMap.get(it.item_id || "") ?? catalogMap.get(it.item_name.toLowerCase().trim()) ?? 0;
-          totalCOGS += cost * (it.quantity || 1);
+          const itemPrice = it.total_price || (it.unit_price || 0) * (it.quantity || 1);
+          retailRevenue += itemPrice;
+          totalCOGS += itemPrice / 2; // Sale price is 2x purchase cost -> COGS = 50%
         } else {
-          servicesRevenue += it.total_price || 0;
+          servicesRevenue += it.total_price || (it.unit_price || 0) * (it.quantity || 1);
         }
       });
     });
