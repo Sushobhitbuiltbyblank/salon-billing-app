@@ -552,24 +552,14 @@ export function CartItemList() {
         const isPackage = item.item_type === "package";
         const isProduct = item.item_type === "product";
 
-        // Check if package has missing stylist for ANY sub-service
         const packageServices = item.package_services || [];
-        const isPackageStylistMissing =
-          isPackage &&
-          (packageServices.length > 0
-            ? packageServices.some((s) => !s.primary_staff_id)
-            : !item.primary_staff_id);
-
-        const isStylistMissing = isService ? !item.primary_staff_id : isPackageStylistMissing;
         const isPersonOpen = openGuestItemId === item.id;
 
         return (
           <div
             key={item.id}
             className={`group relative rounded-2xl border p-3.5 backdrop-blur-xl transition-all duration-200 ${
-              isStylistMissing
-                ? "border-amber-500/60 bg-amber-950/15 hover:border-amber-500/80 shadow-md shadow-amber-950/20"
-                : isPackage
+              isPackage
                 ? "border-purple-900/60 bg-purple-950/20 hover:border-pink-500/50"
                 : "border-zinc-800/90 bg-zinc-950/80 hover:border-purple-500/40 hover:bg-zinc-900/90"
             }`}
@@ -612,13 +602,6 @@ export function CartItemList() {
                           • {item.guest_phone.slice(-4)}
                         </span>
                       )}
-                    </span>
-                  )}
-
-                  {isStylistMissing && (
-                    <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
-                      <AlertCircle className="h-2.5 w-2.5" />
-                      Stylist Required
                     </span>
                   )}
                 </div>
@@ -948,11 +931,7 @@ export function CartItemList() {
                     return (
                       <div
                         key={svc.service_id || sIdx}
-                        className={`p-2.5 rounded-xl border space-y-2 transition-all ${
-                          isSvcUnassigned
-                            ? "bg-amber-950/20 border-amber-500/40"
-                            : "bg-zinc-900/90 border-zinc-800/80"
-                        }`}
+                        className="p-2.5 rounded-xl border space-y-2 transition-all bg-zinc-900/90 border-zinc-800/80"
                       >
                         {/* ROW 1: SERVICE TITLE & PRICE */}
                         <div className="flex items-center justify-between gap-2">
@@ -1002,13 +981,9 @@ export function CartItemList() {
                                 e.target.value
                               )
                             }
-                            className={`w-full h-7 px-2 text-[10px] rounded-lg font-medium transition-all focus:outline-none focus:ring-1 truncate ${
-                              isSvcUnassigned
-                                ? "bg-amber-950/60 border border-amber-500 text-amber-200 focus:ring-amber-500"
-                                : "bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
-                            }`}
+                            className="w-full h-7 px-2 text-[10px] rounded-lg font-medium transition-all focus:outline-none focus:ring-1 truncate bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
                           >
-                            <option value="">-- Stylist * --</option>
+                            <option value="">-- Stylist (Optional) --</option>
                             {staff.map((s) => (
                               <option
                                 key={s.id}
@@ -1162,8 +1137,8 @@ export function CartItemList() {
                 {/* 1. STYLIST SELECTOR ROW */}
                 <div className="space-y-1">
                   <span className="text-[10px] font-bold text-zinc-400 flex items-center gap-1">
-                    <User className={`h-3 w-3 ${isStylistMissing ? "text-amber-400" : "text-purple-400"}`} />
-                    {isService ? "Assigned Stylist *" : "Staff (Optional)"}
+                    <User className="h-3 w-3 text-purple-400" />
+                    Stylist (Optional)
                   </span>
 
                   {item.staff_splits && item.staff_splits.length > 1 ? (
@@ -1205,14 +1180,10 @@ export function CartItemList() {
                               : undefined,
                           });
                         }}
-                        className={`h-8 px-2.5 text-xs rounded-xl font-medium flex-1 min-w-0 transition-all focus:outline-none focus:ring-1 truncate ${
-                          isStylistMissing
-                            ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
-                            : "bg-zinc-900 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
-                        }`}
+                        className="h-8 px-2.5 text-xs rounded-xl font-medium flex-1 min-w-0 transition-all focus:outline-none focus:ring-1 truncate bg-zinc-900 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
                       >
                         <option value="">
-                          {isService ? "-- Select Stylist * --" : "-- Assign Staff (Optional) --"}
+                          -- Select Stylist (Optional) --
                         </option>
                         {staff.map((s) => (
                           <option

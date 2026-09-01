@@ -411,34 +411,6 @@ export function EditInvoiceModal() {
       return;
     }
 
-    // VALIDATE STYLIST FOR EVERY SERVICE & ALL PACKAGE SERVICES
-    const unassignedItems: string[] = [];
-    items.forEach((item) => {
-      if (item.item_type === "service" && !item.primary_staff_id) {
-        unassignedItems.push(`• ${item.item_name}`);
-      } else if (item.item_type === "package") {
-        if (item.package_services && item.package_services.length > 0) {
-          const missing = item.package_services.filter((s) => !s.primary_staff_id);
-          if (missing.length > 0) {
-            unassignedItems.push(
-              `• ${item.item_name} (Missing stylist for: ${missing.map((s) => s.service_name).join(", ")})`
-            );
-          }
-        } else if (!item.primary_staff_id) {
-          unassignedItems.push(`• ${item.item_name}`);
-        }
-      }
-    });
-
-    if (unassignedItems.length > 0) {
-      alert(
-        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each service before saving:\n\n${unassignedItems.join(
-          "\n"
-        )}`
-      );
-      return;
-    }
-
     try {
       setIsSaving(true);
 
@@ -828,21 +800,17 @@ export function EditInvoiceModal() {
                     {/* STYLIST SELECTOR & SPLIT (FOR NON-PACKAGES) */}
                     <div>
                       <span className="text-[10px] text-zinc-400 block mb-0.5">
-                        {isPackage ? "Actions" : `Stylist & Split ${isService && !item.primary_staff_id ? "*" : ""}`}
+                        {isPackage ? "Actions" : "Stylist & Split (Optional)"}
                       </span>
                       <div className="flex items-center gap-1">
                         {!isPackage && (
                           <select
                             value={item.primary_staff_id || ""}
                             onChange={(e) => handleItemStaffChange(item.id, e.target.value)}
-                            className={`h-7 px-1.5 text-xs rounded-lg focus:outline-none focus:ring-1 flex-1 min-w-0 font-medium ${
-                              isService && !item.primary_staff_id
-                                ? "bg-amber-950/40 border border-amber-500/70 text-amber-200 focus:ring-amber-500 font-bold"
-                                : "bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
-                            }`}
+                            className="h-7 px-1.5 text-xs rounded-lg focus:outline-none focus:ring-1 flex-1 min-w-0 font-medium bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
                           >
                             <option value="">
-                              {isService ? "-- Select Stylist * --" : "-- Staff (Optional) --"}
+                              -- Select Stylist (Optional) --
                             </option>
                             {staff.map((s) => (
                               <option key={s.id} value={s.id}>
@@ -930,11 +898,7 @@ export function EditInvoiceModal() {
                           return (
                             <div
                               key={svc.service_id || sIdx}
-                              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 rounded-lg border text-xs ${
-                                isUnassigned
-                                  ? "bg-amber-950/30 border-amber-500/60"
-                                  : "bg-zinc-900/80 border-zinc-800/80"
-                              }`}
+                              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-1.5 rounded-lg border text-xs bg-zinc-900/80 border-zinc-800/80"
                             >
                               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                 <span className="font-bold text-zinc-200 truncate text-[11px]">
@@ -978,13 +942,9 @@ export function EditInvoiceModal() {
                                       e.target.value
                                     )
                                   }
-                                  className={`h-6 px-1.5 text-[10px] rounded-lg font-bold min-w-[130px] focus:outline-none focus:ring-1 ${
-                                    isUnassigned
-                                      ? "bg-amber-950/60 border border-amber-500 text-amber-200 focus:ring-amber-500"
-                                      : "bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
-                                  }`}
+                                  className="h-6 px-1.5 text-[10px] rounded-lg font-bold min-w-[130px] focus:outline-none focus:ring-1 bg-zinc-950 border border-zinc-800 text-zinc-200 focus:ring-purple-500"
                                 >
-                                  <option value="">-- Select Stylist * --</option>
+                                  <option value="">-- Stylist (Optional) --</option>
                                   {staff
                                     .filter((s) => s.status === "active")
                                     .map((s) => (

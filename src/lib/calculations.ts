@@ -239,7 +239,7 @@ export function calculateStaffPerformance(
       const invoiceSubtotal =
         invoice.subtotal !== undefined && invoice.subtotal > 0
           ? invoice.subtotal
-          : invoice.items.reduce(
+          : (invoice.items || []).reduce(
               (sum, it) =>
                 sum +
                 (it.total_price !== undefined
@@ -263,7 +263,7 @@ export function calculateStaffPerformance(
           ? 0
           : 1;
 
-      invoice.items.forEach((item) => {
+      (invoice.items || []).forEach((item) => {
         // PACKAGE COMBO: CREDIT INDIVIDUAL SERVICES TO RESPECTIVE ASSIGNED STYLISTS
         if (
           item.item_type === "package" &&

@@ -96,35 +96,6 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
   const handleCheckout = async () => {
     if (draftItems.length === 0) return;
 
-    // VALIDATE STYLIST FOR EVERY SERVICE & ALL PACKAGE SERVICES
-    const unassignedItems: string[] = [];
-    draftItems.forEach((item) => {
-      if (item.item_type === "service" && !item.primary_staff_id) {
-        unassignedItems.push(`• ${item.item_name}`);
-      } else if (item.item_type === "package") {
-        if (item.package_services && item.package_services.length > 0) {
-          const missing = item.package_services.filter((s) => !s.primary_staff_id);
-          if (missing.length > 0) {
-            unassignedItems.push(
-              `• ${item.item_name} (Missing stylist for: ${missing.map((s) => s.service_name).join(", ")})`
-            );
-          }
-        } else if (!item.primary_staff_id) {
-          unassignedItems.push(`• ${item.item_name}`);
-        }
-      }
-    });
-
-    if (unassignedItems.length > 0) {
-      alert(
-        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each service before completing payment:\n\n${unassignedItems.join(
-          "\n"
-        )}`
-      );
-      onOpenChange(false);
-      return;
-    }
-
     // VALIDATE GENDER MANDATORY ONLY FOR SPECIFIC NAMED / REGISTERED CUSTOMERS (OPTIONAL FOR GUEST / WALK-IN)
     if (hasNamedCustomer && (!draftCustomer?.gender || draftCustomer.gender === "unspecified")) {
       alert(

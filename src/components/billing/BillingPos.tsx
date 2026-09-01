@@ -17,7 +17,6 @@ import {
   ShoppingBag,
   ArrowLeft,
   ChevronRight,
-  AlertCircle,
 } from "lucide-react";
 
 export function BillingPos() {
@@ -42,40 +41,8 @@ export function BillingPos() {
     taxRate: settings.tax_rate,
   });
 
-  // Check unassigned services and packages (services/packages without primary stylist for all sub-services)
-  const unassignedServices: { name: string; details?: string }[] = [];
-  draftItems.forEach((item) => {
-    if (item.item_type === "service" && !item.primary_staff_id) {
-      unassignedServices.push({ name: item.item_name });
-    } else if (item.item_type === "package") {
-      if (item.package_services && item.package_services.length > 0) {
-        const missing = item.package_services.filter((s) => !s.primary_staff_id);
-        if (missing.length > 0) {
-          unassignedServices.push({
-            name: item.item_name,
-            details: `Missing stylist for: ${missing.map((s) => s.service_name).join(", ")}`,
-          });
-        }
-      } else if (!item.primary_staff_id) {
-        unassignedServices.push({ name: item.item_name });
-      }
-    }
-  });
-
   const handleOpenPayment = () => {
     if (draftItems.length === 0) return;
-
-    if (unassignedServices.length > 0) {
-      const listText = unassignedServices
-        .map((s) => (s.details ? `• ${s.name} (${s.details})` : `• ${s.name}`))
-        .join("\n");
-      alert(
-        `⚠️ Stylist Selection Required\n\nPlease select a stylist for each service before checkout:\n\n${listText}`
-      );
-      setMobileTab("ticket");
-      return;
-    }
-
     setIsPaymentOpen(true);
   };
 
@@ -253,28 +220,14 @@ export function BillingPos() {
               </div>
             </div>
 
-            {/* WARNING ALERT IF STYLISTS ARE UNASSIGNED */}
-            {unassignedServices.length > 0 && (
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200">
-                <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 animate-pulse" />
-                <span className="font-medium truncate">
-                  {unassignedServices.length} item{unassignedServices.length > 1 ? "s" : ""} require{unassignedServices.length === 1 ? "s" : ""} stylist selection
-                </span>
-              </div>
-            )}
-
             {/* ACTION BUTTONS */}
             <div className="flex items-center gap-2 pt-0.5">
               <Button
-                variant={unassignedServices.length > 0 ? "secondary" : "glow"}
+                variant="glow"
                 size="lg"
                 onClick={handleOpenPayment}
                 disabled={draftItems.length === 0}
-                className={`flex-1 text-sm font-bold h-11 sm:h-12 ${
-                  unassignedServices.length > 0
-                    ? "border-amber-500/50 text-amber-300 hover:bg-amber-950/40"
-                    : ""
-                }`}
+                className="flex-1 text-sm font-bold h-11 sm:h-12"
               >
                 <CreditCard className="h-4 w-4 mr-1.5" />
                 Collect & Settle ({formatCurrency(totals.grandTotal, settings.currency_symbol)})
