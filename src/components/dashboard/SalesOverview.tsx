@@ -50,37 +50,13 @@ export function SalesOverview() {
     return { filteredInvoices: fInvoices, filteredExpenses: fExpenses };
   }, [invoices, expenses, timeframe]);
 
-  // Compute Cost of Goods Sold (COGS) and Retail Product breakdown
-  // Note: MRP is not purchase price. Since actual purchase price is not tracked yet,
-  // retail markup is 2x of purchase cost (i.e. COGS is 50% of the sale price).
-  const { totalCOGS, retailRevenue, retailProfit, servicesRevenue } = useMemo(() => {
-    let cogs = 0;
-    let retRev = 0;
-    let srvRev = 0;
-
-    filteredInvoices.forEach((inv) => {
-      inv.items.forEach((item) => {
-        if (item.item_type === "product") {
-          const itemPrice = item.total_price || (item.unit_price || 0) * (item.quantity || 1);
-          retRev += itemPrice;
-          cogs += itemPrice / 2; // Sale price is 2x purchase cost -> COGS = 50%
-        } else {
-          srvRev += item.total_price || (item.unit_price || 0) * (item.quantity || 1);
-        }
-      });
-    });
-
-    const retProfit = retRev - cogs;
-    return { totalCOGS: cogs, retailRevenue: retRev, retailProfit: retProfit, servicesRevenue: srvRev };
-  }, [filteredInvoices]);
-
   // Compute KPIs
   const grossSales = filteredInvoices.reduce((sum, inv) => sum + inv.grand_total, 0);
   const totalSubtotal = filteredInvoices.reduce((sum, inv) => sum + inv.subtotal, 0);
   const totalDiscounts = filteredInvoices.reduce((sum, inv) => sum + inv.discount_amount, 0);
   const totalTaxes = filteredInvoices.reduce((sum, inv) => sum + inv.tax_amount, 0);
   const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const netProfit = grossSales - totalCOGS - totalExpenses;
+  const netProfit = grossSales - totalExpenses;
   const profitMargin = grossSales > 0 ? ((netProfit / grossSales) * 100).toFixed(1) : "0";
 
   // Payment Mode Breakdown
@@ -214,61 +190,6 @@ export function SalesOverview() {
           </div>
         </Card>
       </div>
-
-      {/* PROFIT & MARGIN RECONCILIATION CARD */}
-      <Card className="border-zinc-800 bg-zinc-900/60 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-emerald-400" />
-            <span>Profit & Margins Breakdown (Sales vs Purchase Costs vs Expenses)</span>
-          </h3>
-          <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-800/40">
-            {profitMargin}% Net Margin
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800">
-            <span className="text-[10px] text-zinc-400 block font-medium">1. Gross Revenue</span>
-            <span className="text-sm font-black text-white font-mono mt-0.5 block">
-              {formatCurrency(grossSales, settings.currency_symbol)}
-            </span>
-            <span className="text-[10px] text-zinc-500 block mt-0.5">
-              Services: {formatCurrency(servicesRevenue, settings.currency_symbol)} | Retail: {formatCurrency(retailRevenue, settings.currency_symbol)}
-            </span>
-          </div>
-
-          <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800">
-            <span className="text-[10px] text-amber-400 block font-medium">2. Retail Cost (COGS)</span>
-            <span className="text-sm font-black text-amber-300 font-mono mt-0.5 block">
-              -{formatCurrency(totalCOGS, settings.currency_symbol)}
-            </span>
-            <span className="text-[10px] text-zinc-500 block mt-0.5">
-              Est. purchase cost (50% of retail sales, 2x markup)
-            </span>
-          </div>
-
-          <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800">
-            <span className="text-[10px] text-rose-400 block font-medium">3. Salon Expenses</span>
-            <span className="text-sm font-black text-rose-300 font-mono mt-0.5 block">
-              -{formatCurrency(totalExpenses, settings.currency_symbol)}
-            </span>
-            <span className="text-[10px] text-zinc-500 block mt-0.5">
-              Operating costs & bills
-            </span>
-          </div>
-
-          <div className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-800/40">
-            <span className="text-[10px] text-emerald-400 block font-bold">4. Actual Take-Home Profit</span>
-            <span className="text-sm font-black text-emerald-300 font-mono mt-0.5 block">
-              ={formatCurrency(netProfit, settings.currency_symbol)}
-            </span>
-            <span className="text-[10px] text-emerald-400/80 block mt-0.5 font-medium">
-              Gross Sales - COGS - Expenses
-            </span>
-          </div>
-        </div>
-      </Card>
 
       {/* SECOND ROW: PAYMENT BREAKDOWN & TOP TREATMENTS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
