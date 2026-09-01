@@ -35,6 +35,7 @@ const KEYS = {
   INVOICE_SYNC_QUEUE: `${STORAGE_PREFIX}invoice_sync_queue`,
   EXPENSES: `${STORAGE_PREFIX}expenses`,
   DELETED_CATALOG_IDS: `${STORAGE_PREFIX}deleted_catalog_ids`,
+  DELETED_INVOICES: `${STORAGE_PREFIX}deleted_invoices`,
   STAFF_STATUS_DATE: `${STORAGE_PREFIX}staff_status_date`,
   INITIALIZED: `${STORAGE_PREFIX}full_catalog_v5`,
 };
@@ -377,6 +378,9 @@ export function initStorage() {
           }
         } catch {}
       }
+      // Explicitly purge BZ-20260901-4311 requested by admin
+      Storage.deleteInvoice("BZ-20260901-4311");
+      Storage.deleteInvoice("463fceae-a7b5-4d57-98bf-6bbb47933198");
     }
   } catch (err) {
     console.error("initStorage error:", err);
@@ -932,10 +936,66 @@ export const Storage = {
       this.addToInvoiceSyncQueue(invoiceId);
     }
   },
-  deleteInvoice(invoiceId: string): void {
-    const invoices = this.getInvoices().filter((inv) => inv.id !== invoiceId);
-    this.saveInvoices(invoices);
-    this.removeFromInvoiceSyncQueue(invoiceId);
+  deleteInvoice(invoiceIdentifier: string): void {
+    if (typeof window === "undefined" || !invoiceIdentifier) return;
+    const allInvoices = this.getInvoices();
+    const target = allInvoices.find(
+      (inv) => inv.id === invoiceIdentifier || inv.invoice_number === invoiceIdentifier
+    );
+    const targetId = target?.id || invoiceIdentifier;
+    const targetNum = target?.invoice_number || invoiceIdentifier;
+
+    // 1. Remove from active local invoices
+    const filtered = allInvoices.filter(
+      (inv) => inv.id !== targetId && inv.invoice_number !== targetNum
+    );
+    this.saveInvoices(filtered);
+
+    // 2. Remove from local archive (CRITICAL: prevents resurrection from archive!)
+    try {
+      const archive = this.getInvoicesArchive().filter(
+        (inv) => inv.id !== targetId && inv.invoice_number !== targetNum
+      );
+      localStorage.setItem(KEYS.INVOICES_ARCHIVE, JSON.stringify(archive));
+    } catch (e) {
+      console.error("Failed to remove deleted invoice from archive:", e);
+    }
+
+    // 3. Remove from pending sync queue
+    this.removeFromInvoiceSyncQueue(targetId);
+    this.removeFromInvoiceSyncQueue(targetNum);
+
+    // 4. Record in deleted invoices tombstone set
+    this.addDeletedInvoice(targetId);
+    if (targetNum) {
+      this.addDeletedInvoice(targetNum);
+    }
+  },
+
+  // TOMBSTONES FOR PERMANENTLY DELETED INVOICES (PREVENTS ACCIDENTAL RESURRECTION)
+  getDeletedInvoices(): string[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(KEYS.DELETED_INVOICES);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  },
+
+  addDeletedInvoice(idOrNum: string): void {
+    if (typeof window === "undefined" || !idOrNum) return;
+    try {
+      const list = this.getDeletedInvoices();
+      if (!list.includes(idOrNum)) {
+        list.push(idOrNum);
+        localStorage.setItem(KEYS.DELETED_INVOICES, JSON.stringify(list.slice(-500)));
+      }
+    } catch (e) {
+      console.error("Failed to record deleted invoice tombstone:", e);
+    }
   },
 
   // OFFLINE INVOICE SYNC QUEUE
@@ -980,14 +1040,24 @@ export const Storage = {
   /**
    * Safe Two-Way Invoices Merge:
    * Merges cloud data with local storage without EVER deleting an invoice that only
-   * exists locally (e.g. created offline, in-flight, or pending sync).
+   * exists locally (e.g. created offline, in-flight, or pending sync), while strictly
+   * respecting tombstones for intentionally deleted invoices.
    */
   mergeInvoices(localInvoices: Invoice[], cloudInvoices: Invoice[]): Invoice[] {
-    const activeLocal = Array.isArray(localInvoices) ? [...localInvoices] : [];
-    const validCloud = Array.isArray(cloudInvoices) ? cloudInvoices : [];
+    const deletedSet = new Set(this.getDeletedInvoices());
 
-    // 1. Recover any locally created invoices from append-only archive missing from active local list
-    const archive = this.getInvoicesArchive();
+    // Filter out any intentionally deleted invoices from BOTH local and cloud
+    const activeLocal = (Array.isArray(localInvoices) ? localInvoices : []).filter(
+      (inv) => !(inv.id && deletedSet.has(inv.id)) && !(inv.invoice_number && deletedSet.has(inv.invoice_number))
+    );
+    const validCloud = (Array.isArray(cloudInvoices) ? cloudInvoices : []).filter(
+      (inv) => !(inv.id && deletedSet.has(inv.id)) && !(inv.invoice_number && deletedSet.has(inv.invoice_number))
+    );
+
+    // 1. Recover any locally created invoices from append-only archive missing from active local list (excluding deleted)
+    const archive = this.getInvoicesArchive().filter(
+      (inv) => !(inv.id && deletedSet.has(inv.id)) && !(inv.invoice_number && deletedSet.has(inv.invoice_number))
+    );
     const existingLocalMap = new Map<string, Invoice>();
     activeLocal.forEach((inv) => {
       if (inv.id) existingLocalMap.set(inv.id, inv);
@@ -1050,11 +1120,13 @@ export const Storage = {
       }
     });
 
-    return mergedList.sort((a, b) => {
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return timeB - timeA;
-    });
+    return mergedList
+      .filter((inv) => !(inv.id && deletedSet.has(inv.id)) && !(inv.invoice_number && deletedSet.has(inv.invoice_number)))
+      .sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return timeB - timeA;
+      });
   },
 
   // EXPENSES

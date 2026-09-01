@@ -816,7 +816,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       alert("Permission Denied: Only Admin can permanently delete invoices.");
       return;
     }
-    // 1. Instantly delete from local state & storage for immediate UI response
+    // 1. Instantly delete from local state, archive & storage for immediate UI response
     Storage.deleteInvoice(invoiceId);
     setInvoices(Storage.getInvoices());
     setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
@@ -824,12 +824,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // 2. Delete from Supabase PostgreSQL
     if (isSupabaseConfigured()) {
       await SupabaseSync.deleteInvoice(invoiceId);
-      const cloudData = await SupabaseSync.loadAllData();
-      if (cloudData?.invoices) {
-        const merged = Storage.mergeInvoices(Storage.getInvoices(), cloudData.invoices);
-        setInvoices(merged);
-        Storage.saveInvoices(merged);
-      }
+      await loadAllData();
     }
   };
 

@@ -117,4 +117,37 @@ describe("Storage Layer & Local Data Operations", () => {
     expect(rahul?.gender).toBe("male");
     expect(rahul?.total_spent).toBe(600);
   });
+
+  it("permanently deletes invoices, purges from archive, and never resurrects them in mergeInvoices", () => {
+    const invoice: Invoice = {
+      id: "inv-del-99",
+      invoice_number: "BZ-20260901-4311",
+      customer_name: "Walk-in Guest",
+      subtotal: 1700,
+      discount_amount: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 1700,
+      payment_mode: "upi",
+      status: "paid",
+      created_at: new Date().toISOString(),
+      items: [],
+    };
+
+    Storage.createInvoice(invoice);
+    expect(Storage.getInvoices().some((i) => i.invoice_number === "BZ-20260901-4311")).toBe(true);
+    expect(Storage.getInvoicesArchive().some((i) => i.invoice_number === "BZ-20260901-4311")).toBe(true);
+
+    // Delete by invoice_number
+    Storage.deleteInvoice("BZ-20260901-4311");
+
+    // Must be gone from active invoices
+    expect(Storage.getInvoices().some((i) => i.invoice_number === "BZ-20260901-4311")).toBe(false);
+    // Must be purged from archive
+    expect(Storage.getInvoicesArchive().some((i) => i.invoice_number === "BZ-20260901-4311")).toBe(false);
+
+    // Attempting to merge with cloud or local MUST NOT resurrect it
+    const resurrected = Storage.mergeInvoices([], [invoice]);
+    expect(resurrected.some((i) => i.invoice_number === "BZ-20260901-4311")).toBe(false);
+  });
 });

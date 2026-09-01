@@ -14,6 +14,9 @@ import {
   Staff,
 } from "@/types";
 
+export const isValidUUID = (str?: string | null): boolean =>
+  Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
+
 export function encodePackageSku(packageServiceIds?: string[], regularPrice?: number): string {
   const shortIds = (packageServiceIds || []).map((id) => id.replace(/-/g, "").slice(-8));
   const str = `P:${Math.round(regularPrice || 0)}|${shortIds.join(",")}`;
@@ -653,13 +656,34 @@ export const SupabaseSync = {
     }
   },
 
-  async deleteInvoice(invoiceId: string) {
-    if (!isSupabaseConfigured() || !supabase) return;
+  async deleteInvoice(invoiceId: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !supabase) return false;
     try {
-      await supabase.from("invoice_items").delete().eq("invoice_id", invoiceId);
-      await supabase.from("invoices").delete().eq("id", invoiceId);
+      let targetId: string | null = isValidUUID(invoiceId) ? invoiceId : null;
+      let targetNum: string | null = null;
+
+      const { data: inv } = await supabase
+        .from("invoices")
+        .select("id, invoice_number")
+        .or(`id.eq.${targetId || "00000000-0000-0000-0000-000000000000"},invoice_number.eq.${invoiceId}`)
+        .maybeSingle();
+
+      if (inv) {
+        targetId = inv.id;
+        targetNum = inv.invoice_number;
+      }
+
+      if (targetId) {
+        await supabase.from("invoice_items").delete().eq("invoice_id", targetId);
+        await supabase.from("invoices").delete().eq("id", targetId);
+      }
+      if (targetNum) {
+        await supabase.from("invoices").delete().eq("invoice_number", targetNum);
+      }
+      return true;
     } catch (err) {
       console.error("Supabase deleteInvoice error:", err);
+      return false;
     }
   },
 
