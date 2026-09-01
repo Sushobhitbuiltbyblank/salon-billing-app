@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CustomerModal } from "@/components/customer/CustomerModal";
-import { CustomerOfferModal } from "@/components/customer/CustomerOfferModal";
 import {
   Dialog,
   DialogHeader,
@@ -27,7 +26,6 @@ import {
 import {
   detectCustomerReminders,
   generateWhatsAppReminderUrl,
-  generateWhatsAppRakhiOfferUrl,
   wasReminderSentToday,
 } from "@/lib/reminderUtils";
 import {
@@ -96,14 +94,6 @@ export function CustomerDirectory() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
-  // RAKSHA BANDHAN OFFER MODAL STATE
-  const [selectedOfferCustomer, setSelectedOfferCustomer] = useState<Customer | null>(null);
-  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
-
-  const handleOpenOffer = (cust: Customer) => {
-    setSelectedOfferCustomer(cust);
-    setIsOfferModalOpen(true);
-  };
 
   // UNIFIED CUSTOMER LIST COMBINING REGISTERED PROFILES & INVOICE DATA
   const unifiedCustomers = useMemo(() => {
@@ -285,37 +275,6 @@ export function CustomerDirectory() {
     setTimeout(() => setSyncMessage(null), 4000);
   };
 
-  // SEND RAKHI OFFER DIRECT 1-CLICK WHATSAPP TRIGGER (OPTIMIZED FOR IPHONE, MAC & PC)
-  const handleDirectSendRakhiOffer = (cust: Customer) => {
-    const cleanPhone = normalizePhoneNumber(cust.phone);
-    if (!cleanPhone || cleanPhone.length < 7) {
-      alert("No valid mobile number found for this customer.");
-      return;
-    }
-
-    // 1. Copy PNG offer image to clipboard using synchronous ClipboardItem Promise (supported by iOS Safari & Desktop)
-    if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-      try {
-        const item = new ClipboardItem({
-          "image/png": fetch("/offers/raksha-bandhan-offer.png").then((res) => {
-            if (!res.ok) throw new Error("Failed to fetch image");
-            return res.blob();
-          }),
-        });
-        navigator.clipboard.write([item]).catch((err) => {
-          console.warn("Clipboard copy skipped:", err);
-        });
-      } catch (clipErr) {
-        console.warn("Clipboard write not permitted:", clipErr);
-      }
-    }
-
-    // 2. Open Direct WhatsApp Chat with the customer pre-filled with the Rakhi wish & offer
-    const url = generateWhatsAppRakhiOfferUrl(cust, settings.salon_name || "Belezia Salon");
-    window.open(url, "_blank", "noopener,noreferrer");
-    setSyncMessage(`✓ Rakhi Offer WhatsApp opened for ${cust.name}! (Offer image copied to clipboard - tap Paste in WhatsApp to send image)`);
-    setTimeout(() => setSyncMessage(null), 5000);
-  };
 
   const handleEdit = (customer: Customer) => {
     setEditingCustomer(customer);
@@ -398,39 +357,6 @@ export function CustomerDirectory() {
         </div>
       )}
 
-      {/* FESTIVE RAKSHA BANDHAN PROMO CALLOUT BANNER */}
-      <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-rose-950/80 via-pink-950/60 to-amber-950/80 border border-rose-500/40 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-gradient-to-tr from-rose-600 via-pink-600 to-amber-500 text-white flex items-center justify-center font-bold shadow-lg shadow-rose-600/30 shrink-0">
-            <Gift className="h-5 w-5 sm:h-6 sm:w-6" />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5">
-                <span>Happy Raksha Bandhan Special Campaign</span>
-                <Sparkles className="h-4 w-4 text-amber-400" />
-              </h3>
-              <Badge className="bg-rose-500/30 text-rose-200 border border-rose-500/50 text-[10px] font-bold px-2 py-0.5">
-                Valid till 31-Aug-2026
-              </Badge>
-            </div>
-            <p className="text-xs text-rose-200/90 mt-0.5">
-              🎁 <b>Festive Offer:</b> Bring your siblings & get <b>FREE NAIL PAINT</b> for both hands 💅
-            </p>
-          </div>
-        </div>
-
-        {unifiedCustomers.length > 0 && (
-          <Button
-            size="sm"
-            onClick={() => handleOpenOffer(unifiedCustomers[0])}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs shadow-md shadow-rose-600/30 shrink-0 cursor-pointer transition-all border border-rose-400/30"
-          >
-            <Gift className="h-4 w-4 mr-1.5" />
-            <span>Send Rakhi Offer</span>
-          </Button>
-        )}
-      </div>
 
       {/* CRM TOP LEVEL NAVIGATION TABS */}
       <div className="flex items-center gap-2 border-b border-zinc-800/80 pb-2">
@@ -936,28 +862,6 @@ export function CustomerDirectory() {
 
                 {/* CARD FOOTER ACTIONS */}
                 <div className="flex flex-col gap-2 pt-3 mt-3 border-t border-zinc-800/80">
-                  {/* SEND RAKSHA BANDHAN OFFER (DIRECT 1-CLICK & CUSTOMIZE) */}
-                  <div className="flex items-center gap-1.5 w-full">
-                    <Button
-                      size="sm"
-                      onClick={() => handleDirectSendRakhiOffer(cust)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:via-pink-500 hover:to-amber-500 text-white shadow-md shadow-rose-600/30 cursor-pointer transition-all border border-rose-400/30"
-                      title="Directly open customer's WhatsApp chat with Raksha Bandhan offer & wish"
-                    >
-                      <Gift className="h-3.5 w-3.5 text-amber-200" />
-                      <span>Send Rakhi Offer</span>
-                    </Button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleOpenOffer(cust)}
-                      className="px-2.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-rose-300 hover:text-white border border-rose-500/30 transition-colors cursor-pointer shrink-0 text-xs font-bold flex items-center gap-1"
-                      title="Preview offer banner, edit message text, or download image"
-                    >
-                      <Sparkles className="h-3 w-3 text-amber-400" />
-                      <span>Preview</span>
-                    </button>
-                  </div>
 
                   {/* WHATSAPP TRIGGER BUTTON */}
                   <Button
@@ -1202,16 +1106,6 @@ export function CustomerDirectory() {
         }}
       />
 
-      {/* RAKSHA BANDHAN SPECIAL OFFER MODAL */}
-      <CustomerOfferModal
-        customer={selectedOfferCustomer}
-        isOpen={isOfferModalOpen}
-        onClose={() => {
-          setIsOfferModalOpen(false);
-          setSelectedOfferCustomer(null);
-        }}
-        settings={settings}
-      />
     </div>
   );
 }

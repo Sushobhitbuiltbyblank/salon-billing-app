@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { CustomerModal } from "@/components/customer/CustomerModal";
-import { CustomerOfferModal } from "@/components/customer/CustomerOfferModal";
 import { AdminAnalyticsDashboard } from "@/components/admin/AdminAnalyticsDashboard";
 import { AdminInvoiceManagement } from "@/components/admin/AdminInvoiceManagement";
 import { formatCurrency, formatDate, generateUUID } from "@/lib/utils";
@@ -108,9 +107,6 @@ export function AdminPortal() {
     "analytics" | "invoices" | "customers" | "staff" | "catalog" | "categories" | "users" | "settings"
   >("analytics");
 
-  // RAKSHA BANDHAN OFFER MODAL STATE
-  const [selectedOfferCustomer, setSelectedOfferCustomer] = useState<Customer | null>(null);
-  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
 
   // ATTENDANCE & ROSTER STATE
   const [selectedAttendanceDate, setSelectedAttendanceDate] = useState<string>(
@@ -1308,18 +1304,6 @@ export function AdminPortal() {
                             <span>Bill Now</span>
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedOfferCustomer(cust);
-                              setIsOfferModalOpen(true);
-                            }}
-                            className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white text-xs font-bold transition-all shadow-sm cursor-pointer border border-rose-400/30"
-                            title="Send Raksha Bandhan special offer on WhatsApp"
-                          >
-                            <Gift className="h-3 w-3" />
-                            <span>Offer</span>
-                          </button>
                         </div>
 
                         <div className="flex items-center gap-1">
@@ -3412,16 +3396,6 @@ export function AdminPortal() {
         </Dialog>
       )}
 
-      {/* RAKSHA BANDHAN OFFER MODAL */}
-      <CustomerOfferModal
-        customer={selectedOfferCustomer}
-        isOpen={isOfferModalOpen}
-        onClose={() => {
-          setIsOfferModalOpen(false);
-          setSelectedOfferCustomer(null);
-        }}
-        settings={settings}
-      />
     </div>
   );
 }

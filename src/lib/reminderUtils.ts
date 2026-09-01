@@ -165,21 +165,3 @@ export function generateWhatsAppReminderUrl(
 
   return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`;
 }
-
-/**
- * Formats a clean WhatsApp click-to-chat URL for the Raksha Bandhan special festive offer.
- */
-export function generateWhatsAppRakhiOfferUrl(
-  customer: Customer,
-  salonName: string = "Belezia Salon",
-  customMessage?: string
-): string {
-  const cleanPhone = normalizePhoneNumber(customer.phone);
-  const customerName = customer.name || "there";
-
-  const defaultMessage = `🌸 *Happy Raksha Bandhan from ${salonName}!* 🌸\n\nDear ${customerName},\nCelebrate the cherished bond of love & togetherness this festive season with our exclusive salon treat! ✨\n\n🎁 *SPECIAL RAKSHA BANDHAN OFFER:* 🎁\n💅 *Bring your siblings and get FREE NAIL PAINT for both hands!* 💅\n\n📅 *Offer Valid Till:* 31st August 2026\n📍 *Location:* ${salonName}\n\nReply to this message to book your appointment! 💖`;
-
-  const message = customMessage !== undefined ? customMessage : defaultMessage;
-
-  return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message.trim())}`;
-}

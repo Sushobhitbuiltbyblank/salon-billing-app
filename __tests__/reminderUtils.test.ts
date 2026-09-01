@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   detectCustomerReminders,
   generateWhatsAppReminderUrl,
-  generateWhatsAppRakhiOfferUrl,
   isGroomingOrShaveService,
   wasReminderSentToday,
 } from "@/lib/reminderUtils";
@@ -154,22 +153,5 @@ describe("Customer Reminder Engine & WhatsApp Trigger", () => {
     expect(wasReminderSentToday(today)).toBe(true);
     expect(wasReminderSentToday(twoDaysAgo)).toBe(false);
     expect(wasReminderSentToday(undefined)).toBe(false);
-  });
-
-  it("generates direct WhatsApp click-to-chat URL for Raksha Bandhan special offer", () => {
-    const customer: Customer = {
-      id: "cust-rakhi-1",
-      name: "Pooja",
-      phone: "9988776655",
-      gender: "female",
-      total_visits: 2,
-      total_spent: 800,
-    };
-
-    const url = generateWhatsAppRakhiOfferUrl(customer, "Belezia Salon");
-    expect(url).toContain("https://wa.me/919988776655?text=");
-    expect(url).toContain(encodeURIComponent("Pooja"));
-    expect(url).toContain(encodeURIComponent("FREE NAIL PAINT"));
-    expect(url).toContain(encodeURIComponent("31st August 2026"));
   });
 });
