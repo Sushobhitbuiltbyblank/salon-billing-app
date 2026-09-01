@@ -31,6 +31,7 @@ const KEYS = {
   CATALOG: `${STORAGE_PREFIX}catalog`,
   CUSTOMERS: `${STORAGE_PREFIX}customers`,
   INVOICES: `${STORAGE_PREFIX}invoices`,
+  INVOICE_SYNC_QUEUE: `${STORAGE_PREFIX}invoice_sync_queue`,
   EXPENSES: `${STORAGE_PREFIX}expenses`,
   DELETED_CATALOG_IDS: `${STORAGE_PREFIX}deleted_catalog_ids`,
   STAFF_STATUS_DATE: `${STORAGE_PREFIX}staff_status_date`,
@@ -814,8 +815,11 @@ export const Storage = {
   },
   createInvoice(invoice: Invoice): Invoice {
     const invoices = this.getInvoices();
-    invoices.unshift(invoice);
-    this.saveInvoices(invoices);
+    if (!invoices.some((i) => i.id === invoice.id || (i.invoice_number && i.invoice_number === invoice.invoice_number))) {
+      invoices.unshift(invoice);
+      this.saveInvoices(invoices);
+    }
+    this.addToInvoiceSyncQueue(invoice.id);
 
     // STRICT CRM RULE: Update customer stats ONLY if phone has a valid mobile number (>= 7 digits)
     const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
@@ -880,6 +884,7 @@ export const Storage = {
     if (index !== -1) {
       invoices[index] = invoice;
       this.saveInvoices(invoices);
+      this.addToInvoiceSyncQueue(invoice.id);
     }
     return invoice;
   },
@@ -889,11 +894,102 @@ export const Storage = {
     if (target) {
       target.status = "void";
       this.saveInvoices(invoices);
+      this.addToInvoiceSyncQueue(invoiceId);
     }
   },
   deleteInvoice(invoiceId: string): void {
     const invoices = this.getInvoices().filter((inv) => inv.id !== invoiceId);
     this.saveInvoices(invoices);
+    this.removeFromInvoiceSyncQueue(invoiceId);
+  },
+
+  // OFFLINE INVOICE SYNC QUEUE
+  getPendingInvoiceSyncQueue(): string[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(KEYS.INVOICE_SYNC_QUEUE);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  },
+
+  savePendingInvoiceSyncQueue(queue: string[]): void {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(KEYS.INVOICE_SYNC_QUEUE, JSON.stringify(queue));
+    } catch (e) {
+      console.error("Failed to persist invoice sync queue:", e);
+    }
+  },
+
+  addToInvoiceSyncQueue(invoiceId: string): void {
+    const queue = this.getPendingInvoiceSyncQueue();
+    if (!queue.includes(invoiceId)) {
+      queue.push(invoiceId);
+      this.savePendingInvoiceSyncQueue(queue);
+    }
+  },
+
+  removeFromInvoiceSyncQueue(invoiceId: string): void {
+    const queue = this.getPendingInvoiceSyncQueue().filter((id) => id !== invoiceId);
+    this.savePendingInvoiceSyncQueue(queue);
+  },
+
+  isInvoicePendingSync(invoiceId: string): boolean {
+    return this.getPendingInvoiceSyncQueue().includes(invoiceId);
+  },
+
+  /**
+   * Safe Two-Way Invoices Merge:
+   * Merges cloud data with local storage without EVER deleting an invoice that only
+   * exists locally (e.g. created offline, in-flight, or pending sync).
+   */
+  mergeInvoices(localInvoices: Invoice[], cloudInvoices: Invoice[]): Invoice[] {
+    if (!Array.isArray(cloudInvoices) || cloudInvoices.length === 0) {
+      return Array.isArray(localInvoices) ? localInvoices : [];
+    }
+    if (!Array.isArray(localInvoices) || localInvoices.length === 0) {
+      return cloudInvoices;
+    }
+
+    const cloudMap = new Map<string, Invoice>();
+    const cloudNumberMap = new Map<string, Invoice>();
+    cloudInvoices.forEach((inv) => {
+      if (inv.id) cloudMap.set(inv.id, inv);
+      if (inv.invoice_number) cloudNumberMap.set(inv.invoice_number, inv);
+    });
+
+    const pendingQueue = new Set(this.getPendingInvoiceSyncQueue());
+    const mergedList: Invoice[] = [...cloudInvoices];
+
+    localInvoices.forEach((localInv) => {
+      const existsById = localInv.id && cloudMap.has(localInv.id);
+      const existsByNum = localInv.invoice_number && cloudNumberMap.has(localInv.invoice_number);
+
+      if (!existsById && !existsByNum) {
+        // Preserved! Cloud does not have this local invoice yet.
+        mergedList.push(localInv);
+      } else if (localInv.id && pendingQueue.has(localInv.id)) {
+        // If locally modified while offline (e.g. voided), preserve local void state
+        const cloudMatch = (localInv.id ? cloudMap.get(localInv.id) : null) ||
+                           (localInv.invoice_number ? cloudNumberMap.get(localInv.invoice_number) : null);
+        if (cloudMatch && localInv.status === "void" && cloudMatch.status !== "void") {
+          const idx = mergedList.findIndex((m) => m.id === localInv.id || m.invoice_number === localInv.invoice_number);
+          if (idx !== -1) {
+            mergedList[idx] = { ...cloudMatch, status: "void" };
+          }
+        }
+      }
+    });
+
+    return mergedList.sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return timeB - timeA;
+    });
   },
 
   // EXPENSES

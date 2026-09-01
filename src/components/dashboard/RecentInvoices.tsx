@@ -22,6 +22,9 @@ import {
   ArrowRight,
   FileEdit,
   ShieldCheck,
+  Cloud,
+  CloudOff,
+  RefreshCw,
 } from "lucide-react";
 
 export function RecentInvoices() {
@@ -36,6 +39,9 @@ export function RecentInvoices() {
     setActiveTab,
     catalog,
     staff,
+    pendingSyncCount,
+    syncPendingInvoices,
+    isInvoicePendingSync,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -51,7 +57,7 @@ export function RecentInvoices() {
     });
   }, []);
 
-  // FILTER TODAY'S INVOICES ONLY
+  // FILTER TODAY'S INVOICES (PLUS ANY PENDING SYNC INVOICES)
   const todaysInvoices = useMemo(() => {
     const now = new Date();
     return invoices.filter((inv) => {
@@ -62,7 +68,9 @@ export function RecentInvoices() {
           invDate.getMonth() === now.getMonth() &&
           invDate.getDate() === now.getDate();
 
-        if (!isToday) return false;
+        const isPending = isInvoicePendingSync(inv.id);
+        // Ensure all today invoices AND any pending sync invoices remain visible
+        if (!isToday && !isPending) return false;
 
         // Mode filter
         if (selectedMode !== "all" && inv.payment_mode !== selectedMode) {
@@ -85,7 +93,7 @@ export function RecentInvoices() {
         return false;
       }
     });
-  }, [invoices, selectedMode, selectedStatus, searchQuery]);
+  }, [invoices, selectedMode, selectedStatus, searchQuery, isInvoicePendingSync]);
 
   // TODAY STATS
   const todaySettled = todaysInvoices.filter((i) => i.status !== "void");
@@ -162,6 +170,34 @@ export function RecentInvoices() {
           </div>
         </Card>
       </div>
+
+      {/* OFFLINE SYNC ALERT BANNER */}
+      {pendingSyncCount > 0 && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/60 shadow-lg shadow-amber-950/20 text-amber-200">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="h-9 w-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 text-amber-400">
+              <CloudOff className="h-4 w-4 animate-pulse" />
+            </div>
+            <div className="text-xs">
+              <div className="font-bold text-amber-200">
+                {pendingSyncCount} Invoice{pendingSyncCount > 1 ? "s" : ""} Saved in Offline Queue
+              </div>
+              <div className="text-[11px] text-amber-300/80">
+                All bills are safely preserved in local storage and will sync to the cloud automatically once internet connects.
+              </div>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="glow"
+            onClick={() => syncPendingInvoices()}
+            className="text-xs shrink-0 h-8 px-3"
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Sync to Cloud Now
+          </Button>
+        </div>
+      )}
 
       {/* SEARCH AND FILTER BAR */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-800">
@@ -301,6 +337,25 @@ export function RecentInvoices() {
                             minute: "2-digit",
                           })}
                         </div>
+                        {isInvoicePendingSync(inv.id) ? (
+                          <button
+                            type="button"
+                            onClick={() => syncPendingInvoices()}
+                            title="Saved in local offline queue. Click to sync to cloud now."
+                            className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-all cursor-pointer mt-1"
+                          >
+                            <CloudOff className="h-2.5 w-2.5" />
+                            <span>Sync Pending</span>
+                          </button>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 text-[9px] text-emerald-400/80 font-medium mt-1"
+                            title="Synced to cloud database"
+                          >
+                            <Cloud className="h-2.5 w-2.5 text-emerald-400" />
+                            <span>Synced</span>
+                          </span>
+                        )}
                       </td>
 
                       {/* CUSTOMER */}

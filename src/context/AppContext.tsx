@@ -75,6 +75,10 @@ interface AppContextType {
   deleteInvoice: (invoiceId: string) => void;
   editingInvoice: Invoice | null;
   setEditingInvoice: (invoice: Invoice | null) => void;
+  isOnline: boolean;
+  pendingSyncCount: number;
+  syncPendingInvoices: () => Promise<void>;
+  isInvoicePendingSync: (invoiceId: string) => boolean;
   
   // EXPENSES
   expenses: Expense[];
@@ -143,7 +147,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [whatsAppInvoice, setWhatsAppInvoice] = useState<Invoice | null>(null);
 
+  // OFFLINE & SYNC STATE
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
+  const isSyncingQueueRef = useRef(false);
+
   const initialLoadedRef = useRef(false);
+
+  // OFFLINE QUEUE PROCESSOR: Retries sending locally created/updated/voided invoices to Supabase
+  const syncPendingInvoices = useCallback(async () => {
+    if (typeof window === "undefined" || !isSupabaseConfigured() || isSyncingQueueRef.current) return;
+    const queue = Storage.getPendingInvoiceSyncQueue();
+    if (queue.length === 0) {
+      setPendingSyncCount(0);
+      return;
+    }
+
+    try {
+      isSyncingQueueRef.current = true;
+      const allLocalInvoices = Storage.getInvoices();
+
+      for (const invoiceId of queue) {
+        const inv = allLocalInvoices.find((i) => i.id === invoiceId);
+        if (!inv) {
+          // If invoice no longer exists, discard from queue
+          Storage.removeFromInvoiceSyncQueue(invoiceId);
+          continue;
+        }
+
+        if (inv.status === "void") {
+          const res = await SupabaseSync.voidInvoice(invoiceId);
+          if (res) {
+            Storage.removeFromInvoiceSyncQueue(invoiceId);
+          }
+        } else {
+          const res = await SupabaseSync.createInvoice(inv);
+          if (res) {
+            Storage.removeFromInvoiceSyncQueue(invoiceId);
+          }
+        }
+      }
+      setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
+    } catch (e) {
+      console.warn("Offline invoice queue sync encountered an error; will auto-retry:", e);
+    } finally {
+      isSyncingQueueRef.current = false;
+    }
+  }, []);
 
   const loadAllData = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -169,6 +219,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setInvoices(Storage.getInvoices());
       setExpenses(Storage.getExpenses());
       setAttendance(Storage.getAttendance());
+      setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
+      setIsOnline(navigator.onLine);
     } else {
       // Check if day rolled over while app was running or tab was idle
       const resetResult = Storage.checkAndResetDailyStaffStatus();
@@ -220,8 +272,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.saveCustomers(deduplicatedCloud);
         }
         if (cloudData.invoices) {
-          setInvoices((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.invoices) ? cloudData.invoices : prev));
-          Storage.saveInvoices(cloudData.invoices);
+          // SAFE TWO-WAY MERGE: Never overwrite local unsynced invoices!
+          const localInvoices = Storage.getInvoices();
+          const mergedInvoices = Storage.mergeInvoices(localInvoices, cloudData.invoices);
+          setInvoices((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedInvoices) ? mergedInvoices : prev));
+          Storage.saveInvoices(mergedInvoices);
+
+          // If there are pending invoices in the queue, trigger processing
+          if (Storage.getPendingInvoiceSyncQueue().length > 0) {
+            syncPendingInvoices();
+          }
         }
         if (cloudData.expenses) {
           setExpenses((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.expenses) ? cloudData.expenses : prev));
@@ -233,7 +293,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
-  }, []);
+  }, [syncPendingInvoices]);
+
+  // NETWORK CONNECTIVITY & BACKGROUND SYNC LISTENERS
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    setIsOnline(navigator.onLine);
+    setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncPendingInvoices().then(() => loadAllData());
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [syncPendingInvoices, loadAllData]);
 
   useEffect(() => {
     loadAllData();
@@ -243,27 +327,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loadAllData();
     });
 
-    // 2. Multi-device 4-second heartbeat polling fallback for iPad/tablets on background/wake
+    // 2. Multi-device 4-second heartbeat polling fallback: sync pending queue and load cloud updates
     const interval = setInterval(() => {
+      if (navigator.onLine && Storage.getPendingInvoiceSyncQueue().length > 0) {
+        syncPendingInvoices();
+      }
       loadAllData();
     }, 4000);
 
     // 3. Instant sync on window focus or screen unlock / tab switch
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
+        if (navigator.onLine && Storage.getPendingInvoiceSyncQueue().length > 0) {
+          syncPendingInvoices();
+        }
         loadAllData();
       }
     };
-    window.addEventListener("focus", loadAllData);
+    const onWindowFocus = () => {
+      if (navigator.onLine && Storage.getPendingInvoiceSyncQueue().length > 0) {
+        syncPendingInvoices();
+      }
+      loadAllData();
+    };
+
+    window.addEventListener("focus", onWindowFocus);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       unsubscribe();
       clearInterval(interval);
-      window.removeEventListener("focus", loadAllData);
+      window.removeEventListener("focus", onWindowFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [loadAllData]);
+  }, [loadAllData, syncPendingInvoices]);
 
   // AUTH ACTIONS
   const loginWithPin = (userId: string, pin: string): boolean => {
@@ -615,15 +712,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // INVOICE ACTIONS
   const createInvoice = (inv: Invoice): Invoice => {
+    // 1. Immediately persist to localStorage and add to offline queue
     const created = Storage.createInvoice(inv);
     setInvoices(Storage.getInvoices());
     setCustomers(Storage.getCustomers());
-    if (isSupabaseConfigured()) {
-      SupabaseSync.createInvoice(created).then((remoteInv) => {
-        if (remoteInv) {
-          loadAllData();
-        }
-      });
+    setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
+
+    // 2. If online and Supabase configured, attempt immediate push to Supabase
+    if (isSupabaseConfigured() && navigator.onLine) {
+      SupabaseSync.createInvoice(created)
+        .then((remoteInv) => {
+          if (remoteInv) {
+            Storage.removeFromInvoiceSyncQueue(created.id);
+            setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
+            loadAllData();
+          }
+        })
+        .catch((err) => {
+          console.warn("Immediate Supabase invoice sync failed; safely retained in offline queue:", err);
+        });
     }
     return created;
   };
@@ -631,16 +738,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateInvoice = async (inv: Invoice): Promise<Invoice> => {
     const updated = Storage.updateInvoice(inv);
     setInvoices(Storage.getInvoices());
+    setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
     if (isSupabaseConfigured()) {
-      await SupabaseSync.updateInvoice(inv);
-      const cloudData = await SupabaseSync.loadAllData();
-      if (cloudData?.invoices) {
-        setInvoices(cloudData.invoices);
-        Storage.saveInvoices(cloudData.invoices);
-      }
-      if (cloudData?.customers) {
-        setCustomers(cloudData.customers);
-        Storage.saveCustomers(cloudData.customers);
+      try {
+        const res = await SupabaseSync.updateInvoice(inv);
+        if (res) {
+          Storage.removeFromInvoiceSyncQueue(inv.id);
+          setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
+        }
+        const cloudData = await SupabaseSync.loadAllData();
+        if (cloudData?.invoices) {
+          const merged = Storage.mergeInvoices(Storage.getInvoices(), cloudData.invoices);
+          setInvoices(merged);
+          Storage.saveInvoices(merged);
+        }
+        if (cloudData?.customers) {
+          setCustomers(cloudData.customers);
+          Storage.saveCustomers(cloudData.customers);
+        }
+      } catch (e) {
+        console.warn("Failed to sync invoice update to cloud; safely retained in offline queue:", e);
       }
     }
     return updated;
@@ -649,12 +766,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const voidInvoice = async (invoiceId: string) => {
     Storage.voidInvoice(invoiceId);
     setInvoices(Storage.getInvoices());
+    setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
     if (isSupabaseConfigured()) {
-      await SupabaseSync.voidInvoice(invoiceId);
-      const cloudData = await SupabaseSync.loadAllData();
-      if (cloudData?.invoices) {
-        setInvoices(cloudData.invoices);
-        Storage.saveInvoices(cloudData.invoices);
+      try {
+        const res = await SupabaseSync.voidInvoice(invoiceId);
+        if (res) {
+          Storage.removeFromInvoiceSyncQueue(invoiceId);
+          setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
+        }
+        const cloudData = await SupabaseSync.loadAllData();
+        if (cloudData?.invoices) {
+          const merged = Storage.mergeInvoices(Storage.getInvoices(), cloudData.invoices);
+          setInvoices(merged);
+          Storage.saveInvoices(merged);
+        }
+      } catch (e) {
+        console.warn("Failed to sync void invoice to cloud; safely retained in offline queue:", e);
       }
     }
   };
@@ -667,14 +794,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // 1. Instantly delete from local state & storage for immediate UI response
     Storage.deleteInvoice(invoiceId);
     setInvoices(Storage.getInvoices());
+    setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
 
     // 2. Delete from Supabase PostgreSQL
     if (isSupabaseConfigured()) {
       await SupabaseSync.deleteInvoice(invoiceId);
       const cloudData = await SupabaseSync.loadAllData();
       if (cloudData?.invoices) {
-        setInvoices(cloudData.invoices);
-        Storage.saveInvoices(cloudData.invoices);
+        const merged = Storage.mergeInvoices(Storage.getInvoices(), cloudData.invoices);
+        setInvoices(merged);
+        Storage.saveInvoices(merged);
       }
     }
   };
@@ -858,6 +987,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     clearDraft();
   };
 
+  const isInvoicePendingSync = useCallback((invoiceId: string) => {
+    return Storage.isInvoicePendingSync(invoiceId);
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -899,6 +1032,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         deleteInvoice,
         editingInvoice,
         setEditingInvoice,
+        isOnline,
+        pendingSyncCount,
+        syncPendingInvoices,
+        isInvoicePendingSync,
         expenses,
         addExpense,
         deleteExpense,

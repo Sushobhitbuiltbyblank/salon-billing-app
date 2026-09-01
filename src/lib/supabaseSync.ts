@@ -516,12 +516,18 @@ export const SupabaseSync = {
     }
   },
 
-  async voidInvoice(invoiceId: string) {
-    if (!isSupabaseConfigured() || !supabase) return;
+  async voidInvoice(invoiceId: string): Promise<boolean> {
+    if (!isSupabaseConfigured() || !supabase) return false;
     try {
-      await supabase.from("invoices").update({ status: "void" }).eq("id", invoiceId);
+      const { error } = await supabase.from("invoices").update({ status: "void" }).eq("id", invoiceId);
+      if (error) {
+        console.error("Supabase voidInvoice error:", error);
+        return false;
+      }
+      return true;
     } catch (err) {
       console.error("Supabase voidInvoice error:", err);
+      return false;
     }
   },
 

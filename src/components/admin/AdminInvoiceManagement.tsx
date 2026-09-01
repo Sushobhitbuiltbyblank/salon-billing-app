@@ -26,6 +26,8 @@ import {
   Download,
   RotateCcw,
   X,
+  Cloud,
+  CloudOff,
 } from "lucide-react";
 
 export function AdminInvoiceManagement() {
@@ -40,6 +42,8 @@ export function AdminInvoiceManagement() {
     currentUser,
     catalog,
     staff,
+    isInvoicePendingSync,
+    syncPendingInvoices,
   } = useApp();
 
   const isAdmin = currentUser?.role === "admin";
@@ -531,6 +535,25 @@ export function AdminInvoiceManagement() {
                             </Badge>
                           )}
                         </div>
+                        {isInvoicePendingSync(inv.id) ? (
+                          <button
+                            type="button"
+                            onClick={() => syncPendingInvoices()}
+                            title="Saved in local offline queue. Click to sync to cloud now."
+                            className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-all cursor-pointer mt-1"
+                          >
+                            <CloudOff className="h-2.5 w-2.5" />
+                            <span>Sync Pending</span>
+                          </button>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 text-[9px] text-emerald-400/80 font-medium mt-1"
+                            title="Synced to cloud database"
+                          >
+                            <Cloud className="h-2.5 w-2.5 text-emerald-400" />
+                            <span>Synced</span>
+                          </span>
+                        )}
                       </td>
 
                       {/* DATE */}
