@@ -106,6 +106,10 @@ describe("Product and Service Sales Separation", () => {
 
     const { text } = generateWhatsAppMessageText(invoice, mockSettings);
 
+    // Verifies address is included and location icon is removed
+    expect(text).toContain(mockSettings.address);
+    expect(text).not.toContain("📍");
+
     // Verifies section separation
     expect(text).toContain("*SERVICES:*");
     expect(text).toContain("*PRODUCT:*");

@@ -146,9 +146,14 @@ export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSet
       .join("\n");
   }
 
+  const addressLine = settings.address?.trim()
+    ? `${settings.address.trim()}\n`
+    : settings.tagline?.trim()
+    ? `${settings.tagline.trim()}\n`
+    : "";
+
   const message = `✨ *${settings.salon_name}* ✨
-📍 _${settings.tagline}_
---------------------------------
+${addressLine}--------------------------------
 🧾 *TAX INVOICE: ${invoice.invoice_number}*
 📅 Date: ${formatDate(invoice.created_at)}
 👤 Client: *${invoice.customer_name}*
