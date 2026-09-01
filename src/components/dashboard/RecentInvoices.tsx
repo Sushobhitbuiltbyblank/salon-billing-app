@@ -44,6 +44,7 @@ export function RecentInvoices() {
     pendingSyncCount,
     syncPendingInvoices,
     isInvoicePendingSync,
+    refreshData,
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -70,9 +71,12 @@ export function RecentInvoices() {
           invDate.getMonth() === now.getMonth() &&
           invDate.getDate() === now.getDate();
 
+        const todayPrefix = `BZ-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+        const hasTodayNumber = Boolean(inv.invoice_number?.includes(todayPrefix));
+
         const isPending = isInvoicePendingSync(inv.id);
         // Ensure all today invoices AND any pending sync invoices remain visible
-        if (!isToday && !isPending) return false;
+        if (!isToday && !isPending && !hasTodayNumber) return false;
 
         // Mode filter
         if (selectedMode !== "all" && inv.payment_mode !== selectedMode) {
@@ -133,18 +137,33 @@ export function RecentInvoices() {
           </p>
         </div>
 
-        {currentUser?.role === "admin" && (
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setActiveTab("admin")}
-            className="gap-1.5 text-xs text-purple-300 hover:text-white border-purple-800/80 hover:bg-purple-950/60 h-9 px-3 cursor-pointer shrink-0"
+            onClick={() => {
+              syncPendingInvoices().then(() => refreshData());
+            }}
+            className="gap-1.5 text-xs text-zinc-300 hover:text-white border-zinc-700/80 hover:bg-zinc-800/80 h-9 px-3 cursor-pointer shrink-0"
+            title="Sync all pending invoices and refresh database"
           >
-            <ShieldCheck className="h-4 w-4 text-purple-400" />
-            <span>Admin Invoices (Date Filter & Full History)</span>
-            <ArrowRight className="h-3.5 w-3.5" />
+            <RefreshCw className="h-3.5 w-3.5 text-purple-400" />
+            <span>Sync DB</span>
           </Button>
-        )}
+
+          {currentUser?.role === "admin" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActiveTab("admin")}
+              className="gap-1.5 text-xs text-purple-300 hover:text-white border-purple-800/80 hover:bg-purple-950/60 h-9 px-3 cursor-pointer shrink-0"
+            >
+              <ShieldCheck className="h-4 w-4 text-purple-400" />
+              <span>Admin Invoices</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* TODAY SUMMARY STATS: 4-COLUMN CARDS WITH SEPARATE SERVICES & PRODUCTS SALE TOTALS */}

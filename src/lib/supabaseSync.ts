@@ -283,67 +283,85 @@ export const SupabaseSync = {
         items_meta: invoice.items,
       });
 
-      // Ensure customer profile is recorded in Supabase customers table with correct gender
+      // Pre-check staff and catalog items in Supabase to guarantee foreign keys never fail
+      let validStaffIds: Set<string> | null = null;
+      let validCatalogIds: Set<string> | null = null;
+      try {
+        const [{ data: staffData }, { data: catalogData }] = await Promise.all([
+          supabase.from("staff").select("id"),
+          supabase.from("catalog_items").select("id"),
+        ]);
+        if (staffData) validStaffIds = new Set(staffData.map((s: any) => s.id));
+        if (catalogData) validCatalogIds = new Set(catalogData.map((c: any) => c.id));
+      } catch {
+        // Non-blocking
+      }
+
+      // Ensure customer profile is recorded in Supabase customers table with correct gender (non-blocking)
       let finalCustomerId: string | null = null;
-      const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
-      if (cleanPhone && cleanPhone.length >= 7) {
-        const standardPhone = cleanPhone.length === 10 ? cleanPhone : (invoice.customer_phone || "");
-        const custGender =
-          invoice.customer_gender && invoice.customer_gender !== "unspecified"
-            ? invoice.customer_gender
-            : "female";
+      try {
+        const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
+        if (cleanPhone && cleanPhone.length >= 7) {
+          const standardPhone = cleanPhone.length === 10 ? cleanPhone : (invoice.customer_phone || "");
+          const custGender =
+            invoice.customer_gender && invoice.customer_gender !== "unspecified"
+              ? invoice.customer_gender
+              : "female";
 
-        const { data: existingCust } = await supabase
-          .from("customers")
-          .select("id, gender, total_visits, total_spent")
-          .eq("phone", standardPhone)
-          .maybeSingle();
+          const { data: existingCust } = await supabase
+            .from("customers")
+            .select("id, gender, total_visits, total_spent")
+            .eq("phone", standardPhone)
+            .maybeSingle();
 
-        // Calculate accurate non-void invoice count and total spent for this customer
-        const { data: phoneInvoices } = await supabase
-          .from("invoices")
-          .select("id, grand_total, status")
-          .eq("customer_phone", standardPhone)
-          .neq("status", "void");
+          // Calculate accurate non-void invoice count and total spent for this customer
+          const { data: phoneInvoices } = await supabase
+            .from("invoices")
+            .select("id, grand_total, status")
+            .eq("customer_phone", standardPhone)
+            .neq("status", "void");
 
-        const previousInvoices = (phoneInvoices || []).filter((inv) => inv.id !== invoice.id);
-        const accurateVisits = previousInvoices.length + 1;
-        const accurateSpent =
-          previousInvoices.reduce((sum, inv) => sum + (Number(inv.grand_total) || 0), 0) +
-          Number(invoice.grand_total || 0);
+          const previousInvoices = (phoneInvoices || []).filter((inv) => inv.id !== invoice.id);
+          const accurateVisits = previousInvoices.length + 1;
+          const accurateSpent =
+            previousInvoices.reduce((sum, inv) => sum + (Number(inv.grand_total) || 0), 0) +
+            Number(invoice.grand_total || 0);
 
-        const customerPayload = {
-          id: existingCust?.id || (isValidUUID(invoice.customer_id) ? invoice.customer_id : undefined),
-          name: invoice.customer_name || `Guest (${standardPhone})`,
-          phone: standardPhone,
-          email: invoice.customer_email || null,
-          gender: custGender,
-          total_visits: accurateVisits,
-          total_spent: accurateSpent,
-          last_visit: invoice.created_at || new Date().toISOString(),
-          created_at: invoice.created_at || new Date().toISOString(),
-        };
+          const customerPayload = {
+            id: existingCust?.id || (isValidUUID(invoice.customer_id) ? invoice.customer_id : undefined),
+            name: invoice.customer_name || `Guest (${standardPhone})`,
+            phone: standardPhone,
+            email: invoice.customer_email || null,
+            gender: custGender,
+            total_visits: accurateVisits,
+            total_spent: accurateSpent,
+            last_visit: invoice.created_at || new Date().toISOString(),
+            created_at: invoice.created_at || new Date().toISOString(),
+          };
 
-        const { data: upsertedCust } = await supabase
-          .from("customers")
-          .upsert(customerPayload, { onConflict: "phone" })
-          .select("id")
-          .maybeSingle();
+          const { data: upsertedCust } = await supabase
+            .from("customers")
+            .upsert(customerPayload, { onConflict: "phone" })
+            .select("id")
+            .maybeSingle();
 
-        if (upsertedCust?.id) {
-          finalCustomerId = upsertedCust.id;
+          if (upsertedCust?.id) {
+            finalCustomerId = upsertedCust.id;
+          }
+        } else if (isValidUUID(invoice.customer_id)) {
+          // Verify customer_id actually exists in Supabase customers table to prevent foreign key error
+          const { data: custExists } = await supabase
+            .from("customers")
+            .select("id")
+            .eq("id", invoice.customer_id)
+            .maybeSingle();
+
+          if (custExists?.id) {
+            finalCustomerId = custExists.id;
+          }
         }
-      } else if (isValidUUID(invoice.customer_id)) {
-        // Verify customer_id actually exists in Supabase customers table to prevent foreign key error
-        const { data: custExists } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("id", invoice.customer_id)
-          .maybeSingle();
-
-        if (custExists?.id) {
-          finalCustomerId = custExists.id;
-        }
+      } catch (custErr) {
+        console.warn("Non-fatal error updating customer profile during invoice creation:", custErr);
       }
 
       // Sanitize header to match exact columns of 'invoices' table
@@ -367,21 +385,40 @@ export const SupabaseSync = {
         created_at: invoice.created_at || new Date().toISOString(),
       };
 
-      const { data: createdInv, error: invError } = await supabase
+      let createdInv: any = null;
+      const { data: directInv, error: invError } = await supabase
         .from("invoices")
         .upsert(invoiceHeader)
         .select()
         .single();
 
       if (invError) {
-        console.error("Supabase createInvoice error:", invError);
-        throw invError;
+        console.warn("Primary invoice upsert encountered error; retrying with customer_id=null fallback:", invError);
+        const fallbackHeader = { ...invoiceHeader, customer_id: null };
+        const { data: retryInv, error: retryError } = await supabase
+          .from("invoices")
+          .upsert(fallbackHeader)
+          .select()
+          .single();
+
+        if (retryError) {
+          console.error("Supabase createInvoice fatal error:", retryError);
+          throw retryError;
+        }
+        createdInv = retryInv;
+      } else {
+        createdInv = directInv;
       }
 
       const invId = createdInv.id;
 
       // Insert line items with sanitized columns matching 'invoice_items' table
       if (invoice.items && invoice.items.length > 0) {
+        const isStaffValid = (sId?: string | null) =>
+          isValidUUID(sId) && (!validStaffIds || validStaffIds.has(sId!));
+        const isCatalogValid = (cId?: string | null) =>
+          isValidUUID(cId) && (!validCatalogIds || validCatalogIds.has(cId!));
+
         const lineItemsPayload = invoice.items.map((item) => {
           const fallbackStaffId =
             item.primary_staff_id ||
@@ -391,15 +428,15 @@ export const SupabaseSync = {
           return {
             id: isValidUUID(item.id) ? item.id : undefined,
             invoice_id: invId,
-            item_id: isValidUUID(item.item_id) ? item.item_id : null,
+            item_id: isCatalogValid(item.item_id) ? item.item_id : null,
             item_name: item.item_name,
             item_type: item.item_type === "product" ? "product" : "service",
             quantity: Number(item.quantity) || 1,
             unit_price: Number(item.unit_price) || 0,
             discount: Number(item.discount) || 0,
             total_price: Number(item.total_price) || 0,
-            primary_staff_id: isValidUUID(fallbackStaffId) ? fallbackStaffId : null,
-            secondary_staff_id: isValidUUID(item.secondary_staff_id) ? item.secondary_staff_id : null,
+            primary_staff_id: isStaffValid(fallbackStaffId) ? fallbackStaffId : null,
+            secondary_staff_id: isStaffValid(item.secondary_staff_id) ? item.secondary_staff_id : null,
             primary_split_ratio: Number(item.primary_split_ratio) || 100,
             secondary_split_ratio: Number(item.secondary_split_ratio) || 0,
           };
@@ -407,7 +444,17 @@ export const SupabaseSync = {
 
         const { error: itemsError } = await supabase.from("invoice_items").upsert(lineItemsPayload);
         if (itemsError) {
-          console.error("Supabase invoice_items upsert error:", itemsError);
+          console.warn("Supabase invoice_items initial upsert error, retrying without foreign keys:", itemsError);
+          const sanitizedPayload = lineItemsPayload.map((li) => ({
+            ...li,
+            item_id: null,
+            primary_staff_id: null,
+            secondary_staff_id: null,
+          }));
+          const { error: retryItemsError } = await supabase.from("invoice_items").upsert(sanitizedPayload);
+          if (retryItemsError) {
+            console.error("Fatal invoice_items fallback error:", retryItemsError);
+          }
         }
       }
 
@@ -430,6 +477,20 @@ export const SupabaseSync = {
         user_notes: invoice.notes || "",
         items_meta: invoice.items,
       });
+
+      // Pre-check staff and catalog items in Supabase
+      let validStaffIds: Set<string> | null = null;
+      let validCatalogIds: Set<string> | null = null;
+      try {
+        const [{ data: staffData }, { data: catalogData }] = await Promise.all([
+          supabase.from("staff").select("id"),
+          supabase.from("catalog_items").select("id"),
+        ]);
+        if (staffData) validStaffIds = new Set(staffData.map((s: any) => s.id));
+        if (catalogData) validCatalogIds = new Set(catalogData.map((c: any) => c.id));
+      } catch {
+        // Non-blocking
+      }
 
       // 1. Update invoice header
       let finalCustomerId: string | null = null;
@@ -470,8 +531,14 @@ export const SupabaseSync = {
         .single();
 
       if (invError) {
-        console.error("Supabase updateInvoice error:", invError);
-        throw invError;
+        console.warn("Supabase primary updateInvoice error; retrying with customer_id=null:", invError);
+        const { data: retryInv, error: retryError } = await supabase
+          .from("invoices")
+          .update({ ...invoiceHeader, customer_id: null })
+          .eq("id", invoice.id)
+          .select()
+          .single();
+        if (retryError) throw retryError;
       }
 
       // 2. Synchronize line items (delete previous items for this invoice and insert updated items)
@@ -479,6 +546,11 @@ export const SupabaseSync = {
         await supabase.from("invoice_items").delete().eq("invoice_id", invoice.id);
 
         if (invoice.items.length > 0) {
+          const isStaffValid = (sId?: string | null) =>
+            isValidUUID(sId) && (!validStaffIds || validStaffIds.has(sId!));
+          const isCatalogValid = (cId?: string | null) =>
+            isValidUUID(cId) && (!validCatalogIds || validCatalogIds.has(cId!));
+
           const lineItemsPayload = invoice.items.map((item) => {
             const fallbackStaffId =
               item.primary_staff_id ||
@@ -488,15 +560,15 @@ export const SupabaseSync = {
             return {
               id: isValidUUID(item.id) ? item.id : undefined,
               invoice_id: invoice.id,
-              item_id: isValidUUID(item.item_id) ? item.item_id : null,
+              item_id: isCatalogValid(item.item_id) ? item.item_id : null,
               item_name: item.item_name,
               item_type: item.item_type === "product" ? "product" : "service",
               quantity: Number(item.quantity) || 1,
               unit_price: Number(item.unit_price) || 0,
               discount: Number(item.discount) || 0,
               total_price: Number(item.total_price) || 0,
-              primary_staff_id: isValidUUID(fallbackStaffId) ? fallbackStaffId : null,
-              secondary_staff_id: isValidUUID(item.secondary_staff_id) ? item.secondary_staff_id : null,
+              primary_staff_id: isStaffValid(fallbackStaffId) ? fallbackStaffId : null,
+              secondary_staff_id: isStaffValid(item.secondary_staff_id) ? item.secondary_staff_id : null,
               primary_split_ratio: Number(item.primary_split_ratio) || 100,
               secondary_split_ratio: Number(item.secondary_split_ratio) || 0,
             };
@@ -504,7 +576,14 @@ export const SupabaseSync = {
 
           const { error: itemsError } = await supabase.from("invoice_items").insert(lineItemsPayload);
           if (itemsError) {
-            console.error("Supabase invoice_items re-insert error:", itemsError);
+            console.warn("Supabase invoice_items update error; retrying without foreign keys:", itemsError);
+            const sanitizedPayload = lineItemsPayload.map((li) => ({
+              ...li,
+              item_id: null,
+              primary_staff_id: null,
+              secondary_staff_id: null,
+            }));
+            await supabase.from("invoice_items").insert(sanitizedPayload);
           }
         }
       }

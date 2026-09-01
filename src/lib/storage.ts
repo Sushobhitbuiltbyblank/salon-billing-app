@@ -31,6 +31,7 @@ const KEYS = {
   CATALOG: `${STORAGE_PREFIX}catalog`,
   CUSTOMERS: `${STORAGE_PREFIX}customers`,
   INVOICES: `${STORAGE_PREFIX}invoices`,
+  INVOICES_ARCHIVE: `${STORAGE_PREFIX}invoices_archive`,
   INVOICE_SYNC_QUEUE: `${STORAGE_PREFIX}invoice_sync_queue`,
   EXPENSES: `${STORAGE_PREFIX}expenses`,
   DELETED_CATALOG_IDS: `${STORAGE_PREFIX}deleted_catalog_ids`,
@@ -820,6 +821,7 @@ export const Storage = {
       this.saveInvoices(invoices);
     }
     this.addToInvoiceSyncQueue(invoice.id);
+    this.archiveInvoice(invoice);
 
     // STRICT CRM RULE: Update customer stats ONLY if phone has a valid mobile number (>= 7 digits)
     const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
@@ -885,9 +887,42 @@ export const Storage = {
       invoices[index] = invoice;
       this.saveInvoices(invoices);
       this.addToInvoiceSyncQueue(invoice.id);
+      this.archiveInvoice(invoice);
     }
     return invoice;
   },
+
+  // APPEND-ONLY LOCAL INVOICE ARCHIVE (PREVENTS ANY LOCAL DATA LOSS)
+  getInvoicesArchive(): Invoice[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(KEYS.INVOICES_ARCHIVE);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  },
+
+  archiveInvoice(invoice: Invoice): void {
+    if (typeof window === "undefined") return;
+    try {
+      const archive = this.getInvoicesArchive();
+      const idx = archive.findIndex(
+        (i) => i.id === invoice.id || (i.invoice_number && i.invoice_number === invoice.invoice_number)
+      );
+      if (idx !== -1) {
+        archive[idx] = invoice;
+      } else {
+        archive.unshift(invoice);
+      }
+      localStorage.setItem(KEYS.INVOICES_ARCHIVE, JSON.stringify(archive.slice(0, 1000)));
+    } catch (e) {
+      console.warn("Failed to update local invoice archive:", e);
+    }
+  },
+
   voidInvoice(invoiceId: string): void {
     const invoices = this.getInvoices();
     const target = invoices.find((inv) => inv.id === invoiceId);
@@ -948,24 +983,44 @@ export const Storage = {
    * exists locally (e.g. created offline, in-flight, or pending sync).
    */
   mergeInvoices(localInvoices: Invoice[], cloudInvoices: Invoice[]): Invoice[] {
-    if (!Array.isArray(cloudInvoices) || cloudInvoices.length === 0) {
-      return Array.isArray(localInvoices) ? localInvoices : [];
+    const activeLocal = Array.isArray(localInvoices) ? [...localInvoices] : [];
+    const validCloud = Array.isArray(cloudInvoices) ? cloudInvoices : [];
+
+    // 1. Recover any locally created invoices from append-only archive missing from active local list
+    const archive = this.getInvoicesArchive();
+    const existingLocalMap = new Map<string, Invoice>();
+    activeLocal.forEach((inv) => {
+      if (inv.id) existingLocalMap.set(inv.id, inv);
+      if (inv.invoice_number) existingLocalMap.set(inv.invoice_number, inv);
+    });
+    archive.forEach((archivedInv) => {
+      const exists =
+        (archivedInv.id && existingLocalMap.has(archivedInv.id)) ||
+        (archivedInv.invoice_number && existingLocalMap.has(archivedInv.invoice_number));
+      if (!exists) {
+        activeLocal.push(archivedInv);
+        this.addToInvoiceSyncQueue(archivedInv.id);
+      }
+    });
+
+    if (validCloud.length === 0) {
+      return activeLocal;
     }
-    if (!Array.isArray(localInvoices) || localInvoices.length === 0) {
-      return cloudInvoices;
+    if (activeLocal.length === 0) {
+      return validCloud;
     }
 
     const cloudMap = new Map<string, Invoice>();
     const cloudNumberMap = new Map<string, Invoice>();
-    cloudInvoices.forEach((inv) => {
+    validCloud.forEach((inv) => {
       if (inv.id) cloudMap.set(inv.id, inv);
       if (inv.invoice_number) cloudNumberMap.set(inv.invoice_number, inv);
     });
 
     const pendingQueue = new Set(this.getPendingInvoiceSyncQueue());
-    const mergedList: Invoice[] = [...cloudInvoices];
+    const mergedList: Invoice[] = [...validCloud];
 
-    localInvoices.forEach((localInv) => {
+    activeLocal.forEach((localInv) => {
       const existsById = localInv.id && cloudMap.has(localInv.id);
       const existsByNum = localInv.invoice_number && cloudNumberMap.has(localInv.invoice_number);
 
@@ -974,8 +1029,9 @@ export const Storage = {
         mergedList.push(localInv);
       } else if (localInv.id && pendingQueue.has(localInv.id)) {
         // If locally modified while offline (e.g. voided), preserve local void state
-        const cloudMatch = (localInv.id ? cloudMap.get(localInv.id) : null) ||
-                           (localInv.invoice_number ? cloudNumberMap.get(localInv.invoice_number) : null);
+        const cloudMatch =
+          (localInv.id ? cloudMap.get(localInv.id) : null) ||
+          (localInv.invoice_number ? cloudNumberMap.get(localInv.invoice_number) : null);
         if (cloudMatch && localInv.status === "void" && cloudMatch.status !== "void") {
           const idx = mergedList.findIndex((m) => m.id === localInv.id || m.invoice_number === localInv.invoice_number);
           if (idx !== -1) {

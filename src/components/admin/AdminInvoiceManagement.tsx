@@ -74,7 +74,9 @@ export function AdminInvoiceManagement() {
             invDate.getFullYear() === now.getFullYear() &&
             invDate.getMonth() === now.getMonth() &&
             invDate.getDate() === now.getDate();
-          if (!isToday) return false;
+          const todayPrefix = `BZ-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+          const hasTodayNumber = Boolean(inv.invoice_number?.includes(todayPrefix));
+          if (!isToday && !hasTodayNumber) return false;
         } else if (datePreset === "yesterday") {
           const yesterday = new Date(now);
           yesterday.setDate(now.getDate() - 1);

@@ -197,5 +197,21 @@ describe("Offline-First Invoice Sync & Two-Way Merge Architecture", () => {
       Storage.voidInvoice(sampleLocalInvoice.id);
       expect(Storage.isInvoicePendingSync(sampleLocalInvoice.id)).toBe(true);
     });
+
+    it("archives all created invoices to append-only archive and revives them if local invoices are wiped", () => {
+      Storage.createInvoice(sampleLocalInvoice);
+      expect(Storage.getInvoicesArchive()).toHaveLength(1);
+      expect(Storage.getInvoicesArchive()[0].id).toBe(sampleLocalInvoice.id);
+
+      // Simulate a scenario where active invoices are accidentally wiped or overwritten
+      Storage.saveInvoices([]);
+      expect(Storage.getInvoices()).toHaveLength(0);
+
+      // Safe merge with cloud data should automatically revive the invoice from append-only archive
+      const merged = Storage.mergeInvoices(Storage.getInvoices(), []);
+      expect(merged).toHaveLength(1);
+      expect(merged[0].invoice_number).toBe(sampleLocalInvoice.invoice_number);
+      expect(Storage.isInvoicePendingSync(sampleLocalInvoice.id)).toBe(true);
+    });
   });
 });
