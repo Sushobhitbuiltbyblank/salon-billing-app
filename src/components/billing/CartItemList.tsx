@@ -497,6 +497,23 @@ export function CartItemList() {
     });
   };
 
+  const serviceItems = useMemo(
+    () => draftItems.filter((i) => i.item_type !== "product"),
+    [draftItems]
+  );
+  const productItems = useMemo(
+    () => draftItems.filter((i) => i.item_type === "product"),
+    [draftItems]
+  );
+  const servicesSubtotal = useMemo(
+    () => serviceItems.reduce((sum, i) => sum + (i.total_price || 0), 0),
+    [serviceItems]
+  );
+  const productsSubtotal = useMemo(
+    () => productItems.reduce((sum, i) => sum + (i.total_price || 0), 0),
+    [productItems]
+  );
+
   if (draftItems.length === 0) {
     return (
       <div className="h-full min-h-[240px] flex flex-col items-center justify-center p-8 text-center bg-zinc-950/40 rounded-2xl border border-zinc-800/60">
@@ -547,15 +564,16 @@ export function CartItemList() {
         </div>
       )}
 
-      {draftItems.map((item, index) => {
-        const isService = item.item_type === "service";
-        const isPackage = item.item_type === "package";
-        const isProduct = item.item_type === "product";
+      {(() => {
+        const renderItemCard = (item: InvoiceItem, index: number) => {
+          const isService = item.item_type === "service";
+          const isPackage = item.item_type === "package";
+          const isProduct = item.item_type === "product";
 
-        const packageServices = item.package_services || [];
-        const isPersonOpen = openGuestItemId === item.id;
+          const packageServices = item.package_services || [];
+          const isPersonOpen = openGuestItemId === item.id;
 
-        return (
+          return (
           <div
             key={item.id}
             className={`group relative rounded-2xl border p-3.5 backdrop-blur-xl transition-all duration-200 ${
@@ -1431,7 +1449,46 @@ export function CartItemList() {
             )}
           </div>
         );
-      })}
+      };
+
+        return (
+          <>
+            {/* 1. SERVICES & PACKAGES SECTION */}
+            {serviceItems.length > 0 && (
+              <div className="space-y-2.5">
+                {productItems.length > 0 && (
+                  <div className="flex items-center justify-between px-1.5 pt-1 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-indigo-300 uppercase tracking-wider">
+                      <Scissors className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Services & Packages ({serviceItems.length})</span>
+                    </div>
+                    <span className="font-mono text-zinc-400 text-[11px] font-semibold">
+                      Subtotal: {formatCurrency(servicesSubtotal, settings.currency_symbol)}
+                    </span>
+                  </div>
+                )}
+                {serviceItems.map((item, idx) => renderItemCard(item, idx))}
+              </div>
+            )}
+
+            {/* 2. RETAIL PRODUCTS SECTION */}
+            {productItems.length > 0 && (
+              <div className="space-y-2.5 pt-1">
+                <div className="flex items-center justify-between px-1.5 pt-1 text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-pink-300 uppercase tracking-wider">
+                    <ShoppingBag className="h-3.5 w-3.5 text-pink-400" />
+                    <span>Retail Products ({productItems.length})</span>
+                  </div>
+                  <span className="font-mono text-zinc-400 text-[11px] font-semibold">
+                    Subtotal: {formatCurrency(productsSubtotal, settings.currency_symbol)}
+                  </span>
+                </div>
+                {productItems.map((item, idx) => renderItemCard(item, serviceItems.length + idx))}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       <SplitStaffModal
         item={activeSplitItem}

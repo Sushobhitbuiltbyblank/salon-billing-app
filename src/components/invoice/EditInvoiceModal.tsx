@@ -1096,6 +1096,23 @@ export function EditInvoiceModal() {
             </h4>
 
             <div className="space-y-2 text-xs">
+              {totals.productsSubtotal > 0 && (
+                <div className="space-y-1 pb-1.5 border-b border-zinc-900 text-xs">
+                  <div className="flex items-center justify-between text-zinc-400">
+                    <span>Services Subtotal:</span>
+                    <span className="font-mono text-zinc-300">
+                      {formatCurrency(totals.servicesSubtotal, settings.currency_symbol)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-zinc-400">
+                    <span>Retail Products Subtotal:</span>
+                    <span className="font-mono text-pink-300">
+                      {formatCurrency(totals.productsSubtotal, settings.currency_symbol)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <span className="text-zinc-400">Items Subtotal:</span>
                 <strong className="font-mono text-zinc-200">

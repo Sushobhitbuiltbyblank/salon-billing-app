@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { Invoice, SalonSettings, Staff } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { QrCodeImage } from "@/components/ui/QrCodeImage";
@@ -48,6 +48,23 @@ export function ThermalReceipt({
     map.forEach((total, name) => res.push({ name, total }));
     return res;
   }, [invoice.items, invoice.customer_name]);
+
+  const serviceItems = useMemo(
+    () => (invoice.items || []).filter((it) => it.item_type !== "product"),
+    [invoice.items]
+  );
+  const productItems = useMemo(
+    () => (invoice.items || []).filter((it) => it.item_type === "product"),
+    [invoice.items]
+  );
+  const servicesSubtotal = useMemo(
+    () => serviceItems.reduce((sum, it) => sum + (it.total_price || 0), 0),
+    [serviceItems]
+  );
+  const productsSubtotal = useMemo(
+    () => productItems.reduce((sum, it) => sum + (it.total_price || 0), 0),
+    [productItems]
+  );
 
   const googleReviewUrl = settings.google_review_url || "https://g.page/r/CbGd_cwnL9zrEBM/review";
   const instagramUrl = settings.instagram_url || "https://www.instagram.com/beleziasalonlaxminagar?igsi=MTI0ZG85dGRvdTl6aQ%3D%3D&utm_source=qr";
@@ -124,75 +141,98 @@ export function ThermalReceipt({
             </tr>
           </thead>
           <tbody>
-            {invoice.items.map((item, idx) => {
-              const primary = getStaffName(item.primary_staff_id);
-              const secondary = getStaffName(item.secondary_staff_id);
+            {(() => {
+              const renderItemRow = (item: (typeof invoice.items)[0], idx: number) => {
+                const primary = getStaffName(item.primary_staff_id);
+                const secondary = getStaffName(item.secondary_staff_id);
 
-              let services = item.package_services;
-              if (
-                (!services || services.length === 0) &&
-                (item.item_type === "package" || (item.package_service_ids && item.package_service_ids.length > 0))
-              ) {
-                const catalog = typeof window !== "undefined" ? Storage.getCatalog() : [];
-                const catItem = catalog.find(
-                  (c) => c.id === item.item_id || c.name.toLowerCase().trim() === item.item_name.toLowerCase().trim()
-                );
-                if (catItem && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
-                  services = catItem.package_service_ids
-                    .map((sId) => catalog.find((c) => c.id === sId))
-                    .filter(Boolean)
-                    .map((s) => ({
-                      service_id: s!.id,
-                      service_name: s!.name,
-                      price: Math.round(item.unit_price / catItem.package_service_ids!.length),
-                      primary_staff_id: item.primary_staff_id,
-                    }));
+                let services = item.package_services;
+                if (
+                  (!services || services.length === 0) &&
+                  (item.item_type === "package" || (item.package_service_ids && item.package_service_ids.length > 0))
+                ) {
+                  const catalog = typeof window !== "undefined" ? Storage.getCatalog() : [];
+                  const catItem = catalog.find(
+                    (c) => c.id === item.item_id || c.name.toLowerCase().trim() === item.item_name.toLowerCase().trim()
+                  );
+                  if (catItem && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
+                    services = catItem.package_service_ids
+                      .map((sId) => catalog.find((c) => c.id === sId))
+                      .filter(Boolean)
+                      .map((s) => ({
+                        service_id: s!.id,
+                        service_name: s!.name,
+                        price: Math.round(item.unit_price / catItem.package_service_ids!.length),
+                        primary_staff_id: item.primary_staff_id,
+                      }));
+                  }
                 }
+
+                const isPkg = item.item_type === "package" || (services && services.length > 0);
+
+                return (
+                  <tr key={idx} style={{ verticalAlign: "top", borderBottom: "1px dotted #f0f0f0" }}>
+                    <td style={{ padding: "2px 1px" }}>
+                      <div style={{ fontWeight: "bold" }}>
+                        {item.guest_name && (
+                          <span style={{ backgroundColor: "#000000", color: "#ffffff", padding: "1px 4px", borderRadius: "3px", fontSize: "7.5px", marginRight: "4px", textTransform: "uppercase" }}>
+                            [{item.guest_name}]
+                          </span>
+                        )}
+                        {item.item_name}
+                      </div>
+                      {isPkg && services && services.length > 0 ? (
+                        <div style={{ fontSize: "8px", color: "#333333", marginTop: "1px", paddingLeft: "2px" }}>
+                          {services.map((ps, pIdx) => {
+                            const sName = getStaffName(ps.primary_staff_id) || primary;
+                            const psGuest = (ps.guest_name || "").trim();
+                            return (
+                              <div key={pIdx}>
+                                • {psGuest ? `[${psGuest.toUpperCase()}] ` : ""}{ps.service_name} {sName ? `(${sName})` : ""}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "8.5px", color: "#555555", fontStyle: "italic" }}>
+                          {item.staff_splits && item.staff_splits.length > 1 ? (
+                            <>{item.staff_splits.map((s) => `${getStaffName(s.staff_id) || "Staff"} (₹${s.amount})`).join(" + ")}</>
+                          ) : secondary ? (
+                            <>{primary || "Salon Staff"} ({item.primary_split_ratio}%) + {secondary} ({item.secondary_split_ratio}%)</>
+                          ) : (
+                            <>{primary || "Salon Staff"}</>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "center", padding: "2px 1px", fontWeight: "bold" }}>{item.quantity}</td>
+                    <td style={{ textAlign: "right", padding: "2px 1px" }}>{item.unit_price.toFixed(2)}</td>
+                    <td style={{ textAlign: "right", padding: "2px 1px", fontWeight: "bold" }}>{item.total_price.toFixed(2)}</td>
+                  </tr>
+                );
+              };
+
+              if (productItems.length > 0 && serviceItems.length > 0) {
+                return (
+                  <>
+                    <tr style={{ backgroundColor: "#f4f4f5", fontSize: "8px", fontWeight: "bold", textTransform: "uppercase" }}>
+                      <td colSpan={4} style={{ padding: "2px 1px", borderTop: "1px solid #000000", borderBottom: "1px solid #000000" }}>
+                        ✂️ Services & Packages ({serviceItems.length})
+                      </td>
+                    </tr>
+                    {serviceItems.map((item, idx) => renderItemRow(item, idx))}
+                    <tr style={{ backgroundColor: "#f4f4f5", fontSize: "8px", fontWeight: "bold", textTransform: "uppercase" }}>
+                      <td colSpan={4} style={{ padding: "2px 1px", borderTop: "1px solid #000000", borderBottom: "1px solid #000000" }}>
+                        🛍️ Retail Products ({productItems.length})
+                      </td>
+                    </tr>
+                    {productItems.map((item, idx) => renderItemRow(item, serviceItems.length + idx))}
+                  </>
+                );
               }
 
-              const isPkg = item.item_type === "package" || (services && services.length > 0);
-
-              return (
-                <tr key={idx} style={{ verticalAlign: "top", borderBottom: "1px dotted #f0f0f0" }}>
-                  <td style={{ padding: "2px 1px" }}>
-                    <div style={{ fontWeight: "bold" }}>
-                      {item.guest_name && (
-                        <span style={{ backgroundColor: "#000000", color: "#ffffff", padding: "1px 4px", borderRadius: "3px", fontSize: "7.5px", marginRight: "4px", textTransform: "uppercase" }}>
-                          [{item.guest_name}]
-                        </span>
-                      )}
-                      {item.item_name}
-                    </div>
-                    {isPkg && services && services.length > 0 ? (
-                      <div style={{ fontSize: "8px", color: "#333333", marginTop: "1px", paddingLeft: "2px" }}>
-                        {services.map((ps, pIdx) => {
-                          const sName = getStaffName(ps.primary_staff_id) || primary;
-                          const psGuest = (ps.guest_name || "").trim();
-                          return (
-                            <div key={pIdx}>
-                              • {psGuest ? `[${psGuest.toUpperCase()}] ` : ""}{ps.service_name} {sName ? `(${sName})` : ""}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: "8.5px", color: "#555555", fontStyle: "italic" }}>
-                        {item.staff_splits && item.staff_splits.length > 1 ? (
-                          <>{item.staff_splits.map((s) => `${getStaffName(s.staff_id) || "Staff"} (₹${s.amount})`).join(" + ")}</>
-                        ) : secondary ? (
-                          <>{primary || "Salon Staff"} ({item.primary_split_ratio}%) + {secondary} ({item.secondary_split_ratio}%)</>
-                        ) : (
-                          <>{primary || "Salon Staff"}</>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ textAlign: "center", padding: "2px 1px", fontWeight: "bold" }}>{item.quantity}</td>
-                  <td style={{ textAlign: "right", padding: "2px 1px" }}>{item.unit_price.toFixed(2)}</td>
-                  <td style={{ textAlign: "right", padding: "2px 1px", fontWeight: "bold" }}>{item.total_price.toFixed(2)}</td>
-                </tr>
-              );
-            })}
+              return (invoice.items || []).map((item, idx) => renderItemRow(item, idx));
+            })()}
           </tbody>
         </table>
       </div>
@@ -214,7 +254,19 @@ export function ThermalReceipt({
 
       {/* TOTALS & TAX BREAKDOWN */}
       <div style={{ padding: "4px 0", borderBottom: "1px dashed #000000", fontSize: "9.5px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        {productsSubtotal > 0 && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", color: "#333333", fontSize: "9px" }}>
+              <span>Services Subtotal:</span>
+              <span>{formatCurrency(servicesSubtotal, settings.currency_symbol)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", color: "#333333", fontSize: "9px" }}>
+              <span>Retail Products Subtotal:</span>
+              <span>{formatCurrency(productsSubtotal, settings.currency_symbol)}</span>
+            </div>
+          </>
+        )}
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: productsSubtotal > 0 ? "bold" : "normal" }}>
           <span>Subtotal:</span>
           <span>{formatCurrency(invoice.subtotal, settings.currency_symbol)}</span>
         </div>

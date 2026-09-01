@@ -85,6 +85,11 @@ export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSet
     new Set(items.map((i) => (i.guest_name || "").trim()).filter(Boolean))
   );
 
+  const serviceItems = items.filter((it) => it.item_type !== "product");
+  const productItems = items.filter((it) => it.item_type === "product");
+  const servicesSubtotal = serviceItems.reduce((sum, it) => sum + (Number(it.total_price) || 0), 0);
+  const productsSubtotal = productItems.reduce((sum, it) => sum + (Number(it.total_price) || 0), 0);
+
   let itemsText = "";
   if (uniqueGuests.length > 0) {
     const groupedMap = new Map<string, typeof items>();
@@ -114,6 +119,20 @@ export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSet
       groupSections.push(`${header}\n${lines}`);
     });
     itemsText = groupSections.join("\n\n");
+  } else if (productItems.length > 0 && serviceItems.length > 0) {
+    const renderBlock = (list: typeof items, startIdx: number) =>
+      list
+        .map((item, idx) => {
+          let line = `${startIdx + idx}. *${item.item_name}* (${item.quantity}x) - ${settings.currency_symbol}${item.total_price.toFixed(2)}`;
+          if (item.item_type === "package" && item.package_services && item.package_services.length > 0) {
+            const subLines = item.package_services.map((ps) => `   └ • ${ps.guest_name ? `[${ps.guest_name}] ` : ""}${ps.service_name}: ₹${ps.price}`).join("\n");
+            line += `\n${subLines}`;
+          }
+          return line;
+        })
+        .join("\n");
+
+    itemsText = `✂️ *SERVICES & PACKAGES:*\n${renderBlock(serviceItems, 1)}\n\n🛍️ *RETAIL PRODUCTS:*\n${renderBlock(productItems, serviceItems.length + 1)}`;
   } else {
     itemsText = items
       .map((item, idx) => {
@@ -137,7 +156,7 @@ export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSet
 *SERVICES & PRODUCTS:*
 ${itemsText}
 --------------------------------
-Subtotal: ${settings.currency_symbol}${invoice.subtotal.toFixed(2)}
+${productsSubtotal > 0 ? `Services Subtotal: ${settings.currency_symbol}${servicesSubtotal.toFixed(2)}\nRetail Products: ${settings.currency_symbol}${productsSubtotal.toFixed(2)}\n` : ""}Subtotal: ${settings.currency_symbol}${invoice.subtotal.toFixed(2)}
 ${invoice.discount_amount > 0 ? `Discount: -${settings.currency_symbol}${invoice.discount_amount.toFixed(2)}\n` : ""}${
     invoice.tax_amount > 0 ? `GST (${invoice.tax_rate}%): +${settings.currency_symbol}${invoice.tax_amount.toFixed(2)}\n` : ""
 }*Grand Total:* *${settings.currency_symbol}${invoice.grand_total.toFixed(2)}*

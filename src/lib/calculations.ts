@@ -18,6 +18,15 @@ export function calculateInvoiceTotals(params: {
 }) {
   const { items, discountType, discountValue, taxEnabled, taxRate } = params;
 
+  // Breakdown by item type: Services & Packages vs Retail Products
+  const servicesSubtotal = items
+    .filter((item) => item.item_type !== "product")
+    .reduce((sum, item) => sum + (item.total_price || 0), 0);
+
+  const productsSubtotal = items
+    .filter((item) => item.item_type === "product")
+    .reduce((sum, item) => sum + (item.total_price || 0), 0);
+
   // Subtotal = Sum of all line item totals
   const subtotal = items.reduce((sum, item) => sum + (item.total_price || 0), 0);
 
@@ -41,6 +50,8 @@ export function calculateInvoiceTotals(params: {
 
   return {
     subtotal,
+    servicesSubtotal,
+    productsSubtotal,
     discountAmount,
     taxableAmount,
     taxAmount,

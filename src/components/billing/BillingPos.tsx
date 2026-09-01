@@ -15,6 +15,7 @@ import {
   CreditCard,
   Sparkles,
   ShoppingBag,
+  Scissors,
   ArrowLeft,
   ChevronRight,
 } from "lucide-react";
@@ -186,6 +187,30 @@ export function BillingPos() {
           <div className="shrink-0 p-3.5 sm:p-4 border-t border-zinc-800/90 bg-zinc-950/95 space-y-2.5 sm:space-y-3 sticky bottom-0 z-10 shadow-2xl backdrop-blur-md">
             {/* TOTALS MINI SUMMARY */}
             <div className="space-y-1.5 text-xs">
+              {totals.productsSubtotal > 0 && (
+                <>
+                  <div className="flex justify-between text-zinc-400">
+                    <span className="flex items-center gap-1">
+                      <Scissors className="h-3 w-3 text-indigo-400" />
+                      <span>Services Subtotal</span>
+                    </span>
+                    <span className="font-mono text-zinc-300">
+                      {formatCurrency(totals.servicesSubtotal, settings.currency_symbol)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-zinc-400">
+                    <span className="flex items-center gap-1">
+                      <ShoppingBag className="h-3 w-3 text-pink-400" />
+                      <span>Retail Products Subtotal</span>
+                    </span>
+                    <span className="font-mono text-pink-300">
+                      {formatCurrency(totals.productsSubtotal, settings.currency_symbol)}
+                    </span>
+                  </div>
+                </>
+              )}
+
               <div className="flex justify-between text-zinc-400">
                 <span>Subtotal</span>
                 <span className="font-mono text-zinc-200">

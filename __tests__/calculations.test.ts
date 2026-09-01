@@ -50,6 +50,45 @@ describe("Calculation Utils & Staff Incentive Logic", () => {
     });
     expect(totals.subtotal).toBe(600); // 600 + 0
     expect(totals.grandTotal).toBe(600);
+    expect(totals.servicesSubtotal).toBe(600);
+    expect(totals.productsSubtotal).toBe(0);
+  });
+
+  it("calculates separate retail product sale amount and services sale amount", () => {
+    const items: InvoiceItem[] = [
+      {
+        id: "item-service",
+        item_name: "Hair Color",
+        item_type: "service",
+        quantity: 1,
+        unit_price: 1500,
+        discount: 0,
+        total_price: 1500,
+      },
+      {
+        id: "item-product",
+        item_name: "L'Oreal Shampoo",
+        item_type: "product",
+        quantity: 2,
+        unit_price: 600,
+        discount: 100,
+        total_price: 1100,
+      },
+    ];
+
+    const totals = calculateInvoiceTotals({
+      items,
+      discountType: "flat",
+      discountValue: 200,
+      taxEnabled: false,
+      taxRate: 0,
+    });
+
+    expect(totals.servicesSubtotal).toBe(1500);
+    expect(totals.productsSubtotal).toBe(1100);
+    expect(totals.subtotal).toBe(2600);
+    expect(totals.discountAmount).toBe(200);
+    expect(totals.grandTotal).toBe(2400);
   });
 
   describe("Staff Sales Volume & Discount Deductions (User Scenarios)", () => {

@@ -208,6 +208,11 @@ export default function PublicReceiptPage() {
     );
   }
 
+  const serviceItems = (invoice.items || []).filter((it) => it.item_type !== "product");
+  const productItems = (invoice.items || []).filter((it) => it.item_type === "product");
+  const servicesSubtotal = serviceItems.reduce((sum, it) => sum + (it.total_price || 0), 0);
+  const productsSubtotal = productItems.reduce((sum, it) => sum + (it.total_price || 0), 0);
+
   return (
     <div className="min-h-screen bg-[#09090b] text-white py-6 px-3 flex flex-col items-center justify-center">
       {/* TOP HEADER CONTROLS */}
@@ -280,81 +285,104 @@ export default function PublicReceiptPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {(invoice.items || []).map((item, idx) => {
-                  const primaryStaff = staff.find((s) => s.id === item.primary_staff_id)?.name;
-                  const secondaryStaff = item.secondary_staff_id ? staff.find((s) => s.id === item.secondary_staff_id)?.name : null;
+                {(() => {
+                  const renderItemRow = (item: (typeof invoice.items)[0], idx: number) => {
+                    const primaryStaff = staff.find((s) => s.id === item.primary_staff_id)?.name;
+                    const secondaryStaff = item.secondary_staff_id ? staff.find((s) => s.id === item.secondary_staff_id)?.name : null;
 
-                  let staffDisplay = "";
-                  if (item.staff_splits && item.staff_splits.length > 1) {
-                    staffDisplay = item.staff_splits
-                      .map((s) => {
-                        const st = staff.find((staffMember) => staffMember.id === s.staff_id);
-                        return `${st?.name || "Staff"} (₹${s.amount})`;
-                      })
-                      .join(" + ");
-                  } else {
-                    staffDisplay = primaryStaff ? (secondaryStaff ? `${primaryStaff} & ${secondaryStaff}` : primaryStaff) : "";
-                  }
-
-                  let services = item.package_services;
-                  if (
-                    (!services || services.length === 0) &&
-                    (item.item_type === "package" || (item.package_service_ids && item.package_service_ids.length > 0))
-                  ) {
-                    const catalog = typeof window !== "undefined" ? Storage.getCatalog() : [];
-                    const catItem = catalog.find(
-                      (c) => c.id === item.item_id || c.name.toLowerCase().trim() === item.item_name.toLowerCase().trim()
-                    );
-                    if (catItem && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
-                      services = catItem.package_service_ids
-                        .map((sId) => catalog.find((c) => c.id === sId))
-                        .filter(Boolean)
-                        .map((s) => ({
-                          service_id: s!.id,
-                          service_name: s!.name,
-                          price: Math.round(item.unit_price / catItem.package_service_ids!.length),
-                          primary_staff_id: item.primary_staff_id,
-                        }));
+                    let staffDisplay = "";
+                    if (item.staff_splits && item.staff_splits.length > 1) {
+                      staffDisplay = item.staff_splits
+                        .map((s) => {
+                          const st = staff.find((staffMember) => staffMember.id === s.staff_id);
+                          return `${st?.name || "Staff"} (₹${s.amount})`;
+                        })
+                        .join(" + ");
+                    } else {
+                      staffDisplay = primaryStaff ? (secondaryStaff ? `${primaryStaff} & ${secondaryStaff}` : primaryStaff) : "";
                     }
+
+                    let services = item.package_services;
+                    if (
+                      (!services || services.length === 0) &&
+                      (item.item_type === "package" || (item.package_service_ids && item.package_service_ids.length > 0))
+                    ) {
+                      const catalog = typeof window !== "undefined" ? Storage.getCatalog() : [];
+                      const catItem = catalog.find(
+                        (c) => c.id === item.item_id || c.name.toLowerCase().trim() === item.item_name.toLowerCase().trim()
+                      );
+                      if (catItem && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
+                        services = catItem.package_service_ids
+                          .map((sId) => catalog.find((c) => c.id === sId))
+                          .filter(Boolean)
+                          .map((s) => ({
+                            service_id: s!.id,
+                            service_name: s!.name,
+                            price: Math.round(item.unit_price / catItem.package_service_ids!.length),
+                            primary_staff_id: item.primary_staff_id,
+                          }));
+                      }
+                    }
+
+                    const isPkg = item.item_type === "package" || (services && services.length > 0);
+
+                    return (
+                      <tr key={idx}>
+                        <td className="py-1.5 pr-1">
+                          <div className="flex items-center gap-1.5 flex-wrap font-semibold text-zinc-900">
+                            {item.guest_name && (
+                              <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-cyan-100 text-cyan-900 border border-cyan-300">
+                                👤 {item.guest_name}
+                              </span>
+                            )}
+                            <span>{item.item_name}</span>
+                          </div>
+                          {isPkg && services && services.length > 0 ? (
+                            <div className="text-[8.5px] text-zinc-600 space-y-0.5 mt-0.5">
+                              {services.map((ps, pIdx) => {
+                                const sName = staff.find((s) => s.id === ps.primary_staff_id)?.name || primaryStaff;
+                                return (
+                                  <div key={pIdx}>
+                                    • {ps.guest_name ? `[${ps.guest_name}] ` : ""}{ps.service_name} {sName ? `(Stylist: ${sName})` : ""}: ₹{ps.price}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-[9px] text-purple-700 font-medium">
+                              Stylist: {staffDisplay || "Salon Team"}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-1.5 text-center font-mono text-zinc-600">{item.quantity}</td>
+                        <td className="py-1.5 text-right font-mono font-bold text-zinc-900">
+                          {formatCurrency(item.total_price, settings.currency_symbol)}
+                        </td>
+                      </tr>
+                    );
+                  };
+
+                  if (productItems.length > 0 && serviceItems.length > 0) {
+                    return (
+                      <>
+                        <tr className="bg-zinc-100 text-zinc-800 font-bold uppercase text-[9px] tracking-wider">
+                          <td colSpan={3} className="py-1 px-1">
+                            ✂️ Services & Packages ({serviceItems.length})
+                          </td>
+                        </tr>
+                        {serviceItems.map((item, idx) => renderItemRow(item, idx))}
+                        <tr className="bg-zinc-100 text-zinc-800 font-bold uppercase text-[9px] tracking-wider">
+                          <td colSpan={3} className="py-1 px-1">
+                            🛍️ Retail Products ({productItems.length})
+                          </td>
+                        </tr>
+                        {productItems.map((item, idx) => renderItemRow(item, serviceItems.length + idx))}
+                      </>
+                    );
                   }
 
-                  const isPkg = item.item_type === "package" || (services && services.length > 0);
-
-                  return (
-                    <tr key={idx}>
-                      <td className="py-1.5 pr-1">
-                        <div className="flex items-center gap-1.5 flex-wrap font-semibold text-zinc-900">
-                          {item.guest_name && (
-                            <span className="text-[8.5px] font-bold px-1.5 py-0.2 rounded bg-cyan-100 text-cyan-900 border border-cyan-300">
-                              👤 {item.guest_name}
-                            </span>
-                          )}
-                          <span>{item.item_name}</span>
-                        </div>
-                        {isPkg && services && services.length > 0 ? (
-                          <div className="text-[8.5px] text-zinc-600 space-y-0.5 mt-0.5">
-                            {services.map((ps, pIdx) => {
-                              const sName = staff.find((s) => s.id === ps.primary_staff_id)?.name || primaryStaff;
-                              return (
-                                <div key={pIdx}>
-                                  • {ps.guest_name ? `[${ps.guest_name}] ` : ""}{ps.service_name} {sName ? `(Stylist: ${sName})` : ""}: ₹{ps.price}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-[9px] text-purple-700 font-medium">
-                            Stylist: {staffDisplay || "Salon Team"}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-1.5 text-center font-mono text-zinc-600">{item.quantity}</td>
-                      <td className="py-1.5 text-right font-mono font-bold text-zinc-900">
-                        {formatCurrency(item.total_price, settings.currency_symbol)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                  return (invoice.items || []).map((item, idx) => renderItemRow(item, idx));
+                })()}
               </tbody>
             </table>
           </div>
@@ -400,7 +428,19 @@ export default function PublicReceiptPage() {
 
           {/* TOTALS & BREAKDOWN */}
           <div className="py-3 border-b border-dashed border-zinc-300 space-y-1.5 text-[10px]">
-            <div className="flex justify-between text-zinc-600">
+            {productsSubtotal > 0 && (
+              <>
+                <div className="flex justify-between text-zinc-600">
+                  <span>Services Subtotal:</span>
+                  <span className="font-mono">{formatCurrency(servicesSubtotal, settings.currency_symbol)}</span>
+                </div>
+                <div className="flex justify-between text-zinc-600">
+                  <span>Retail Products Subtotal:</span>
+                  <span className="font-mono">{formatCurrency(productsSubtotal, settings.currency_symbol)}</span>
+                </div>
+              </>
+            )}
+            <div className={`flex justify-between ${productsSubtotal > 0 ? "font-bold text-zinc-800" : "text-zinc-600"}`}>
               <span>Subtotal:</span>
               <span className="font-mono">{formatCurrency(invoice.subtotal, settings.currency_symbol)}</span>
             </div>

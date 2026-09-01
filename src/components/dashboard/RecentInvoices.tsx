@@ -25,6 +25,8 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
+  Scissors,
+  ShoppingBag,
 } from "lucide-react";
 
 export function RecentInvoices() {
@@ -95,10 +97,22 @@ export function RecentInvoices() {
     });
   }, [invoices, selectedMode, selectedStatus, searchQuery, isInvoicePendingSync]);
 
-  // TODAY STATS
+  // TODAY STATS WITH SEPARATE SERVICES & RETAIL PRODUCT SALES
   const todaySettled = todaysInvoices.filter((i) => i.status !== "void");
   const todayTotalCollection = todaySettled.reduce((sum, i) => sum + (i.grand_total || 0), 0);
   const todayVoidCount = todaysInvoices.filter((i) => i.status === "void").length;
+
+  let todayServicesTotal = 0;
+  let todayProductsTotal = 0;
+  todaySettled.forEach((inv) => {
+    (inv.items || []).forEach((item) => {
+      if (item.item_type === "product") {
+        todayProductsTotal += item.total_price || 0;
+      } else {
+        todayServicesTotal += item.total_price || 0;
+      }
+    });
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -115,7 +129,7 @@ export function RecentInvoices() {
             </Badge>
           </div>
           <p className="text-xs text-zinc-400 mt-1">
-            Displaying today&apos;s salon transactions for rapid cashier settlement, thermal receipt reprinting, and client WhatsApp sharing.
+            Displaying today&apos;s salon transactions with separate service and retail product sales breakdown.
           </p>
         </div>
 
@@ -133,8 +147,9 @@ export function RecentInvoices() {
         )}
       </div>
 
-      {/* TODAY SUMMARY STATS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* TODAY SUMMARY STATS: 4-COLUMN CARDS WITH SEPARATE SERVICES & PRODUCTS SALE TOTALS */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* CARD 1: INVOICE COUNT */}
         <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Today&apos;s Invoices</span>
@@ -146,28 +161,46 @@ export function RecentInvoices() {
           </div>
         </Card>
 
+        {/* CARD 2: SERVICES SALE AMOUNT */}
         <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Today&apos;s Gross Collection</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Services Sale</span>
+            <div className="h-6 w-6 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+              <Scissors className="h-3.5 w-3.5" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-indigo-400 font-mono">
+            {formatCurrency(todayServicesTotal, settings.currency_symbol)}
+          </div>
+          <div className="text-[10px] text-zinc-400 mt-1">Salon services & packages</div>
+        </Card>
+
+        {/* CARD 3: RETAIL PRODUCTS SALE AMOUNT */}
+        <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Retail Products Sale</span>
+            <div className="h-6 w-6 rounded-lg bg-pink-500/20 text-pink-400 flex items-center justify-center">
+              <ShoppingBag className="h-3.5 w-3.5" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-pink-400 font-mono">
+            {formatCurrency(todayProductsTotal, settings.currency_symbol)}
+          </div>
+          <div className="text-[10px] text-zinc-400 mt-1">Take-home retail sales</div>
+        </Card>
+
+        {/* CARD 4: TODAY GROSS COLLECTION */}
+        <Card className="p-3.5 bg-gradient-to-br from-emerald-950/40 via-zinc-950 to-zinc-900/90 border-emerald-500/30">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Today&apos;s Collection</span>
+            <div className="h-6 w-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </div>
           </div>
           <div className="mt-2 text-2xl font-black text-emerald-400 font-mono">
             {formatCurrency(todayTotalCollection, settings.currency_symbol)}
           </div>
-          <div className="text-[10px] text-emerald-400/80 mt-1 font-semibold">Today&apos;s total settled volume</div>
-        </Card>
-
-        <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Historical Logs</span>
-            <Calendar className="h-4 w-4 text-zinc-400" />
-          </div>
-          <div className="mt-2 text-sm font-semibold text-zinc-300">
-            {invoices.length} total across all time
-          </div>
-          <div className="text-[10px] text-zinc-500 mt-1">
-            Auditing across custom dates is located in Admin Portal
-          </div>
+          <div className="text-[10px] text-emerald-400/80 mt-1 font-semibold">Total settled volume</div>
         </Card>
       </div>
 

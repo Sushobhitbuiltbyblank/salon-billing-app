@@ -28,6 +28,8 @@ import {
   X,
   Cloud,
   CloudOff,
+  Scissors,
+  ShoppingBag,
 } from "lucide-react";
 
 export function AdminInvoiceManagement() {
@@ -129,11 +131,22 @@ export function AdminInvoiceManagement() {
   }, [invoices, datePreset, customStartDate, customEndDate, selectedMode, selectedStatus, searchQuery]);
 
   // DYNAMIC KPIS ACCORDING TO CURRENT FILTER
-  const totalSettledCount = filteredInvoices.filter((i) => i.status !== "void").length;
+  const settledInvoices = filteredInvoices.filter((i) => i.status !== "void");
+  const totalSettledCount = settledInvoices.length;
   const totalVoidCount = filteredInvoices.filter((i) => i.status === "void").length;
-  const totalSettledAmount = filteredInvoices
-    .filter((i) => i.status !== "void")
-    .reduce((sum, i) => sum + (i.grand_total || 0), 0);
+  const totalSettledAmount = settledInvoices.reduce((sum, i) => sum + (i.grand_total || 0), 0);
+
+  let filteredServicesTotal = 0;
+  let filteredProductsTotal = 0;
+  settledInvoices.forEach((inv) => {
+    (inv.items || []).forEach((item) => {
+      if (item.item_type === "product") {
+        filteredProductsTotal += item.total_price || 0;
+      } else {
+        filteredServicesTotal += item.total_price || 0;
+      }
+    });
+  });
 
   // RESET ALL FILTERS
   const handleResetFilters = () => {
@@ -351,8 +364,8 @@ export function AdminInvoiceManagement() {
         )}
       </div>
 
-      {/* DYNAMIC KPI METRIC CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* DYNAMIC KPI METRIC CARDS WITH SEPARATE SERVICES & PRODUCT SALES */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Filtered Invoices</span>
@@ -360,30 +373,53 @@ export function AdminInvoiceManagement() {
           </div>
           <div className="mt-2 text-xl font-black text-white font-mono">{filteredInvoices.length}</div>
           <div className="text-[10px] text-zinc-500 mt-1">
-            {totalSettledCount} active paid / {totalVoidCount} voided ({invoices.length} total in DB)
+            {totalSettledCount} active / {totalVoidCount} voided
           </div>
         </Card>
 
         <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Filtered Settled Revenue</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Services Sale</span>
+            <div className="h-6 w-6 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+              <Scissors className="h-3.5 w-3.5" />
+            </div>
+          </div>
+          <div className="mt-2 text-xl font-black text-indigo-400 font-mono">
+            {formatCurrency(filteredServicesTotal, settings.currency_symbol)}
+          </div>
+          <div className="text-[10px] text-zinc-400 mt-1">
+            Services & packages
+          </div>
+        </Card>
+
+        <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Retail Products Sale</span>
+            <div className="h-6 w-6 rounded-lg bg-pink-500/20 text-pink-400 flex items-center justify-center">
+              <ShoppingBag className="h-3.5 w-3.5" />
+            </div>
+          </div>
+          <div className="mt-2 text-xl font-black text-pink-400 font-mono">
+            {formatCurrency(filteredProductsTotal, settings.currency_symbol)}
+          </div>
+          <div className="text-[10px] text-zinc-400 mt-1">
+            Retail inventory sales
+          </div>
+        </Card>
+
+        <Card className="p-3.5 bg-gradient-to-br from-emerald-950/40 via-zinc-950 to-zinc-900/90 border-emerald-500/30">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Settled Revenue</span>
+            <div className="h-6 w-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </div>
           </div>
           <div className="mt-2 text-xl font-black text-emerald-400 font-mono">
             {formatCurrency(totalSettledAmount, settings.currency_symbol)}
           </div>
           <div className="text-[10px] text-emerald-400/80 mt-1 font-semibold">
-            Collection for {datePreset === "all" ? "All Time" : datePreset}
+            {datePreset === "all" ? "All time volume" : `${datePreset} volume`}
           </div>
-        </Card>
-
-        <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Voided / Cancelled</span>
-            <Ban className="h-4 w-4 text-amber-400" />
-          </div>
-          <div className="mt-2 text-xl font-black text-amber-400 font-mono">{totalVoidCount}</div>
-          <div className="text-[10px] text-zinc-500 mt-1">Invoices marked as void in filter</div>
         </Card>
       </div>
 

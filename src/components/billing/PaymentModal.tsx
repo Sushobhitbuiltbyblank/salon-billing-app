@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   Receipt,
   FileText,
+  Scissors,
+  ShoppingBag,
 } from "lucide-react";
 import { calculateInvoiceTotals } from "@/lib/calculations";
 import { formatCurrency, generateInvoiceNumber, generateUUID } from "@/lib/utils";
@@ -308,6 +310,30 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
             <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
               Bill Summary
             </h4>
+
+            {/* SUBTOTALS (SEPARATE SERVICES & PRODUCTS) */}
+            {totals.productsSubtotal > 0 && (
+              <div className="space-y-1 pb-1.5 border-b border-zinc-900 text-xs">
+                <div className="flex items-center justify-between text-zinc-400">
+                  <span className="flex items-center gap-1">
+                    <Scissors className="h-3 w-3 text-indigo-400" />
+                    <span>Services Subtotal:</span>
+                  </span>
+                  <span className="font-mono text-zinc-300">
+                    {formatCurrency(totals.servicesSubtotal, settings.currency_symbol)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-zinc-400">
+                  <span className="flex items-center gap-1">
+                    <ShoppingBag className="h-3 w-3 text-pink-400" />
+                    <span>Retail Products Subtotal:</span>
+                  </span>
+                  <span className="font-mono text-pink-300">
+                    {formatCurrency(totals.productsSubtotal, settings.currency_symbol)}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* SUBTOTAL */}
             <div className="flex items-center justify-between text-xs">
