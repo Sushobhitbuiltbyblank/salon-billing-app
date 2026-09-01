@@ -82,9 +82,13 @@ export function BillingPos() {
   return (
     <div className="max-w-[1700px] mx-auto w-full">
       {/* =========================================================================
-          MOBILE VIEW SWITCHER (ONLY VISIBLE ON SCREENS < XL)
+          MOBILE / TABBED VIEW SWITCHER (ONLY VISIBLE ON SCREENS < XL)
           ========================================================================= */}
-      <div className="flex xl:hidden items-center bg-zinc-900/90 p-1 rounded-2xl border border-zinc-800/90 mb-3 shadow-lg">
+      <div
+        className={`flex xl:hidden items-center bg-zinc-900/90 p-1 rounded-2xl border border-zinc-800/90 mb-3 shadow-lg w-full transition-all duration-200 ${
+          mobileTab === "ticket" ? "max-w-2xl mx-auto" : "max-w-5xl mx-auto"
+        }`}
+      >
         <button
           type="button"
           onClick={() => setMobileTab("catalog")}
@@ -120,13 +124,13 @@ export function BillingPos() {
       {/* =========================================================================
           MAIN LAYOUT CONTAINER
           ========================================================================= */}
-      <div className="flex flex-col xl:flex-row gap-3.5 xl:h-[calc(100vh-5.5rem)] pb-12 xl:pb-0">
+      <div className="flex flex-col xl:flex-row gap-3.5 xl:h-[calc(100dvh-5.5rem)] pb-2 xl:pb-0">
         
         {/* =====================================================================
             LEFT COLUMN: CLIENT SELECTOR + CATALOG GRID
             ===================================================================== */}
         <div
-          className={`flex-1 flex flex-col gap-3.5 min-h-0 min-w-0 ${
+          className={`flex-1 flex flex-col gap-3.5 min-h-0 min-w-0 max-w-5xl mx-auto w-full xl:max-w-none ${
             mobileTab === "ticket" ? "hidden xl:flex" : "flex"
           }`}
         >
@@ -143,12 +147,14 @@ export function BillingPos() {
             RIGHT COLUMN: CURRENT INVOICE / CART TICKET
             ===================================================================== */}
         <div
-          className={`w-full xl:w-[380px] 2xl:w-[450px] flex flex-col rounded-2xl border border-zinc-800/90 bg-zinc-900/80 backdrop-blur-xl shadow-2xl overflow-hidden shrink-0 ${
-            mobileTab === "catalog" ? "hidden xl:flex" : "flex min-h-[500px]"
+          className={`w-full max-w-2xl mx-auto xl:max-w-none xl:w-[380px] 2xl:w-[450px] flex flex-col rounded-2xl border border-zinc-800/90 bg-zinc-900/80 backdrop-blur-xl shadow-2xl overflow-hidden shrink-0 ${
+            mobileTab === "catalog"
+              ? "hidden xl:flex"
+              : "flex h-[calc(100dvh-12rem)] sm:h-[calc(100dvh-9.5rem)] min-h-[420px] xl:h-full"
           }`}
         >
           {/* CART HEADER */}
-          <div className="flex items-center justify-between p-4 border-b border-zinc-800/80 bg-zinc-950/60">
+          <div className="shrink-0 flex items-center justify-between p-3.5 sm:p-4 border-b border-zinc-800/80 bg-zinc-950/60">
             <div className="flex items-center gap-2">
               {/* Back to Catalog on Mobile */}
               <button
@@ -205,12 +211,12 @@ export function BillingPos() {
           </div>
 
           {/* CART ITEMS SCROLLABLE LIST */}
-          <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5 max-h-[60vh] xl:max-h-none">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3.5 space-y-2.5">
             <CartItemList />
           </div>
 
           {/* CART FOOTER / TOTALS & CHECKOUT ACTIONS */}
-          <div className="p-4 border-t border-zinc-800/90 bg-zinc-950/90 space-y-3">
+          <div className="shrink-0 p-3.5 sm:p-4 border-t border-zinc-800/90 bg-zinc-950/95 space-y-2.5 sm:space-y-3 sticky bottom-0 z-10 shadow-2xl backdrop-blur-md">
             {/* TOTALS MINI SUMMARY */}
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between text-zinc-400">
@@ -249,22 +255,22 @@ export function BillingPos() {
 
             {/* WARNING ALERT IF STYLISTS ARE UNASSIGNED */}
             {unassignedServices.length > 0 && (
-              <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200">
+              <div className="flex items-center gap-2 p-2 rounded-xl bg-amber-950/40 border border-amber-500/50 text-[11px] text-amber-200">
                 <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 animate-pulse" />
-                <span className="font-medium">
-                  {unassignedServices.length} item{unassignedServices.length > 1 ? "s" : ""} require{unassignedServices.length === 1 ? "s" : ""} a stylist selection
+                <span className="font-medium truncate">
+                  {unassignedServices.length} item{unassignedServices.length > 1 ? "s" : ""} require{unassignedServices.length === 1 ? "s" : ""} stylist selection
                 </span>
               </div>
             )}
 
             {/* ACTION BUTTONS */}
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-2 pt-0.5">
               <Button
                 variant={unassignedServices.length > 0 ? "secondary" : "glow"}
                 size="lg"
                 onClick={handleOpenPayment}
                 disabled={draftItems.length === 0}
-                className={`flex-1 text-sm font-bold h-12 ${
+                className={`flex-1 text-sm font-bold h-11 sm:h-12 ${
                   unassignedServices.length > 0
                     ? "border-amber-500/50 text-amber-300 hover:bg-amber-950/40"
                     : ""
@@ -282,8 +288,8 @@ export function BillingPos() {
           FLOATING BOTTOM QUICK-CHECKOUT PILL (ON MOBILE WHEN IN CATALOG TAB)
           ========================================================================= */}
       {mobileTab === "catalog" && draftItems.length > 0 && (
-        <div className="xl:hidden fixed bottom-18 left-3 right-3 z-30 animate-in slide-in-from-bottom-4 duration-300">
-          <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-900/95 border border-purple-500/50 shadow-2xl backdrop-blur-2xl">
+        <div className="xl:hidden fixed bottom-18 lg:bottom-6 left-3 right-3 z-30 animate-in slide-in-from-bottom-4 duration-300 max-w-md mx-auto pointer-events-none">
+          <div className="pointer-events-auto flex items-center justify-between p-3 rounded-2xl bg-zinc-900/95 border border-purple-500/50 shadow-2xl backdrop-blur-2xl">
             <div className="flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-600 text-white font-mono font-bold text-xs shadow-md shadow-purple-600/40">
                 {draftItems.length}

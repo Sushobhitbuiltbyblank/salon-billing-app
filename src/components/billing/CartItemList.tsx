@@ -499,7 +499,7 @@ export function CartItemList() {
 
   if (draftItems.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 text-center bg-zinc-950/40 rounded-2xl border border-zinc-800/60">
+      <div className="h-full min-h-[240px] flex flex-col items-center justify-center p-8 text-center bg-zinc-950/40 rounded-2xl border border-zinc-800/60">
         <div className="h-12 w-12 rounded-2xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-3 shadow-inner">
           <Scissors className="h-6 w-6" />
         </div>
