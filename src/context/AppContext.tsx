@@ -278,8 +278,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setInvoices((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedInvoices) ? mergedInvoices : prev));
           Storage.saveInvoices(mergedInvoices);
 
+          // Auto-reconciliation: ensure any local invoice not yet recorded in cloud is enqueued for sync
+          const cloudIds = new Set(cloudData.invoices.map((c) => c.id).filter(Boolean));
+          const cloudNumbers = new Set(cloudData.invoices.map((c) => c.invoice_number).filter(Boolean));
+          let hasUnsyncedInvoices = false;
+          mergedInvoices.forEach((m) => {
+            const inCloud =
+              (m.id && cloudIds.has(m.id)) || (m.invoice_number && cloudNumbers.has(m.invoice_number));
+            if (!inCloud) {
+              Storage.addToInvoiceSyncQueue(m.id);
+              hasUnsyncedInvoices = true;
+            }
+          });
+
           // If there are pending invoices in the queue, trigger processing
-          if (Storage.getPendingInvoiceSyncQueue().length > 0) {
+          if (hasUnsyncedInvoices || Storage.getPendingInvoiceSyncQueue().length > 0) {
+            setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
             syncPendingInvoices();
           }
         }
@@ -327,9 +341,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loadAllData();
     });
 
-    // 2. Multi-device 4-second heartbeat polling fallback: sync pending queue and load cloud updates
+    // 2. Multi-device 4-second heartbeat polling: sync pending queue and load cloud updates
     const interval = setInterval(() => {
-      if (navigator.onLine && Storage.getPendingInvoiceSyncQueue().length > 0) {
+      if (Storage.getPendingInvoiceSyncQueue().length > 0) {
         syncPendingInvoices();
       }
       loadAllData();
@@ -338,14 +352,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // 3. Instant sync on window focus or screen unlock / tab switch
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        if (navigator.onLine && Storage.getPendingInvoiceSyncQueue().length > 0) {
+        if (Storage.getPendingInvoiceSyncQueue().length > 0) {
           syncPendingInvoices();
         }
         loadAllData();
       }
     };
     const onWindowFocus = () => {
-      if (navigator.onLine && Storage.getPendingInvoiceSyncQueue().length > 0) {
+      if (Storage.getPendingInvoiceSyncQueue().length > 0) {
         syncPendingInvoices();
       }
       loadAllData();
@@ -718,8 +732,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCustomers(Storage.getCustomers());
     setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
 
-    // 2. If online and Supabase configured, attempt immediate push to Supabase
-    if (isSupabaseConfigured() && navigator.onLine) {
+    // 2. Attempt immediate push to Supabase if configured
+    if (isSupabaseConfigured()) {
       SupabaseSync.createInvoice(created)
         .then((remoteInv) => {
           if (remoteInv) {

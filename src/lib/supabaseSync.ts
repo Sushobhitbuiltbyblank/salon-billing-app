@@ -364,23 +364,34 @@ export const SupabaseSync = {
         console.warn("Non-fatal error updating customer profile during invoice creation:", custErr);
       }
 
-      // Sanitize header to match exact columns of 'invoices' table
+      // Sanitize header to match exact columns and check constraints of 'invoices' table
+      const safeDiscountType =
+        (invoice.discount_type as string) === "percentage" || (invoice.discount_type as string) === "percent"
+          ? "percentage"
+          : "flat";
+      const safePaymentMode = ["cash", "upi", "card", "split"].includes(invoice.payment_mode || "")
+        ? invoice.payment_mode
+        : "cash";
+      const safeStatus = ["paid", "void", "pending"].includes(invoice.status || "")
+        ? invoice.status
+        : "paid";
+
       const invoiceHeader = {
         id: isValidUUID(invoice.id) ? invoice.id : undefined,
         invoice_number: invoice.invoice_number,
         customer_id: finalCustomerId,
-        customer_name: invoice.customer_name || "Walk-in Guest",
+        customer_name: (invoice.customer_name || "").trim() || "Walk-in Guest",
         customer_phone: invoice.customer_phone || null,
         subtotal: Number(invoice.subtotal) || 0,
         discount_amount: Number(invoice.discount_amount) || 0,
-        discount_type: invoice.discount_type || "flat",
+        discount_type: safeDiscountType,
         discount_value: Number(invoice.discount_value) || 0,
         tax_amount: Number(invoice.tax_amount) || 0,
         tax_rate: Number(invoice.tax_rate) || 0,
         grand_total: Number(invoice.grand_total) || 0,
-        payment_mode: invoice.payment_mode || "cash",
+        payment_mode: safePaymentMode,
         payment_breakdown: invoice.payment_breakdown || null,
-        status: invoice.status || "paid",
+        status: safeStatus,
         notes: notesPayload,
         created_at: invoice.created_at || new Date().toISOString(),
       };
@@ -505,21 +516,32 @@ export const SupabaseSync = {
         }
       }
 
+      const safeDiscountType =
+        (invoice.discount_type as string) === "percentage" || (invoice.discount_type as string) === "percent"
+          ? "percentage"
+          : "flat";
+      const safePaymentMode = ["cash", "upi", "card", "split"].includes(invoice.payment_mode || "")
+        ? invoice.payment_mode
+        : "cash";
+      const safeStatus = ["paid", "void", "pending"].includes(invoice.status || "")
+        ? invoice.status
+        : "paid";
+
       const invoiceHeader = {
         invoice_number: invoice.invoice_number,
         customer_id: finalCustomerId,
-        customer_name: invoice.customer_name || "Walk-in Guest",
+        customer_name: (invoice.customer_name || "").trim() || "Walk-in Guest",
         customer_phone: invoice.customer_phone || null,
         subtotal: Number(invoice.subtotal) || 0,
         discount_amount: Number(invoice.discount_amount) || 0,
-        discount_type: invoice.discount_type || "flat",
+        discount_type: safeDiscountType,
         discount_value: Number(invoice.discount_value) || 0,
         tax_amount: Number(invoice.tax_amount) || 0,
         tax_rate: Number(invoice.tax_rate) || 0,
         grand_total: Number(invoice.grand_total) || 0,
-        payment_mode: invoice.payment_mode || "cash",
+        payment_mode: safePaymentMode,
         payment_breakdown: invoice.payment_breakdown || null,
-        status: invoice.status || "paid",
+        status: safeStatus,
         notes: notesPayload,
       };
 
