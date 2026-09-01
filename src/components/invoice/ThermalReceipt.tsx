@@ -217,13 +217,13 @@ export function ThermalReceipt({
                   <>
                     <tr style={{ backgroundColor: "#f4f4f5", fontSize: "8px", fontWeight: "bold", textTransform: "uppercase" }}>
                       <td colSpan={4} style={{ padding: "2px 1px", borderTop: "1px solid #000000", borderBottom: "1px solid #000000" }}>
-                        ✂️ Services & Packages ({serviceItems.length})
+                        Services
                       </td>
                     </tr>
                     {serviceItems.map((item, idx) => renderItemRow(item, idx))}
                     <tr style={{ backgroundColor: "#f4f4f5", fontSize: "8px", fontWeight: "bold", textTransform: "uppercase" }}>
                       <td colSpan={4} style={{ padding: "2px 1px", borderTop: "1px solid #000000", borderBottom: "1px solid #000000" }}>
-                        🛍️ Retail Products ({productItems.length})
+                        Product
                       </td>
                     </tr>
                     {productItems.map((item, idx) => renderItemRow(item, serviceItems.length + idx))}
@@ -261,7 +261,7 @@ export function ThermalReceipt({
               <span>{formatCurrency(servicesSubtotal, settings.currency_symbol)}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", color: "#333333", fontSize: "9px" }}>
-              <span>Retail Products Subtotal:</span>
+              <span>Product Subtotal:</span>
               <span>{formatCurrency(productsSubtotal, settings.currency_symbol)}</span>
             </div>
           </>

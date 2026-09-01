@@ -628,10 +628,11 @@ export function AdminInvoiceManagement() {
                               {/* 1. SERVICES LIST */}
                               {serviceItems.length > 0 && (
                                 <div className="space-y-1">
-                                  <div className="flex items-center gap-1 text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
-                                    <Scissors className="h-3 w-3" />
-                                    <span>Services ({serviceItems.length})</span>
-                                  </div>
+                                  {productItems.length > 0 && (
+                                    <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
+                                      Services
+                                    </div>
+                                  )}
                                   {serviceItems.map((item, iIdx) => {
                                     let services = item.package_services;
                                     if (
@@ -719,12 +720,11 @@ export function AdminInvoiceManagement() {
                                 </div>
                               )}
 
-                              {/* 2. RETAIL PRODUCTS LIST */}
+                              {/* 2. PRODUCT LIST (ONLY IF PURCHASED) */}
                               {productItems.length > 0 && (
                                 <div className="space-y-1 pt-1.5 border-t border-zinc-800/80">
-                                  <div className="flex items-center gap-1 text-[10px] font-bold text-pink-400 uppercase tracking-wider">
-                                    <ShoppingBag className="h-3 w-3 text-pink-400" />
-                                    <span>Retail Products ({productItems.length})</span>
+                                  <div className="text-[10px] font-bold text-pink-400 uppercase tracking-wider">
+                                    Product
                                   </div>
                                   {productItems.map((item, pIdx) => {
                                     const primaryStaffName = staff.find((s) => s.id === item.primary_staff_id)?.name;

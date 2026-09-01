@@ -367,13 +367,13 @@ export default function PublicReceiptPage() {
                       <>
                         <tr className="bg-zinc-100 text-zinc-800 font-bold uppercase text-[9px] tracking-wider">
                           <td colSpan={3} className="py-1 px-1">
-                            ✂️ Services & Packages ({serviceItems.length})
+                            Services
                           </td>
                         </tr>
                         {serviceItems.map((item, idx) => renderItemRow(item, idx))}
                         <tr className="bg-zinc-100 text-zinc-800 font-bold uppercase text-[9px] tracking-wider">
                           <td colSpan={3} className="py-1 px-1">
-                            🛍️ Retail Products ({productItems.length})
+                            Product
                           </td>
                         </tr>
                         {productItems.map((item, idx) => renderItemRow(item, serviceItems.length + idx))}
@@ -412,7 +412,7 @@ export default function PublicReceiptPage() {
             return (
               <div className="my-2.5 p-2.5 rounded-xl bg-cyan-50/70 border border-cyan-200 text-[10px] space-y-1">
                 <div className="font-bold text-cyan-900 uppercase tracking-wide">
-                  👥 Per-Person Split Summary:
+                  Per-Person Split Summary:
                 </div>
                 <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                   {breakdown.map((gb, gIdx) => (
@@ -435,7 +435,7 @@ export default function PublicReceiptPage() {
                   <span className="font-mono">{formatCurrency(servicesSubtotal, settings.currency_symbol)}</span>
                 </div>
                 <div className="flex justify-between text-zinc-600">
-                  <span>Retail Products Subtotal:</span>
+                  <span>Product Subtotal:</span>
                   <span className="font-mono">{formatCurrency(productsSubtotal, settings.currency_symbol)}</span>
                 </div>
               </>

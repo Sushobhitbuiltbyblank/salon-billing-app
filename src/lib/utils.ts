@@ -132,7 +132,7 @@ export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSet
         })
         .join("\n");
 
-    itemsText = `✂️ *SERVICES & PACKAGES:*\n${renderBlock(serviceItems, 1)}\n\n🛍️ *RETAIL PRODUCTS:*\n${renderBlock(productItems, serviceItems.length + 1)}`;
+    itemsText = `*SERVICES:*\n${renderBlock(serviceItems, 1)}\n\n*PRODUCT:*\n${renderBlock(productItems, serviceItems.length + 1)}`;
   } else {
     itemsText = items
       .map((item, idx) => {
@@ -153,10 +153,9 @@ export function generateWhatsAppMessageText(invoice: Invoice, settings: SalonSet
 📅 Date: ${formatDate(invoice.created_at)}
 👤 Client: *${invoice.customer_name}*
 --------------------------------
-*SERVICES & PRODUCTS:*
 ${itemsText}
 --------------------------------
-${productsSubtotal > 0 ? `Services Subtotal: ${settings.currency_symbol}${servicesSubtotal.toFixed(2)}\nRetail Products: ${settings.currency_symbol}${productsSubtotal.toFixed(2)}\n` : ""}Subtotal: ${settings.currency_symbol}${invoice.subtotal.toFixed(2)}
+${productsSubtotal > 0 ? `Services Subtotal: ${settings.currency_symbol}${servicesSubtotal.toFixed(2)}\nProduct Subtotal: ${settings.currency_symbol}${productsSubtotal.toFixed(2)}\n` : ""}Subtotal: ${settings.currency_symbol}${invoice.subtotal.toFixed(2)}
 ${invoice.discount_amount > 0 ? `Discount: -${settings.currency_symbol}${invoice.discount_amount.toFixed(2)}\n` : ""}${
     invoice.tax_amount > 0 ? `GST (${invoice.tax_rate}%): +${settings.currency_symbol}${invoice.tax_amount.toFixed(2)}\n` : ""
 }*Grand Total:* *${settings.currency_symbol}${invoice.grand_total.toFixed(2)}*

@@ -1453,14 +1453,14 @@ export function CartItemList() {
 
         return (
           <>
-            {/* 1. SERVICES & PACKAGES SECTION */}
+            {/* 1. SERVICES SECTION */}
             {serviceItems.length > 0 && (
               <div className="space-y-2.5">
                 {productItems.length > 0 && (
                   <div className="flex items-center justify-between px-1.5 pt-1 text-xs">
                     <div className="flex items-center gap-1.5 font-bold text-indigo-300 uppercase tracking-wider">
                       <Scissors className="h-3.5 w-3.5 text-indigo-400" />
-                      <span>Services & Packages ({serviceItems.length})</span>
+                      <span>Services ({serviceItems.length})</span>
                     </div>
                     <span className="font-mono text-zinc-400 text-[11px] font-semibold">
                       Subtotal: {formatCurrency(servicesSubtotal, settings.currency_symbol)}
@@ -1471,13 +1471,13 @@ export function CartItemList() {
               </div>
             )}
 
-            {/* 2. RETAIL PRODUCTS SECTION */}
+            {/* 2. PRODUCT SECTION */}
             {productItems.length > 0 && (
               <div className="space-y-2.5 pt-1">
                 <div className="flex items-center justify-between px-1.5 pt-1 text-xs">
                   <div className="flex items-center gap-1.5 font-bold text-pink-300 uppercase tracking-wider">
                     <ShoppingBag className="h-3.5 w-3.5 text-pink-400" />
-                    <span>Retail Products ({productItems.length})</span>
+                    <span>Product ({productItems.length})</span>
                   </div>
                   <span className="font-mono text-zinc-400 text-[11px] font-semibold">
                     Subtotal: {formatCurrency(productsSubtotal, settings.currency_symbol)}

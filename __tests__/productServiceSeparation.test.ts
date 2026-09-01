@@ -107,14 +107,14 @@ describe("Product and Service Sales Separation", () => {
     const { text } = generateWhatsAppMessageText(invoice, mockSettings);
 
     // Verifies section separation
-    expect(text).toContain("SERVICES & PACKAGES:");
-    expect(text).toContain("RETAIL PRODUCTS:");
+    expect(text).toContain("*SERVICES:*");
+    expect(text).toContain("*PRODUCT:*");
     expect(text).toContain("Hair Cut & Blowdry");
     expect(text).toContain("L'Oreal Absolute Repair Shampoo");
 
     // Verifies separate subtotals in summary
     expect(text).toContain("Services Subtotal: ₹2800.00");
-    expect(text).toContain("Retail Products: ₹1400.00");
+    expect(text).toContain("Product Subtotal: ₹1400.00");
     expect(text).toContain("Subtotal: ₹4200.00");
 
     // Verifies grand total is as it is
