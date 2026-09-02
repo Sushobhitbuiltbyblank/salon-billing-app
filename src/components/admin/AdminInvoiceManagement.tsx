@@ -28,7 +28,6 @@ import {
   X,
   Cloud,
   CloudOff,
-  Scissors,
   ShoppingBag,
 } from "lucide-react";
 
@@ -150,14 +149,11 @@ export function AdminInvoiceManagement() {
   const totalVoidCount = filteredInvoices.filter((i) => i.status === "void").length;
   const totalSettledAmount = settledInvoices.reduce((sum, i) => sum + (i.grand_total || 0), 0);
 
-  let filteredServicesTotal = 0;
   let filteredProductsTotal = 0;
   settledInvoices.forEach((inv) => {
     (inv.items || []).forEach((item) => {
       if (item.item_type === "product") {
         filteredProductsTotal += item.total_price || 0;
-      } else {
-        filteredServicesTotal += item.total_price || 0;
       }
     });
   });
@@ -379,8 +375,8 @@ export function AdminInvoiceManagement() {
         )}
       </div>
 
-      {/* DYNAMIC KPI METRIC CARDS WITH SEPARATE SERVICES & PRODUCT SALES */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* DYNAMIC KPI METRIC CARDS WITH RETAIL PRODUCT SALES */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Filtered Invoices</span>
@@ -389,21 +385,6 @@ export function AdminInvoiceManagement() {
           <div className="mt-2 text-xl font-black text-white font-mono">{filteredInvoices.length}</div>
           <div className="text-[10px] text-zinc-500 mt-1">
             {totalSettledCount} active / {totalVoidCount} voided
-          </div>
-        </Card>
-
-        <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Services Sale</span>
-            <div className="h-6 w-6 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
-              <Scissors className="h-3.5 w-3.5" />
-            </div>
-          </div>
-          <div className="mt-2 text-xl font-black text-indigo-400 font-mono">
-            {formatCurrency(filteredServicesTotal, settings.currency_symbol)}
-          </div>
-          <div className="text-[10px] text-zinc-400 mt-1">
-            Services & packages
           </div>
         </Card>
 
@@ -458,9 +439,7 @@ export function AdminInvoiceManagement() {
             className="h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-300 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
           >
             <option value="all">All Sales (All Items)</option>
-            <option value="service">Service Sale</option>
             <option value="product">Product Sale</option>
-            <option value="service_only">Service Only</option>
             <option value="product_only">Product Only</option>
           </select>
 

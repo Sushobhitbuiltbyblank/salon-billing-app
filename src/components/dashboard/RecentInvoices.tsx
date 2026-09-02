@@ -25,7 +25,6 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
-  Scissors,
   ShoppingBag,
 } from "lucide-react";
 
@@ -118,14 +117,11 @@ export function RecentInvoices() {
   const todayTotalCollection = todaySettled.reduce((sum, i) => sum + (i.grand_total || 0), 0);
   const todayVoidCount = todaysInvoices.filter((i) => i.status === "void").length;
 
-  let todayServicesTotal = 0;
   let todayProductsTotal = 0;
   todaySettled.forEach((inv) => {
     (inv.items || []).forEach((item) => {
       if (item.item_type === "product") {
         todayProductsTotal += item.total_price || 0;
-      } else {
-        todayServicesTotal += item.total_price || 0;
       }
     });
   });
@@ -145,7 +141,7 @@ export function RecentInvoices() {
             </Badge>
           </div>
           <p className="text-xs text-zinc-400 mt-1">
-            Displaying today&apos;s salon transactions with separate service and retail product sales breakdown.
+            Displaying today&apos;s salon transactions with retail product sales tracking and billing log.
           </p>
         </div>
 
@@ -188,8 +184,8 @@ export function RecentInvoices() {
         </div>
       </div>
 
-      {/* TODAY SUMMARY STATS: 4-COLUMN CARDS WITH SEPARATE SERVICES & PRODUCTS SALE TOTALS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* TODAY SUMMARY STATS: 3-COLUMN CARDS WITH RETAIL PRODUCTS SALE TOTAL */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* CARD 1: INVOICE COUNT */}
         <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
           <div className="flex items-center justify-between">
@@ -202,21 +198,7 @@ export function RecentInvoices() {
           </div>
         </Card>
 
-        {/* CARD 2: SERVICES SALE AMOUNT */}
-        <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Services Sale</span>
-            <div className="h-6 w-6 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
-              <Scissors className="h-3.5 w-3.5" />
-            </div>
-          </div>
-          <div className="mt-2 text-2xl font-black text-indigo-400 font-mono">
-            {formatCurrency(todayServicesTotal, settings.currency_symbol)}
-          </div>
-          <div className="text-[10px] text-zinc-400 mt-1">Salon services & packages</div>
-        </Card>
-
-        {/* CARD 3: RETAIL PRODUCTS SALE AMOUNT */}
+        {/* CARD 2: RETAIL PRODUCTS SALE AMOUNT */}
         <Card className="p-3.5 bg-zinc-950/80 border-zinc-800">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Retail Products Sale</span>
@@ -230,7 +212,7 @@ export function RecentInvoices() {
           <div className="text-[10px] text-zinc-400 mt-1">Take-home retail sales</div>
         </Card>
 
-        {/* CARD 4: TODAY GROSS COLLECTION */}
+        {/* CARD 3: TODAY GROSS COLLECTION */}
         <Card className="p-3.5 bg-gradient-to-br from-emerald-950/40 via-zinc-950 to-zinc-900/90 border-emerald-500/30">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Today&apos;s Collection</span>
@@ -268,9 +250,7 @@ export function RecentInvoices() {
             className="h-9 px-3 text-xs bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-300 focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
           >
             <option value="all">All Sales (All Items)</option>
-            <option value="service">Service Sale</option>
             <option value="product">Product Sale</option>
-            <option value="service_only">Service Only</option>
             <option value="product_only">Product Only</option>
           </select>
 
