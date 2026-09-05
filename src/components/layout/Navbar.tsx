@@ -36,6 +36,7 @@ export function Navbar() {
     customers,
     currentUser,
     setIsAuthModalOpen,
+    setIsSpinWheelOpen,
     logout,
   } = useApp();
 
@@ -180,6 +181,16 @@ export function Navbar() {
 
         {/* RIGHT ACTIONS: LOGGED-IN USER PROFILE, CLOCK & MOBILE MENU TOGGLE */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* SPIN & WIN WHEEL BUTTON */}
+          <button
+            onClick={() => setIsSpinWheelOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-pink-500/20 to-purple-500/20 hover:from-amber-500/30 hover:via-pink-500/30 hover:to-purple-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold shadow-sm transition-all cursor-pointer group shrink-0"
+            title="Open Spin the Wheel Reward Game"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
+            <span className="hidden sm:inline">Spin & Win</span>
+          </button>
+
           {/* USER PROFILE CHIP (CLICK TO SWITCH PROFILE / LOGOUT) */}
           {currentUser ? (
             <button
@@ -241,6 +252,32 @@ export function Navbar() {
             <div className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
               Navigation Menu
             </div>
+
+            {/* PROMINENT MOBILE LUCKY WHEEL BANNER */}
+            <button
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                setIsSpinWheelOpen(true);
+              }}
+              className="w-full flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-purple-950/60 via-pink-950/40 to-amber-950/50 border border-amber-500/40 text-white font-bold text-sm cursor-pointer shadow-md mb-2"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300">
+                  <Sparkles className="h-5 w-5 animate-pulse" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-bold text-amber-300 flex items-center gap-1.5">
+                    <span>Lucky Wheel</span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/30">
+                      VIP
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-zinc-400">Play Lucky Wheel & Unlock Prizes</div>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-amber-400" />
+            </button>
+
             <div className="grid grid-cols-1 gap-1.5">
               {navItems.map((item) => {
                 const Icon = item.icon;

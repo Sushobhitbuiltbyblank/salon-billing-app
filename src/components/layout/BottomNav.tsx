@@ -12,10 +12,11 @@ import {
   Wallet,
   Package,
   Shield,
+  Sparkles,
 } from "lucide-react";
 
 export function BottomNav() {
-  const { activeTab, setActiveTab, draftItems, currentUser, setIsAuthModalOpen } = useApp();
+  const { activeTab, setActiveTab, draftItems, currentUser, setIsAuthModalOpen, setIsSpinWheelOpen } = useApp();
 
   const navItems: Array<{
     id: AppTab;
@@ -69,6 +70,20 @@ export function BottomNav() {
             </button>
           );
         })}
+
+        {/* LUCKY WHEEL MOBILE BUTTON */}
+        <button
+          onClick={() => setIsSpinWheelOpen(true)}
+          className="relative flex flex-col items-center justify-center py-1 px-2 sm:px-2.5 min-w-[50px] sm:min-w-[56px] rounded-xl text-amber-400 hover:text-amber-300 transition-all cursor-pointer shrink-0"
+          title="Spin the Wheel Rewards"
+        >
+          <div className="relative">
+            <Sparkles className="h-5 w-5 text-amber-400 animate-pulse drop-shadow-[0_0_8px_rgba(245,158,11,0.6)]" />
+          </div>
+          <span className="text-[10px] mt-0.5 tracking-tight font-bold text-amber-300">
+            Spin
+          </span>
+        </button>
 
         {/* MOBILE USER SWITCH BUTTON */}
         <button

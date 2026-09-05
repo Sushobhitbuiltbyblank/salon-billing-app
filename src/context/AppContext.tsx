@@ -112,6 +112,10 @@ interface AppContextType {
   whatsAppInvoice: Invoice | null;
   setWhatsAppInvoice: (invoice: Invoice | null) => void;
 
+  // SPIN THE WHEEL MODAL STATE
+  isSpinWheelOpen: boolean;
+  setIsSpinWheelOpen: (open: boolean) => void;
+
   // GLOBAL ACTIONS
   resetDemoData: () => void;
   refreshData: () => void;
@@ -123,6 +127,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<AppUser[]>(DEFAULT_USERS);
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(true);
+  const [isSpinWheelOpen, setIsSpinWheelOpen] = useState(false);
 
   const [settings, setSettings] = useState<SalonSettings>(DEFAULT_SETTINGS);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -1079,6 +1084,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPrintInvoice,
         whatsAppInvoice,
         setWhatsAppInvoice,
+        isSpinWheelOpen,
+        setIsSpinWheelOpen,
         resetDemoData,
         refreshData: loadAllData,
       }}
