@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Sparkles,
   Percent,
@@ -52,6 +52,7 @@ import {
   DEFAULT_PRIZES,
   SpinGameState,
   SpinClaimRecord,
+  PrizeType,
 } from "@/types/rewards";
 import {
   playTickSound,
@@ -69,9 +70,16 @@ interface SpinTheWheelProps {
 }
 
 export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
-  const { settings, catalog, saveCatalogItem, addDraftItem, draftItems } = useApp();
+  const {
+    settings,
+    catalog,
+    saveCatalogItem,
+    addDraftItem,
+    draftItems,
+    wheelInventory,
+    decrementWheelItemQuantity,
+  } = useApp();
 
-  const [prizes, setPrizes] = useState<RewardPrize[]>(() => getActivePrizes());
   const [gameState, setGameState] = useState<SpinGameState>("IDLE");
   const [currentRotation, setCurrentRotation] = useState<number>(0);
   const [winningPrize, setWinningPrize] = useState<RewardPrize | null>(null);
@@ -92,13 +100,36 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
   const animationFrameRef = useRef<number | null>(null);
   const lastTickAngleRef = useRef<number>(0);
 
+  // Map dedicated wheelInventory items to prize slices if configured
+  const prizes: RewardPrize[] = useMemo(() => {
+    if (wheelInventory && wheelInventory.length > 0) {
+      return wheelInventory.map((item) => ({
+        id: item.id,
+        label: item.title,
+        shortLabel: item.title.length > 18 ? item.title.slice(0, 16) + "..." : item.title,
+        type:
+          item.category === "free_service"
+            ? ("service" as PrizeType)
+            : item.category === "gift"
+            ? ("product_gift" as PrizeType)
+            : ("discount_percent" as PrizeType),
+        value: 0,
+        color: item.color || "#8b5cf6",
+        textColor: "#ffffff",
+        iconName: item.category === "free_service" ? "Scissors" : item.category === "gift" ? "Gift" : "Tag",
+        description: `${item.title} (${item.category.replace("_", " ")}) - Stock: ${item.quantity}`,
+        requiresInventoryDeduction: true,
+      }));
+    }
+    return DEFAULT_PRIZES;
+  }, [wheelInventory]);
+
   const numSlices = prizes.length;
   const sliceAngle = 360 / numSlices;
 
-  // Initialize mute state & load configured prizes
+  // Initialize mute state
   useEffect(() => {
     setIsMutedState(getSoundMuted());
-    setPrizes(getActivePrizes());
   }, []);
 
   const handleToggleMute = () => {
@@ -126,8 +157,19 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
     setIsClaimed(false);
     setStockDeductedMessage(null);
 
-    // Pick random prize index
-    const targetIndex = Math.floor(Math.random() * numSlices);
+    // Pick in-stock active prize index if available, otherwise random
+    const inStockIndices = wheelInventory && wheelInventory.length > 0
+      ? wheelInventory
+          .map((item, idx) => ({ idx, available: item.is_active && item.quantity > 0 }))
+          .filter((i) => i.available)
+          .map((i) => i.idx)
+      : [];
+
+    const targetIndex =
+      inStockIndices.length > 0
+        ? inStockIndices[Math.floor(Math.random() * inStockIndices.length)]
+        : Math.floor(Math.random() * numSlices);
+
     const selectedPrize = prizes[targetIndex];
     setWinningPrize(selectedPrize);
 
@@ -242,28 +284,12 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
 
     let stockMsg = "Reward successfully claimed!";
 
-    // If prize is a physical product / gift, decrement stock in Supabase catalog
-    if (winningPrize.requiresInventoryDeduction || winningPrize.type === "product_gift") {
-      // Find matching or relevant retail product in catalog
-      const matchedProduct = catalog.find(
-        (c) =>
-          c.type === "product" &&
-          (c.name.toLowerCase().includes("serum") ||
-            c.name.toLowerCase().includes("cream") ||
-            c.name.toLowerCase().includes("product") ||
-            (c.stock_qty !== undefined && c.stock_qty > 0))
-      );
-
-      if (matchedProduct) {
-        const updatedQty = Math.max(0, (matchedProduct.stock_qty ?? 10) - 1);
-        await saveCatalogItem({
-          ...matchedProduct,
-          stock_qty: updatedQty,
-        });
-        stockMsg = `✅ 1x "${matchedProduct.name}" claimed. Remaining Stock: ${updatedQty} (Synced to Supabase)`;
-      } else {
-        stockMsg = "✅ Reward claimed & recorded in salon database.";
-      }
+    // Automatically decrement quantity in wheel_inventory pool (Supabase + Local)
+    const updatedWheelItem = await decrementWheelItemQuantity(winningPrize.id);
+    if (updatedWheelItem) {
+      stockMsg = `✅ Redeemed "${winningPrize.label}". Remaining Pool Stock: ${updatedWheelItem.quantity} (Synced to Supabase wheel_inventory)`;
+    } else {
+      stockMsg = `✅ Redeemed "${winningPrize.label}" (Recorded in salon database)`;
     }
 
     setIsClaimed(true);

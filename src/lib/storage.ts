@@ -11,6 +11,7 @@ import {
   AttendanceRecord,
   AttendanceStatus,
 } from "@/types";
+import { WheelInventoryItem, DEFAULT_WHEEL_INVENTORY } from "@/types/rewards";
 import { generateUUID } from "./utils";
 import {
   deduplicateCustomerArray,
@@ -37,6 +38,7 @@ const KEYS = {
   DELETED_CATALOG_IDS: `${STORAGE_PREFIX}deleted_catalog_ids`,
   DELETED_INVOICES: `${STORAGE_PREFIX}deleted_invoices`,
   STAFF_STATUS_DATE: `${STORAGE_PREFIX}staff_status_date`,
+  WHEEL_INVENTORY: `${STORAGE_PREFIX}wheel_inventory`,
   INITIALIZED: `${STORAGE_PREFIX}full_catalog_v5`,
 };
 
@@ -1216,6 +1218,49 @@ export const Storage = {
   deleteExpense(expenseId: string): void {
     const list = this.getExpenses().filter((e) => e.id !== expenseId);
     this.saveExpenses(list);
+  },
+
+  // WHEEL INVENTORY STORAGE
+  getWheelInventory(): WheelInventoryItem[] {
+    if (typeof window === "undefined") return DEFAULT_WHEEL_INVENTORY;
+    try {
+      const raw = localStorage.getItem(KEYS.WHEEL_INVENTORY);
+      if (!raw) return DEFAULT_WHEEL_INVENTORY;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_WHEEL_INVENTORY;
+    } catch {
+      return DEFAULT_WHEEL_INVENTORY;
+    }
+  },
+  saveWheelInventory(items: WheelInventoryItem[]): void {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(KEYS.WHEEL_INVENTORY, JSON.stringify(items));
+    } catch (e) {
+      console.error(e);
+    }
+  },
+  saveWheelInventoryItem(item: WheelInventoryItem): void {
+    const list = this.getWheelInventory();
+    const idx = list.findIndex((i) => i.id === item.id);
+    if (idx >= 0) {
+      list[idx] = item;
+    } else {
+      list.push(item);
+    }
+    this.saveWheelInventory(list);
+  },
+  decrementWheelInventoryStock(itemId: string): WheelInventoryItem | null {
+    const list = this.getWheelInventory();
+    const item = list.find((i) => i.id === itemId);
+    if (!item) return null;
+    item.quantity = Math.max(0, item.quantity - 1);
+    this.saveWheelInventory(list);
+    return item;
+  },
+  deleteWheelInventoryItem(itemId: string): void {
+    const list = this.getWheelInventory().filter((i) => i.id !== itemId);
+    this.saveWheelInventory(list);
   },
 
   // WIPE / FRESH START

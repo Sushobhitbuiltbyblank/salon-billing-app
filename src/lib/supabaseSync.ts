@@ -13,6 +13,7 @@ import {
   SalonSettings,
   Staff,
 } from "@/types";
+import { WheelInventoryItem } from "@/types/rewards";
 
 export const isValidUUID = (str?: string | null): boolean =>
   Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
@@ -94,6 +95,7 @@ export const SupabaseSync = {
         invoicesRes,
         expensesRes,
         usersRes,
+        wheelInventoryRes,
       ] = await Promise.all([
         supabase.from("salon_settings").select("*").single(),
         supabase.from("staff").select("*").order("name").limit(500),
@@ -103,6 +105,7 @@ export const SupabaseSync = {
         supabase.from("invoices").select("*, invoice_items(*)").order("created_at", { ascending: false }).limit(5000),
         supabase.from("expenses").select("*").order("expense_date", { ascending: false }).limit(5000),
         supabase.from("app_users").select("*").order("role").limit(100),
+        supabase.from("wheel_inventory").select("*").order("created_at").limit(100),
       ]);
 
       return {
@@ -260,11 +263,15 @@ export const SupabaseSync = {
           if (!list.some((u) => u.id === "usr-admin-02")) {
             list.splice(1, 0, DEFAULT_USERS[1]);
           }
-          if (!list.some((u) => u.id === "usr-rec-01")) {
+          if (!list.some((u) => u.id === "usr-receptionist-01")) {
             list.push(DEFAULT_USERS[2]);
           }
           return list;
         })(),
+        wheelInventory:
+          wheelInventoryRes?.data && wheelInventoryRes.data.length > 0
+            ? (wheelInventoryRes.data as WheelInventoryItem[])
+            : Storage.getWheelInventory(),
       };
     } catch (err) {
       console.warn("Supabase fetch error, falling back to local storage:", err);
@@ -1035,7 +1042,81 @@ export const SupabaseSync = {
     }
   },
 
-  // 10. SUBSCRIBE TO REALTIME BROADCASTS
+  // 10. WHEEL INVENTORY SYNC
+  async loadWheelInventory(): Promise<WheelInventoryItem[]> {
+    if (!isSupabaseConfigured() || !supabase) return Storage.getWheelInventory();
+    try {
+      const { data, error } = await supabase.from("wheel_inventory").select("*").order("created_at");
+      if (error || !data || data.length === 0) {
+        return Storage.getWheelInventory();
+      }
+      Storage.saveWheelInventory(data);
+      return data;
+    } catch {
+      return Storage.getWheelInventory();
+    }
+  },
+
+  async saveWheelInventoryItem(item: WheelInventoryItem): Promise<WheelInventoryItem | null> {
+    Storage.saveWheelInventoryItem(item);
+    if (!isSupabaseConfigured() || !supabase) return item;
+    try {
+      const { data, error } = await supabase.from("wheel_inventory").upsert(item).select().single();
+      if (error) {
+        console.error("Supabase saveWheelInventoryItem error:", error);
+        return item;
+      }
+      return data;
+    } catch (err) {
+      console.error("Supabase saveWheelInventoryItem exception:", err);
+      return item;
+    }
+  },
+
+  async decrementWheelInventoryQuantity(itemId: string): Promise<WheelInventoryItem | null> {
+    const localUpdated = Storage.decrementWheelInventoryStock(itemId);
+    if (!isSupabaseConfigured() || !supabase) return localUpdated;
+    try {
+      const { data: current, error: fetchErr } = await supabase
+        .from("wheel_inventory")
+        .select("quantity")
+        .eq("id", itemId)
+        .single();
+      if (fetchErr || !current) {
+        if (localUpdated) {
+          await supabase.from("wheel_inventory").upsert(localUpdated);
+        }
+        return localUpdated;
+      }
+      const newQty = Math.max(0, current.quantity - 1);
+      const { data, error } = await supabase
+        .from("wheel_inventory")
+        .update({ quantity: newQty })
+        .eq("id", itemId)
+        .select()
+        .single();
+      if (!error && data) {
+        Storage.saveWheelInventoryItem(data);
+        return data;
+      }
+      return localUpdated;
+    } catch (err) {
+      console.error("Supabase decrementWheelInventoryQuantity error:", err);
+      return localUpdated;
+    }
+  },
+
+  async deleteWheelInventoryItem(itemId: string): Promise<void> {
+    Storage.deleteWheelInventoryItem(itemId);
+    if (!isSupabaseConfigured() || !supabase) return;
+    try {
+      await supabase.from("wheel_inventory").delete().eq("id", itemId);
+    } catch (err) {
+      console.error("Supabase deleteWheelInventoryItem error:", err);
+    }
+  },
+
+  // 11. SUBSCRIBE TO REALTIME BROADCASTS
   subscribeToRealtimeUpdates(onUpdate: () => void) {
     if (!isSupabaseConfigured() || !supabase) return () => {};
 
@@ -1049,6 +1130,7 @@ export const SupabaseSync = {
       .on("postgres_changes", { event: "*", schema: "public", table: "salon_settings" }, onUpdate)
       .on("postgres_changes", { event: "*", schema: "public", table: "app_users" }, onUpdate)
       .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, onUpdate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "wheel_inventory" }, onUpdate)
       .subscribe();
 
     return () => {

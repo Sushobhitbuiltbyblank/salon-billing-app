@@ -4,6 +4,73 @@ export type SpinGameState =
   | "WON_PENDING_VERIFICATION"
   | "VERIFIED_AND_REVEALED";
 
+export type WheelItemCategory =
+  | "gift"
+  | "offer"
+  | "discount_coupon"
+  | "free_service";
+
+export interface WheelInventoryItem {
+  id: string; // UUID
+  title: string;
+  category: WheelItemCategory;
+  quantity: number;
+  is_active: boolean;
+  color?: string;
+  created_at?: string;
+}
+
+export const DEFAULT_WHEEL_INVENTORY: WheelInventoryItem[] = [
+  {
+    id: "00000000-0000-0000-0000-000000000101",
+    title: "Win VIP Gift",
+    category: "gift",
+    quantity: 10,
+    is_active: true,
+    color: "#f43f5e",
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000102",
+    title: "Free Hair Spa",
+    category: "free_service",
+    quantity: 30,
+    is_active: true,
+    color: "#3b82f6",
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000103",
+    title: "20% Discount",
+    category: "discount_coupon",
+    quantity: 5,
+    is_active: true,
+    color: "#ec4899",
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000104",
+    title: "100 Rupee Off",
+    category: "offer",
+    quantity: 15,
+    is_active: true,
+    color: "#10b981",
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000105",
+    title: "Free De-Tan",
+    category: "free_service",
+    quantity: 10,
+    is_active: true,
+    color: "#8b5cf6",
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000106",
+    title: "40% Discount on Product Purchase of 1000",
+    category: "offer",
+    quantity: 10,
+    is_active: true,
+    color: "#f59e0b",
+  },
+];
+
 export type PrizeType =
   | "service"
   | "discount_percent"

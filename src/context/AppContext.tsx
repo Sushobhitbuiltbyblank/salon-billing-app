@@ -18,6 +18,7 @@ import {
   AttendanceRecord,
   AttendanceStatus,
 } from "@/types";
+import { WheelInventoryItem } from "@/types/rewards";
 import { Storage, initStorage, DEFAULT_SETTINGS, DEFAULT_USERS } from "@/lib/storage";
 import { SupabaseSync } from "@/lib/supabaseSync";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
@@ -112,9 +113,13 @@ interface AppContextType {
   whatsAppInvoice: Invoice | null;
   setWhatsAppInvoice: (invoice: Invoice | null) => void;
 
-  // SPIN THE WHEEL MODAL STATE
+  // SPIN THE WHEEL MODAL & INVENTORY STATE
   isSpinWheelOpen: boolean;
   setIsSpinWheelOpen: (open: boolean) => void;
+  wheelInventory: WheelInventoryItem[];
+  saveWheelInventoryItem: (item: WheelInventoryItem) => Promise<void>;
+  deleteWheelInventoryItem: (itemId: string) => Promise<void>;
+  decrementWheelItemQuantity: (itemId: string) => Promise<WheelInventoryItem | null>;
 
   // GLOBAL ACTIONS
   resetDemoData: () => void;
@@ -137,6 +142,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [wheelInventory, setWheelInventory] = useState<WheelInventoryItem[]>([]);
   
   const [activeTab, setActiveTab] = useState<AppTab>("pos");
 
@@ -224,6 +230,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setInvoices(Storage.getInvoices());
       setExpenses(Storage.getExpenses());
       setAttendance(Storage.getAttendance());
+      setWheelInventory(Storage.getWheelInventory());
       setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
       setIsOnline(navigator.onLine);
     } else {
@@ -319,6 +326,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (cloudData.users) {
           setUsers((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.users) ? cloudData.users : prev));
           Storage.saveUsers(cloudData.users);
+        }
+        if (cloudData.wheelInventory) {
+          setWheelInventory((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.wheelInventory) ? cloudData.wheelInventory : prev));
+          Storage.saveWheelInventory(cloudData.wheelInventory);
         }
       }
     }
@@ -1086,6 +1097,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setWhatsAppInvoice,
         isSpinWheelOpen,
         setIsSpinWheelOpen,
+        wheelInventory,
+        saveWheelInventoryItem: async (item: WheelInventoryItem) => {
+          Storage.saveWheelInventoryItem(item);
+          setWheelInventory(Storage.getWheelInventory());
+          if (isSupabaseConfigured()) {
+            await SupabaseSync.saveWheelInventoryItem(item);
+            const updated = await SupabaseSync.loadWheelInventory();
+            setWheelInventory(updated);
+          }
+        },
+        deleteWheelInventoryItem: async (itemId: string) => {
+          Storage.deleteWheelInventoryItem(itemId);
+          setWheelInventory(Storage.getWheelInventory());
+          if (isSupabaseConfigured()) {
+            await SupabaseSync.deleteWheelInventoryItem(itemId);
+            const updated = await SupabaseSync.loadWheelInventory();
+            setWheelInventory(updated);
+          }
+        },
+        decrementWheelItemQuantity: async (itemId: string) => {
+          const updated = await SupabaseSync.decrementWheelInventoryQuantity(itemId);
+          if (updated) {
+            setWheelInventory(Storage.getWheelInventory());
+          }
+          return updated;
+        },
         resetDemoData,
         refreshData: loadAllData,
       }}

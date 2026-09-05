@@ -152,6 +152,14 @@ export function AdminRewardsManagement() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <Link
+            href="/admin/wheel-inventory"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all cursor-pointer"
+          >
+            <Package className="h-3.5 w-3.5" />
+            <span>Manage 6 Pool Stocks</span>
+          </Link>
+
           <Button
             variant="outline"
             size="sm"
@@ -168,7 +176,7 @@ export function AdminRewardsManagement() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors"
           >
             <ExternalLink className="h-3.5 w-3.5" />
-            <span>Tablet Kiosk Mode</span>
+            <span>Tablet Kiosk</span>
           </Link>
         </div>
       </div>
