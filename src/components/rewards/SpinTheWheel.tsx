@@ -61,7 +61,7 @@ import {
   setSoundMuted,
   initAudioContext,
 } from "@/lib/audioEffects";
-import { generateClaimCode, saveClaimRecord } from "@/lib/rewardStorage";
+import { generateClaimCode, saveClaimRecord, getActivePrizes } from "@/lib/rewardStorage";
 
 interface SpinTheWheelProps {
   onClose?: () => void;
@@ -71,6 +71,7 @@ interface SpinTheWheelProps {
 export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
   const { settings, catalog, saveCatalogItem, addDraftItem, draftItems } = useApp();
 
+  const [prizes, setPrizes] = useState<RewardPrize[]>(() => getActivePrizes());
   const [gameState, setGameState] = useState<SpinGameState>("IDLE");
   const [currentRotation, setCurrentRotation] = useState<number>(0);
   const [winningPrize, setWinningPrize] = useState<RewardPrize | null>(null);
@@ -91,13 +92,13 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
   const animationFrameRef = useRef<number | null>(null);
   const lastTickAngleRef = useRef<number>(0);
 
-  const prizes: RewardPrize[] = DEFAULT_PRIZES;
   const numSlices = prizes.length;
   const sliceAngle = 360 / numSlices;
 
-  // Initialize mute state
+  // Initialize mute state & load configured prizes
   useEffect(() => {
     setIsMutedState(getSoundMuted());
+    setPrizes(getActivePrizes());
   }, []);
 
   const handleToggleMute = () => {

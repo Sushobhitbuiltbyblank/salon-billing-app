@@ -22,6 +22,7 @@ import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } fr
 import { CustomerModal } from "@/components/customer/CustomerModal";
 import { AdminAnalyticsDashboard } from "@/components/admin/AdminAnalyticsDashboard";
 import { AdminInvoiceManagement } from "@/components/admin/AdminInvoiceManagement";
+import { AdminRewardsManagement } from "@/components/admin/AdminRewardsManagement";
 import { formatCurrency, formatDate, generateUUID } from "@/lib/utils";
 import { unifyCustomerList, isCustomerInTimeframe, CustomerTimeframeFilter } from "@/lib/customerUtils";
 import {
@@ -104,7 +105,7 @@ export function AdminPortal() {
   } = useApp();
 
   const [activeAdminTab, setActiveAdminTab] = useState<
-    "analytics" | "invoices" | "customers" | "staff" | "catalog" | "categories" | "users" | "settings"
+    "analytics" | "invoices" | "customers" | "staff" | "catalog" | "categories" | "rewards" | "users" | "settings"
   >("analytics");
 
 
@@ -822,6 +823,7 @@ export function AdminPortal() {
           { id: "staff", label: "Staff & Commissions", icon: Users, count: staff.length },
           { id: "catalog", label: "Services & Products", icon: Package, count: catalog.length },
           { id: "categories", label: "Categories", icon: Layers, count: categories.length },
+          { id: "rewards", label: "Lucky Wheel Rewards", icon: Sparkles },
           ...(currentUser?.role === "admin"
             ? [
                 { id: "users", label: "Receptionists & PINs", icon: KeyRound, count: users.length },
@@ -2118,6 +2120,15 @@ export function AdminPortal() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB: LUCKY WHEEL OFFERS, INVENTORY & REWARDS MANAGEMENT
+          ========================================================================= */}
+      {activeAdminTab === "rewards" && (
+        <div className="animate-in fade-in duration-200">
+          <AdminRewardsManagement />
         </div>
       )}
 
