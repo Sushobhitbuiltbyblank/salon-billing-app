@@ -420,7 +420,22 @@ export const Storage = {
       const raw = localStorage.getItem(KEYS.USERS);
       if (!raw) return DEFAULT_USERS;
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_USERS;
+      if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_USERS;
+
+      // Deduplicate by ID and Email
+      const seenIds = new Set<string>();
+      const seenEmails = new Set<string>();
+      const uniqueList: AppUser[] = [];
+      for (const u of parsed) {
+        if (!u || typeof u !== "object" || !u.id) continue;
+        const cleanEmail = (u.email || "").toLowerCase().trim();
+        if (!seenIds.has(u.id) && (!cleanEmail || !seenEmails.has(cleanEmail))) {
+          seenIds.add(u.id);
+          if (cleanEmail) seenEmails.add(cleanEmail);
+          uniqueList.push(u);
+        }
+      }
+      return uniqueList.length > 0 ? uniqueList : DEFAULT_USERS;
     } catch {
       return DEFAULT_USERS;
     }

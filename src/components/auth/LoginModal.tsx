@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { AppUser } from "@/types";
 import { DEFAULT_USERS } from "@/lib/storage";
@@ -44,11 +44,26 @@ export function LoginModal() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Filter staff profiles (Sushobhit Jain, Prabhat Jain, Amit Sharma)
-  const staffUsers = (users || []).filter(
-    (u) => u && typeof u === "object" && typeof u.id === "string" && !u.id.startsWith("usr-visitor-")
-  );
-  const displayStaff = staffUsers.length > 0 ? staffUsers : DEFAULT_USERS;
+  // Filter and strictly deduplicate staff profiles (Sushobhit Jain, Prabhat Jain, Amit Sharma)
+  const displayStaff = useMemo(() => {
+    const list = (users || []).filter(
+      (u) => u && typeof u === "object" && typeof u.id === "string" && !u.id.startsWith("usr-visitor-")
+    );
+    const source = list.length > 0 ? list : DEFAULT_USERS;
+    const seenIds = new Set<string>();
+    const seenEmails = new Set<string>();
+    const uniqueStaff: AppUser[] = [];
+    for (const u of source) {
+      if (!u || !u.id) continue;
+      const cleanEmail = (u.email || "").toLowerCase().trim();
+      if (!seenIds.has(u.id) && (!cleanEmail || !seenEmails.has(cleanEmail))) {
+        seenIds.add(u.id);
+        if (cleanEmail) seenEmails.add(cleanEmail);
+        uniqueStaff.push(u);
+      }
+    }
+    return uniqueStaff;
+  }, [users]);
 
   useEffect(() => {
     if (!selectedUser && displayStaff.length > 0) {

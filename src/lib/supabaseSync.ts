@@ -257,16 +257,30 @@ export const SupabaseSync = {
           const remoteUsers = (usersRes.data || []) as AppUser[];
           const list = [...remoteUsers];
           // Ensure Sushobhit, Prabhat, and Amit always exist
-          if (!list.some((u) => u.id === "usr-admin-01")) {
+          if (!list.some((u) => u.id === "usr-admin-01" || (u.email && u.email.toLowerCase() === "sushobhit@belezia.com"))) {
             list.unshift(DEFAULT_USERS[0]);
           }
-          if (!list.some((u) => u.id === "usr-admin-02")) {
+          if (!list.some((u) => u.id === "usr-admin-02" || (u.email && u.email.toLowerCase() === "prabhat@belezia.com"))) {
             list.splice(1, 0, DEFAULT_USERS[1]);
           }
-          if (!list.some((u) => u.id === "usr-receptionist-01")) {
+          if (!list.some((u) => u.id === "usr-rec-01" || (u.email && u.email.toLowerCase() === "amit@belezia.com"))) {
             list.push(DEFAULT_USERS[2]);
           }
-          return list;
+
+          // Strict deduplication by ID and Email
+          const seenIds = new Set<string>();
+          const seenEmails = new Set<string>();
+          const uniqueList: AppUser[] = [];
+          for (const u of list) {
+            if (!u || typeof u !== "object" || !u.id) continue;
+            const cleanEmail = (u.email || "").toLowerCase().trim();
+            if (!seenIds.has(u.id) && (!cleanEmail || !seenEmails.has(cleanEmail))) {
+              seenIds.add(u.id);
+              if (cleanEmail) seenEmails.add(cleanEmail);
+              uniqueList.push(u);
+            }
+          }
+          return uniqueList;
         })(),
         wheelInventory:
           wheelInventoryRes?.data && wheelInventoryRes.data.length > 0
