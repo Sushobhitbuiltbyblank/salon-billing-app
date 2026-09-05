@@ -88,7 +88,7 @@ export function Navbar() {
     {
       id: "history",
       label: "Invoices Log",
-      description: "Recent Bills, Void & Receipts",
+      description: "Recent Bills & Receipts",
       icon: History,
     },
     {

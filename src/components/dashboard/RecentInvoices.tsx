@@ -12,7 +12,6 @@ import {
   Search,
   Printer,
   MessageCircle,
-  Ban,
   User,
   Phone,
   Receipt,
@@ -31,7 +30,6 @@ import {
 export function RecentInvoices() {
   const {
     invoices,
-    voidInvoice,
     setPrintInvoice,
     setEditingInvoice,
     setWhatsAppInvoice,
@@ -315,7 +313,7 @@ export function RecentInvoices() {
                         isVoid ? "opacity-40 line-through bg-red-950/10" : ""
                       }`}
                     >
-                      {/* ACTIONS ON THE LEFT: PRINT, EDIT, WHATSAPP, VOID */}
+                      {/* ACTIONS ON THE LEFT: PRINT, EDIT, WHATSAPP */}
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           {/* PRINT TRIGGER */}
@@ -347,21 +345,6 @@ export function RecentInvoices() {
                           >
                             <MessageCircle className="h-3.5 w-3.5 text-emerald-400 hover:text-white" />
                           </button>
-
-                          {/* VOID BUTTON */}
-                          {!isVoid && (
-                            <button
-                              onClick={() => {
-                                if (confirm(`Void invoice #${inv.invoice_number}? This cannot be undone.`)) {
-                                  voidInvoice(inv.id);
-                                }
-                              }}
-                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-amber-600 text-zinc-400 hover:text-white transition-all cursor-pointer shadow-sm"
-                              title="Void Invoice"
-                            >
-                              <Ban className="h-3.5 w-3.5" />
-                            </button>
-                          )}
                         </div>
                       </td>
 

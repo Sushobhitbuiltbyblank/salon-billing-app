@@ -520,7 +520,7 @@ export function EditInvoiceModal() {
             >
               <option value="paid">Paid</option>
               <option value="pending">Pending</option>
-              <option value="void">Void</option>
+              {status === "void" && <option value="void" disabled>Void</option>}
             </select>
           </div>
         </div>

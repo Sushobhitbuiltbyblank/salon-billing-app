@@ -13,7 +13,6 @@ import {
   Search,
   Printer,
   MessageCircle,
-  Ban,
   Trash2,
   AlertTriangle,
   FileEdit,
@@ -34,7 +33,6 @@ import {
 export function AdminInvoiceManagement() {
   const {
     invoices,
-    voidInvoice,
     deleteInvoice,
     setPrintInvoice,
     setEditingInvoice,
@@ -505,7 +503,7 @@ export function AdminInvoiceManagement() {
                         isVoid ? "opacity-45 line-through bg-zinc-950/40" : ""
                       }`}
                     >
-                      {/* ADMIN ACTIONS ON THE LEFT: PRINT, EDIT, WHATSAPP, VOID, DELETE */}
+                      {/* ADMIN ACTIONS ON THE LEFT: PRINT, EDIT, WHATSAPP, DELETE */}
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           {/* PRINT */}
@@ -537,21 +535,6 @@ export function AdminInvoiceManagement() {
                           >
                             <MessageCircle className="h-3.5 w-3.5 text-emerald-400 hover:text-white" />
                           </button>
-
-                          {/* VOID BUTTON */}
-                          {!isVoid && (
-                            <button
-                              onClick={() => {
-                                if (confirm(`Void invoice #${inv.invoice_number}? This cannot be undone.`)) {
-                                  voidInvoice(inv.id);
-                                }
-                              }}
-                              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-amber-600 text-zinc-400 hover:text-white transition-all cursor-pointer shadow-sm"
-                              title="Void Invoice"
-                            >
-                              <Ban className="h-3.5 w-3.5" />
-                            </button>
-                          )}
 
                           {/* PERMANENT DELETE (ADMIN ONLY) */}
                           {isAdmin && (
