@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
+import { SalesBreakdownView } from "./SalesBreakdownView";
 
 export function SalesOverview() {
   const { invoices, expenses, settings, staff, catalog, setActiveTab } = useApp();
@@ -190,6 +191,9 @@ export function SalesOverview() {
           </div>
         </Card>
       </div>
+
+      {/* PERIODIC SALES INTELLIGENCE: DAY-WISE (WEEK & MONTH) AND MONTH-WISE (YEAR) BREAKDOWN */}
+      <SalesBreakdownView />
 
       {/* SECOND ROW: PAYMENT BREAKDOWN & TOP TREATMENTS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
