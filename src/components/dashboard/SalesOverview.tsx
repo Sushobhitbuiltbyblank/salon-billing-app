@@ -192,10 +192,7 @@ export function SalesOverview() {
         </Card>
       </div>
 
-      {/* PERIODIC SALES INTELLIGENCE: DAY-WISE (WEEK & MONTH) AND MONTH-WISE (YEAR) BREAKDOWN */}
-      <SalesBreakdownView />
-
-      {/* SECOND ROW: PAYMENT BREAKDOWN & TOP TREATMENTS */}
+      {/* SECOND ROW: PAYMENT BREAKDOWN & TOP TREATMENTS (BELOW NET PROFIT) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* PAYMENT CHANNELS DISTRIBUTION */}
         <Card>
@@ -287,6 +284,9 @@ export function SalesOverview() {
           </div>
         </Card>
       </div>
+
+      {/* PERIODIC SALES INTELLIGENCE: DAY-WISE (WEEK & MONTH) AND MONTH-WISE (YEAR) BREAKDOWN */}
+      <SalesBreakdownView />
     </div>
   );
 }
