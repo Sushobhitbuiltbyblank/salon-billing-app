@@ -85,8 +85,6 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
       }
       if ((!matched.name || isAnonymousCustomerName(matched.name)) && cust.name && !isAnonymousCustomerName(cust.name)) {
         matched.name = cust.name;
-      } else if (cust.name && cust.name.length > (matched.name || "").length && !isAnonymousCustomerName(cust.name)) {
-        matched.name = cust.name;
       }
 
       // Preserve specific gender and do not let older duplicate entries overwrite
@@ -190,11 +188,11 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
     }
 
     if (matched) {
-      // Augment and update existing customer details from invoice
-      if (cleanPhone && cleanPhone.length >= 7) {
+      // Invoices augment missing fields on existing CRM profiles
+      if ((!matched.phone || matched.phone.length < 7) && cleanPhone) {
         matched.phone = cleanPhone.length === 10 ? cleanPhone : (inv.customer_phone || matched.phone);
       }
-      if (rawName && !isAnon) {
+      if ((!matched.name || isAnonymousCustomerName(matched.name)) && rawName && !isAnon) {
         matched.name = rawName;
       }
       if (!matched.email && inv.customer_email) {
@@ -203,6 +201,15 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
       if (inv.created_at) {
         if (!matched.last_visit || new Date(inv.created_at) > new Date(matched.last_visit)) {
           matched.last_visit = inv.created_at;
+        }
+      }
+      // If invoice was edited directly with customer_id link, reflect updated phone/name
+      if (inv.customer_id && matched.id && inv.customer_id === matched.id) {
+        if (cleanPhone && cleanPhone.length >= 7) {
+          matched.phone = cleanPhone.length === 10 ? cleanPhone : (inv.customer_phone || matched.phone);
+        }
+        if (rawName && !isAnon) {
+          matched.name = rawName;
         }
       }
     }

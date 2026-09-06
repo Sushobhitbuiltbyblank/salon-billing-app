@@ -242,4 +242,76 @@ describe("Invoice Customer Detail Editing & Client Reconciliation", () => {
     expect(crmDirectory[0].total_visits).toBe(1);
     expect(crmDirectory[0].total_spent).toBe(500);
   });
+
+  it("updates client details directly from Client CRM, propagates changes to linked invoices, and prevents reverting", () => {
+    localStorage.clear();
+
+    const customer: Customer = {
+      id: "cust-crm-edit-1",
+      name: "Swati ji",
+      phone: "8118298469",
+      gender: "female",
+      email: "swati@example.com",
+      birthday: "1995-05-15",
+      notes: "VIP Client",
+      total_visits: 1,
+      total_spent: 400,
+    };
+    Storage.saveCustomer(customer);
+
+    const invoice: Invoice = {
+      id: "inv-swati-1",
+      invoice_number: "BZ-20260906-5532",
+      customer_id: "cust-crm-edit-1",
+      customer_name: "Swati ji",
+      customer_phone: "8118298469",
+      customer_gender: "female",
+      subtotal: 400,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 400,
+      payment_mode: "upi",
+      status: "paid",
+      created_at: "2026-09-06T06:44:37.198Z",
+      items: [],
+    };
+    Storage.createInvoice(invoice);
+
+    // User edits customer in CRM: changes name to shorter name "Swati", changes phone to "8118298469", clears email
+    const editedInCrm: Customer = {
+      id: "cust-crm-edit-1",
+      name: "Swati",
+      phone: "8118298469",
+      gender: "female",
+      email: "", // user cleared email
+      birthday: "1995-05-15",
+      notes: "Preferred stylist: Priya",
+      total_visits: 1,
+      total_spent: 400,
+    };
+    const saved = Storage.saveCustomer(editedInCrm);
+
+    expect(saved.name).toBe("Swati");
+    expect(saved.email).toBeUndefined(); // email was cleared
+    expect(saved.notes).toBe("Preferred stylist: Priya");
+
+    // Verify linked invoice was also updated
+    const updatedInvoices = Storage.getInvoices();
+    const linkedInv = updatedInvoices.find((inv) => inv.id === "inv-swati-1");
+    expect(linkedInv).toBeDefined();
+    expect(linkedInv!.customer_name).toBe("Swati");
+    expect(linkedInv!.customer_phone).toBe("8118298469");
+
+    // Verify unifyCustomerList does not revert the CRM edit to the old invoice name
+    const unified = unifyCustomerList(Storage.getCustomers(), Storage.getInvoices());
+    expect(unified.length).toBe(1);
+    expect(unified[0].name).toBe("Swati");
+    expect(unified[0].email).toBeUndefined();
+    expect(unified[0].notes).toBe("Preferred stylist: Priya");
+    expect(unified[0].total_visits).toBe(1);
+    expect(unified[0].total_spent).toBe(400);
+  });
 });

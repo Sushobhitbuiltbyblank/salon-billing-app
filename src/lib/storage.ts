@@ -818,17 +818,20 @@ export const Storage = {
       return customer;
     }
 
+    const isSpecialMulti = cleanPhone === "9250755655";
     const list = this.getCustomers();
-    const otherCustomers = list.filter((c) => {
-      if (customer.id && c.id && c.id === customer.id) return false;
-      if (!customer.id && cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone && normalizeCustomerName(c.name) === normalizeCustomerName(customer.name)) return false;
-      return true;
-    });
 
     const existing = list.find((c) => {
       if (customer.id && c.id && c.id === customer.id) return true;
-      if (!customer.id && cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone && normalizeCustomerName(c.name) === normalizeCustomerName(customer.name)) return true;
+      if (!isSpecialMulti && cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone) return true;
       return false;
+    });
+
+    const otherCustomers = list.filter((c) => {
+      if (customer.id && c.id && c.id === customer.id) return false;
+      if (existing?.id && c.id && c.id === existing.id) return false;
+      if (!isSpecialMulti && cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone) return false;
+      return true;
     });
 
     const merged: Customer = {
@@ -846,10 +849,10 @@ export const Storage = {
           : existing?.gender && existing.gender !== "unspecified"
           ? existing.gender
           : "female",
-      email: customer.email !== undefined ? customer.email : existing?.email,
-      birthday: customer.birthday !== undefined ? customer.birthday : existing?.birthday,
-      anniversary: customer.anniversary !== undefined ? customer.anniversary : existing?.anniversary,
-      notes: customer.notes !== undefined ? customer.notes : existing?.notes,
+      email: customer.email !== undefined ? (customer.email.trim() || undefined) : existing?.email,
+      birthday: customer.birthday !== undefined ? (customer.birthday.trim() || undefined) : existing?.birthday,
+      anniversary: customer.anniversary !== undefined ? (customer.anniversary.trim() || undefined) : existing?.anniversary,
+      notes: customer.notes !== undefined ? (customer.notes.trim() || undefined) : existing?.notes,
       total_visits: customer.total_visits !== undefined ? customer.total_visits : (existing?.total_visits || 0),
       total_spent: customer.total_spent !== undefined ? customer.total_spent : (existing?.total_spent || 0),
       last_visit: customer.last_visit || existing?.last_visit,
@@ -859,6 +862,36 @@ export const Storage = {
 
     otherCustomers.unshift(merged);
     this.saveCustomers(otherCustomers);
+
+    // Keep all linked invoices in local storage synchronized with updated customer details
+    const localInvoices = this.getInvoices();
+    let invoicesModified = false;
+    const oldPhone = existing ? normalizePhoneNumber(existing.phone) : "";
+
+    localInvoices.forEach((inv) => {
+      const isLinkedById = inv.customer_id && inv.customer_id === merged.id;
+      const isLinkedByOldPhone = oldPhone && oldPhone.length >= 7 && normalizePhoneNumber(inv.customer_phone) === oldPhone;
+      const isLinkedByNewPhone = cleanPhone.length >= 7 && normalizePhoneNumber(inv.customer_phone) === cleanPhone;
+
+      if (isLinkedById || isLinkedByOldPhone || isLinkedByNewPhone) {
+        inv.customer_id = merged.id;
+        inv.customer_name = merged.name;
+        inv.customer_phone = merged.phone;
+        if (merged.gender && merged.gender !== "unspecified") {
+          inv.customer_gender = merged.gender;
+        }
+        if (merged.email !== undefined) {
+          inv.customer_email = merged.email;
+        }
+        this.archiveInvoice(inv);
+        invoicesModified = true;
+      }
+    });
+
+    if (invoicesModified) {
+      this.saveInvoices(localInvoices);
+    }
+
     return merged;
   },
   deleteCustomer(id: string): void {

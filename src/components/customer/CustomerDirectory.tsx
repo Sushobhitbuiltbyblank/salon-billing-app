@@ -1123,6 +1123,7 @@ export function CustomerDirectory() {
         customerToEdit={editingCustomer}
         onSaved={() => {
           setEditingCustomer(null);
+          refreshData?.();
         }}
       />
 

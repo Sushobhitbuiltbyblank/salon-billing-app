@@ -997,6 +997,8 @@ export const SupabaseSync = {
         notes: customer.notes?.trim() || null,
       };
 
+      let savedCust: any = null;
+
       if (customer.id) {
         const { data: updated, error: updateError } = await supabase
           .from("customers")
@@ -1005,11 +1007,11 @@ export const SupabaseSync = {
           .select();
 
         if (!updateError && updated && updated.length > 0) {
-          return updated[0];
+          savedCust = updated[0];
         }
 
         // If duplicate phone error (23505), another record in Supabase already has this phone!
-        if (updateError && (updateError.code === "23505" || updateError.message?.includes("customers_phone_key"))) {
+        if (!savedCust && updateError && (updateError.code === "23505" || updateError.message?.includes("customers_phone_key"))) {
           const { data: existingByPhone } = await supabase
             .from("customers")
             .select("*")
@@ -1023,26 +1025,56 @@ export const SupabaseSync = {
               .eq("id", existingByPhone.id)
               .select();
 
-            if (customer.id !== existingByPhone.id) {
-              await supabase.from("customers").delete().eq("id", customer.id);
-            }
-
-            return Array.isArray(mergedCust) && mergedCust.length > 0 ? mergedCust[0] : existingByPhone;
+            savedCust = Array.isArray(mergedCust) && mergedCust.length > 0 ? mergedCust[0] : existingByPhone;
           }
         }
       }
 
-      const { data, error } = await supabase
-        .from("customers")
-        .upsert({ ...(customer.id ? { id: customer.id } : {}), ...payload }, { onConflict: "phone" })
-        .select();
+      if (!savedCust) {
+        // Check if existing record exists by phone before attempting insert (prevents foreign key 23503 error on upsert)
+        const { data: existingByPhone } = await supabase
+          .from("customers")
+          .select("*")
+          .eq("phone", standardPhone)
+          .maybeSingle();
 
-      if (error) {
-        console.error("Supabase saveCustomer error:", error);
-        return null;
+        if (existingByPhone) {
+          const { data: updatedByPhone } = await supabase
+            .from("customers")
+            .update(payload)
+            .eq("id", existingByPhone.id)
+            .select();
+
+          savedCust = Array.isArray(updatedByPhone) && updatedByPhone.length > 0 ? updatedByPhone[0] : existingByPhone;
+        } else {
+          const insertId = customer.id && isValidUUID(customer.id) ? customer.id : undefined;
+          const { data, error } = await supabase
+            .from("customers")
+            .upsert({ ...(insertId ? { id: insertId } : {}), ...payload }, { onConflict: "phone" })
+            .select();
+
+          if (error) {
+            console.error("Supabase saveCustomer error:", error);
+            return null;
+          }
+          savedCust = Array.isArray(data) ? data[0] : data;
+        }
       }
 
-      const savedCust = Array.isArray(data) ? data[0] : data;
+      // Synchronize all invoices in Supabase linked to this customer
+      const finalId = savedCust?.id || customer.id;
+      if (finalId) {
+        await supabase
+          .from("invoices")
+          .update({
+            customer_name: payload.name,
+            customer_phone: payload.phone,
+            customer_email: payload.email || "",
+            customer_gender: payload.gender,
+          })
+          .eq("customer_id", finalId);
+      }
+
       return savedCust || null;
     } catch (err) {
       console.error("Supabase saveCustomer exception:", err);

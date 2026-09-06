@@ -721,6 +721,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const saveCustomer = async (cust: Customer): Promise<Customer> => {
     const saved = Storage.saveCustomer(cust);
     setCustomers(Storage.getCustomers());
+    setInvoices(Storage.getInvoices());
     if (isSupabaseConfigured()) {
       try {
         const remoteCust = await SupabaseSync.saveCustomer(saved);
@@ -752,6 +753,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
           Storage.saveCustomers(dedupedFresh);
           setCustomers(dedupedFresh);
+          setInvoices(Storage.getInvoices());
         }
       } catch (err) {
         console.error("Supabase sync customer error:", err);
