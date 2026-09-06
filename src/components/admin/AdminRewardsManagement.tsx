@@ -43,13 +43,14 @@ import {
   Eye,
 } from "lucide-react";
 import Link from "next/link";
+import { WheelInventoryManager } from "./WheelInventoryManager";
 
 export function AdminRewardsManagement() {
-  const { catalog, saveCatalogItem, settings, updateSettings, setIsSpinWheelOpen } = useApp();
+  const { catalog, saveCatalogItem, settings, updateSettings, setIsSpinWheelOpen, wheelInventory } = useApp();
 
   const [prizes, setPrizes] = useState<RewardPrize[]>(() => getActivePrizes());
   const [claimLogs, setClaimLogs] = useState<SpinClaimRecord[]>(() => getClaimRecords());
-  const [activeSubTab, setActiveSubTab] = useState<"prizes" | "inventory" | "claims" | "gate">("prizes");
+  const [activeSubTab, setActiveSubTab] = useState<"pool" | "prizes" | "inventory" | "claims" | "gate">("pool");
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [searchLog, setSearchLog] = useState("");
 
@@ -152,13 +153,22 @@ export function AdminRewardsManagement() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <Link
-            href="/admin/wheel-inventory"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all cursor-pointer"
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("pool")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeSubTab === "pool"
+                ? "bg-purple-600 text-white shadow-md shadow-purple-600/40 ring-1 ring-purple-400 font-extrabold"
+                : "bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30"
+            }`}
+            title="Manage Lucky Wheel Pool Stocks"
           >
-            <Package className="h-3.5 w-3.5" />
+            <Layers className="h-3.5 w-3.5 text-amber-400" />
             <span>Manage 6 Pool Stocks</span>
-          </Link>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-950/60 text-purple-200 border border-purple-500/40 font-bold">
+              {wheelInventory.length}
+            </span>
+          </button>
 
           <Button
             variant="outline"
@@ -178,11 +188,35 @@ export function AdminRewardsManagement() {
             <ExternalLink className="h-3.5 w-3.5" />
             <span>Tablet Kiosk</span>
           </Link>
+
+          <Link
+            href="/admin/wheel-inventory"
+            target="_blank"
+            className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            title="Open Pool Stocks in Full Screen / Standalone Tab"
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-zinc-400" />
+          </Link>
         </div>
       </div>
 
       {/* SUB-TABS NAVIGATION */}
       <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-2xl border border-zinc-800/80 overflow-x-auto no-scrollbar">
+        <button
+          onClick={() => setActiveSubTab("pool")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+            activeSubTab === "pool"
+              ? "bg-purple-600 text-white shadow-md shadow-purple-600/30 font-black"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+          }`}
+        >
+          <Layers className="h-4 w-4 text-amber-400" />
+          <span>Manage Pool Stocks (6)</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-amber-300 font-bold border border-zinc-700">
+            {wheelInventory.length}
+          </span>
+        </button>
+
         <button
           onClick={() => setActiveSubTab("prizes")}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
@@ -247,10 +281,19 @@ export function AdminRewardsManagement() {
       )}
 
       {/* ========================================================================= */}
+      {/* 0. LUCKY WHEEL POOL STOCKS INVENTORY */}
+      {/* ========================================================================= */}
+      {activeSubTab === "pool" && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <WheelInventoryManager />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* 1. OFFERS & PRIZES SLICES CONFIGURATION */}
       {/* ========================================================================= */}
       {activeSubTab === "prizes" && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-in fade-in duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800">
             <div>
               <h3 className="text-sm font-bold text-white">Wheel Slices & Reward Offers</h3>
