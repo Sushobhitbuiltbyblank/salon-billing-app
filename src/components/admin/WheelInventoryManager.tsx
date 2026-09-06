@@ -670,113 +670,158 @@ export function WheelInventoryManager({ standalone = false }: WheelInventoryMana
       </div>
 
       {/* ADD / EDIT MODAL */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-md animate-in fade-in">
-          <div className="relative w-full max-w-md rounded-3xl bg-zinc-950 border border-zinc-800 shadow-2xl p-6 overflow-hidden">
-            <DialogHeader className="mb-4">
-              <DialogTitle className="text-base font-extrabold text-white flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-amber-400" />
-                <span>{editingItem ? "Edit Wheel Reward" : "Add New Wheel Reward"}</span>
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen} maxWidth="md">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div
+              className="h-10 w-10 rounded-xl flex items-center justify-center text-white text-base font-bold shadow-md shrink-0 border border-white/10"
+              style={{ backgroundColor: modalForm.color || "#8b5cf6" }}
+            >
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="text-base font-bold text-white">
+                {editingItem ? "Edit Wheel Reward" : "Add New Wheel Reward"}
               </DialogTitle>
               <DialogDescription className="text-xs text-zinc-400">
-                Define the reward title, category, initial stock pool, and slice color.
+                Configure reward slice details, stock pool units, and wheel slice color.
               </DialogDescription>
-            </DialogHeader>
-
-            <form onSubmit={handleSaveModal} className="space-y-4">
-              <div>
-                <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">
-                  Item Name / Title
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Free Hair Spa, 20% Discount"
-                  value={modalForm.title}
-                  onChange={(e) => setModalForm({ ...modalForm, title: e.target.value })}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">
-                    Category Type
-                  </label>
-                  <select
-                    value={modalForm.category}
-                    onChange={(e) => setModalForm({ ...modalForm, category: e.target.value as WheelItemCategory })}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-purple-500"
-                  >
-                    <option value="gift">Gifts (gift)</option>
-                    <option value="offer">Offers (offer)</option>
-                    <option value="discount_coupon">Discount Coupons (discount_coupon)</option>
-                    <option value="free_service">Free Service Coupons (free_service)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">
-                    Stock Quantity
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={modalForm.quantity}
-                    onChange={(e) => setModalForm({ ...modalForm, quantity: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-1">
-                    Slice Color
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={modalForm.color}
-                      onChange={(e) => setModalForm({ ...modalForm, color: e.target.value })}
-                      className="h-8 w-12 rounded bg-zinc-900 border border-zinc-800 cursor-pointer p-0.5"
-                    />
-                    <span className="text-xs font-mono text-zinc-400">{modalForm.color}</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col justify-end">
-                  <label className="flex items-center gap-2 p-2 rounded-xl bg-zinc-900 border border-zinc-800 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={modalForm.is_active}
-                      onChange={(e) => setModalForm({ ...modalForm, is_active: e.target.checked })}
-                      className="rounded bg-zinc-950 border-zinc-700 text-purple-600 focus:ring-0"
-                    />
-                    <span className="text-xs font-bold text-white">Active on Wheel</span>
-                  </label>
-                </div>
-              </div>
-
-              <DialogFooter className="mt-6 flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsModalOpen(false)}
-                  className="text-xs border-zinc-800 text-zinc-400"
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" variant="accent" size="sm" className="gap-1 text-xs font-bold">
-                  <Save className="h-3.5 w-3.5" />
-                  <span>{editingItem ? "Update Reward" : "Save Reward"}</span>
-                </Button>
-              </DialogFooter>
-            </form>
+            </div>
           </div>
-        </div>
+        </DialogHeader>
+
+        <form onSubmit={handleSaveModal} className="space-y-4 pt-2">
+          {/* ITEM TITLE */}
+          <div>
+            <label className="text-[11px] uppercase font-bold text-zinc-300 block mb-1.5 tracking-wider">
+              Reward Title / Slogan <span className="text-rose-400">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Free Hair Spa, 20% Discount, Win VIP Gift"
+              value={modalForm.title}
+              onChange={(e) => setModalForm({ ...modalForm, title: e.target.value })}
+              className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 font-medium placeholder:text-zinc-600"
+            />
+          </div>
+
+          {/* CATEGORY & QUANTITY */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label className="text-[11px] uppercase font-bold text-zinc-300 block mb-1.5 tracking-wider">
+                Category Type
+              </label>
+              <select
+                value={modalForm.category}
+                onChange={(e) => setModalForm({ ...modalForm, category: e.target.value as WheelItemCategory })}
+                className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-purple-500 font-medium"
+              >
+                <option value="gift">🎁 Gifts (gift)</option>
+                <option value="offer">🏷️ Offers (offer)</option>
+                <option value="discount_coupon">🎟️ Discount Coupons (discount_coupon)</option>
+                <option value="free_service">✂️ Free Service Coupons (free_service)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[11px] uppercase font-bold text-zinc-300 block mb-1.5 tracking-wider">
+                Stock Quantity in Pool
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalForm((prev) => ({ ...prev, quantity: Math.max(0, prev.quantity - 1) }))}
+                  className="h-10 w-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center font-bold text-sm shrink-0 transition-colors"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={modalForm.quantity}
+                  onChange={(e) => setModalForm({ ...modalForm, quantity: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                  className="w-full h-10 bg-zinc-950 border border-zinc-700/80 rounded-xl px-3 text-center text-sm text-white font-mono font-bold focus:outline-none focus:border-purple-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setModalForm((prev) => ({ ...prev, quantity: prev.quantity + 1 }))}
+                  className="h-10 w-10 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 flex items-center justify-center font-bold text-sm shrink-0 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* SLICE COLOR & ACTIVE TOGGLE */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label className="text-[11px] uppercase font-bold text-zinc-300 block mb-1.5 tracking-wider">
+                Slice Color Theme
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={modalForm.color}
+                  onChange={(e) => setModalForm({ ...modalForm, color: e.target.value })}
+                  className="h-10 w-14 rounded-xl bg-zinc-950 border border-zinc-700/80 cursor-pointer p-1"
+                />
+                <span className="text-xs font-mono text-zinc-300 px-2.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800">
+                  {modalForm.color}
+                </span>
+
+                {/* Color swatches */}
+                <div className="flex items-center gap-1">
+                  {["#f43f5e", "#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ec4899"].map((hex) => (
+                    <button
+                      key={hex}
+                      type="button"
+                      onClick={() => setModalForm({ ...modalForm, color: hex })}
+                      className="h-6 w-6 rounded-md transition-transform hover:scale-110 border border-white/20"
+                      style={{ backgroundColor: hex }}
+                      title={hex}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col justify-end">
+              <label className="flex items-center gap-3 p-3 rounded-xl bg-zinc-950 border border-zinc-800 cursor-pointer hover:border-zinc-700 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={modalForm.is_active}
+                  onChange={(e) => setModalForm({ ...modalForm, is_active: e.target.checked })}
+                  className="h-4 w-4 rounded bg-zinc-900 border-zinc-700 text-purple-600 focus:ring-0 cursor-pointer"
+                />
+                <div>
+                  <span className="text-xs font-bold text-white block">Active on Lucky Wheel</span>
+                  <span className="text-[10px] text-zinc-500">
+                    {modalForm.is_active ? "Customers can win this reward" : "Temporarily paused / hidden"}
+                  </span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-6 flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsModalOpen(false)}
+              className="text-xs border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="accent" size="sm" className="gap-1.5 text-xs font-bold shadow-md shadow-purple-600/30">
+              <Save className="h-3.5 w-3.5" />
+              <span>{editingItem ? "Update Reward" : "Save Reward"}</span>
+            </Button>
+          </DialogFooter>
+        </form>
       </Dialog>
     </div>
   );

@@ -118,7 +118,7 @@ export function AdminRewardsManagement() {
           }`}
         >
           <Layers className="h-4 w-4 text-amber-400" />
-          <span>Manage Pool Stocks ({wheelInventory?.length || 6})</span>
+          <span>Manage Pool Stocks</span>
           <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-amber-300 font-bold border border-zinc-700">
             {wheelInventory?.length || 6}
           </span>

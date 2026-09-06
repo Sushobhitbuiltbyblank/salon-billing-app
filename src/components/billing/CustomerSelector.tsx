@@ -15,6 +15,8 @@ import {
   X,
   CheckCircle2,
   AlertTriangle,
+  Search,
+  UserPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, generateUUID } from "@/lib/utils";
@@ -31,10 +33,103 @@ export function CustomerSelector() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isAddingDetails, setIsAddingDetails] = useState(false);
 
+  // SEARCH CLIENT STATE
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   // UNIFY REGISTERED CUSTOMERS + INVOICE CUSTOMER RECORDS
   const allAvailableCustomers = useMemo(() => {
     return unifyCustomerList(customers, invoices);
   }, [customers, invoices]);
+
+  // CLOSE DROPDOWN WHEN CLICKING OUTSIDE
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // SEARCH RESULTS MATCHING NAME OR PHONE NUMBER
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+
+    const digitsOnly = q.replace(/\D/g, "");
+
+    return allAvailableCustomers
+      .filter((c: Customer) => {
+        if (!c) return false;
+        // Ignore anonymous "Walk-in Guest" from results unless explicitly searched
+        const isAnon = isAnonymousCustomerName(c.name || "");
+        if (isAnon && !q.includes("walk")) return false;
+
+        // Match Name
+        const nameMatch = c.name && c.name.toLowerCase().includes(q);
+
+        // Match Phone (exact, formatted, or raw digits)
+        const cleanP = normalizePhoneNumber(c.phone);
+        const rawPhone = (c.phone || "").replace(/\D/g, "");
+        const phoneMatch =
+          (c.phone && c.phone.includes(q)) ||
+          (digitsOnly && (cleanP.includes(digitsOnly) || rawPhone.includes(digitsOnly)));
+
+        return Boolean(nameMatch || phoneMatch);
+      })
+      .sort((a, b) => (b.total_visits || 0) - (a.total_visits || 0))
+      .slice(0, 8); // Top 8 matches
+  }, [searchQuery, allAvailableCustomers]);
+
+  // SELECT CUSTOMER FROM SEARCH
+  const handleSelectCustomer = (c: Customer) => {
+    const cleanPhone = normalizePhoneNumber(c.phone) || c.phone || "";
+    setDraftCustomer({
+      id: c.id,
+      name: c.name,
+      phone: cleanPhone,
+      gender: c.gender && c.gender !== "unspecified" ? c.gender : undefined,
+      email: c.email || "",
+      birthday: c.birthday || "",
+      notes: c.notes || "",
+      total_visits: c.total_visits || 1,
+      total_spent: c.total_spent || 0,
+      created_at: c.created_at,
+    });
+    setSearchQuery("");
+    setIsSearchOpen(false);
+    setIsAddingDetails(true);
+  };
+
+  // KEYBOARD NAVIGATION IN SEARCH RESULTS
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isSearchOpen || searchResults.length === 0) {
+      if (e.key === "ArrowDown" && searchResults.length > 0) {
+        setIsSearchOpen(true);
+      }
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1) % searchResults.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev - 1 + searchResults.length) % searchResults.length);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (searchResults[highlightedIndex]) {
+        handleSelectCustomer(searchResults[highlightedIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setIsSearchOpen(false);
+    }
+  };
 
   const handleFieldChange = (field: keyof Customer, value: string) => {
     let cleanValue = value;
@@ -94,6 +189,8 @@ export function CustomerSelector() {
 
   const handleResetToWalkIn = () => {
     setDraftCustomer(null);
+    setSearchQuery("");
+    setIsSearchOpen(false);
     setIsAddingDetails(false);
     setShowAdvanced(false);
   };
@@ -211,7 +308,7 @@ export function CustomerSelector() {
               <span className="text-[10px] text-zinc-400 block">
                 {matchedCustomer
                   ? `Returning guest (${matchedCustomer.total_visits} visits • ${formatCurrency(matchedCustomer.total_spent, settings.currency_symbol)})`
-                  : "Enter mobile number to auto-fill returning client or add new"}
+                  : "Search client by name or phone to auto-fill details, or enter new"}
               </span>
             </div>
           </div>
@@ -233,14 +330,192 @@ export function CustomerSelector() {
               <button
                 type="button"
                 onClick={handleResetToWalkIn}
-                className="text-zinc-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors"
+                className="text-zinc-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-zinc-800 transition-colors flex items-center gap-1 text-xs"
                 title="Clear client details (Reset to Walk-in)"
+              >
+                <X className="h-4 w-4" />
+                <span className="hidden sm:inline text-[11px]">Walk-in</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* =====================================================================
+            CLIENT SEARCH BAR (SEARCH BY NAME OR PHONE NUMBER)
+            ===================================================================== */}
+        <div className="relative" ref={searchContainerRef}>
+          <div className="relative flex items-center">
+            <Search className="absolute left-3.5 h-4 w-4 text-purple-400 pointer-events-none" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="🔍 Search client by name or number (e.g. Priya, 9810123456)..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setIsSearchOpen(true);
+                setHighlightedIndex(0);
+              }}
+              onFocus={() => {
+                if (searchQuery.trim().length > 0) setIsSearchOpen(true);
+              }}
+              onKeyDown={handleSearchKeyDown}
+              className="w-full h-10 pl-10 pr-9 text-xs sm:text-sm bg-zinc-950/90 border border-purple-500/30 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-400 font-medium transition-all shadow-inner"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setIsSearchOpen(false);
+                }}
+                className="absolute right-2.5 p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                title="Clear search"
               >
                 <X className="h-4 w-4" />
               </button>
             )}
           </div>
+
+          {/* SEARCH SUGGESTIONS FLOATING DROPDOWN */}
+          {isSearchOpen && searchQuery.trim().length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-zinc-950/95 border border-purple-500/40 rounded-2xl shadow-2xl backdrop-blur-2xl overflow-hidden max-h-80 overflow-y-auto divide-y divide-zinc-800/80 animate-in fade-in slide-in-from-top-2 duration-150">
+              {/* RESULTS HEADER */}
+              <div className="p-2.5 px-3 bg-zinc-900/90 text-zinc-400 text-[11px] font-bold flex items-center justify-between">
+                <span>
+                  {searchResults.length > 0
+                    ? `Found ${searchResults.length} matching client${searchResults.length > 1 ? "s" : ""}`
+                    : "No existing clients found"}
+                </span>
+                <span className="text-[10px] text-zinc-500">Press Enter or click to select</span>
+              </div>
+
+              {/* LIST OF MATCHING CLIENTS */}
+              {searchResults.length > 0 ? (
+                searchResults.map((c, idx) => {
+                  const isHighlighted = idx === highlightedIndex;
+                  const cleanP = normalizePhoneNumber(c.phone) || c.phone;
+                  const isVip = (c.total_visits || 0) > 5;
+
+                  return (
+                    <button
+                      key={c.id || idx}
+                      type="button"
+                      onClick={() => handleSelectCustomer(c)}
+                      onMouseEnter={() => setHighlightedIndex(idx)}
+                      className={`w-full p-3 text-left flex items-center justify-between gap-3 transition-colors cursor-pointer ${
+                        isHighlighted
+                          ? "bg-purple-900/30 border-l-4 border-purple-500"
+                          : "hover:bg-zinc-900/80 border-l-4 border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-8 w-8 rounded-xl bg-purple-600/20 text-purple-300 font-bold flex items-center justify-center text-xs shrink-0 border border-purple-500/30">
+                          {c.gender === "female" ? "👩" : c.gender === "male" ? "👨" : "👤"}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs sm:text-sm font-bold text-white tracking-tight truncate">
+                              {c.name}
+                            </span>
+                            {isVip && (
+                              <Badge variant="purple" className="text-[9px] py-0 px-1.5">
+                                VIP
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-400 font-mono">
+                            <span className="flex items-center gap-1 text-purple-300">
+                              <Phone className="h-3 w-3" />
+                              <span>{cleanP}</span>
+                            </span>
+                            {c.gender && c.gender !== "unspecified" && (
+                              <span className="text-[10px] uppercase text-zinc-500 font-sans">
+                                • {c.gender}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="text-xs font-semibold text-emerald-400 font-mono">
+                          {c.total_spent ? formatCurrency(c.total_spent, settings.currency_symbol) : "New"}
+                        </div>
+                        <div className="text-[10px] text-zinc-500">
+                          {c.total_visits ? `${c.total_visits} visit${c.total_visits > 1 ? "s" : ""}` : "1 visit"}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="p-4 text-center space-y-2">
+                  <p className="text-xs text-zinc-400">
+                    No client found for &quot;<span className="text-white font-semibold">{searchQuery}</span>&quot;
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                    {/* Quick action: use search query as Name */}
+                    {isNaN(Number(searchQuery.replace(/\s/g, ""))) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleFieldChange("name", searchQuery.trim());
+                          setSearchQuery("");
+                          setIsSearchOpen(false);
+                        }}
+                        className="text-[11px] px-2.5 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <UserPlus className="h-3.5 w-3.5" />
+                        <span>Use &quot;{searchQuery.trim()}&quot; as Customer Name</span>
+                      </button>
+                    )}
+
+                    {/* Quick action: use search query as Phone */}
+                    {searchQuery.replace(/\D/g, "").length >= 5 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleFieldChange("phone", searchQuery.replace(/\D/g, ""));
+                          setSearchQuery("");
+                          setIsSearchOpen(false);
+                        }}
+                        className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Phone className="h-3.5 w-3.5" />
+                        <span>Use &quot;{searchQuery.replace(/\D/g, "")}&quot; as Mobile</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* ACTIVE SELECTED CLIENT BADGE (IF LOADED FROM SEARCH OR CRM) */}
+        {matchedCustomer && (
+          <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/40 flex items-center justify-between text-xs sm:text-[11px] animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 min-w-0">
+              <UserCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+              <div className="truncate">
+                <span className="text-zinc-300">Client Selected: </span>
+                <strong className="text-white">{matchedCustomer.name}</strong>
+                {matchedCustomer.phone && (
+                  <span className="font-mono text-purple-300 ml-1.5">
+                    ({normalizePhoneNumber(matchedCustomer.phone) || matchedCustomer.phone})
+                  </span>
+                )}
+                <span className="text-zinc-400 ml-1.5">
+                  • {matchedCustomer.total_visits} visit{matchedCustomer.total_visits > 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 font-mono text-emerald-400 font-semibold">
+              <span>{formatCurrency(matchedCustomer.total_spent, settings.currency_symbol)}</span>
+            </div>
+          </div>
+        )}
 
         {/* ALWAYS-EXPANDED CORE FIELDS: NAME, MOBILE, AND GENDER */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
@@ -393,8 +668,8 @@ export function CustomerSelector() {
                   <span>⚠️ Renaming Existing Customer Profile</span>
                 </div>
                 <p className="text-[11px] text-amber-200/90 leading-tight mt-1">
-                  Mobile number <span className="font-mono font-bold text-white">{draftCustomer?.phone}</span> is registered to <span className="font-bold underline text-white">"{matchedCustomerByPhone.name}"</span>.
-                  Renaming to <span className="font-bold text-white">"{draftCustomer?.name}"</span> will update their customer profile in the CRM upon billing/saving.
+                  Mobile number <span className="font-mono font-bold text-white">{draftCustomer?.phone}</span> is registered to <span className="font-bold underline text-white">&quot;{matchedCustomerByPhone.name}&quot;</span>.
+                  Renaming to <span className="font-bold text-white">&quot;{draftCustomer?.name}&quot;</span> will update their customer profile in the CRM upon billing/saving.
                 </p>
               </div>
             </div>
@@ -404,23 +679,8 @@ export function CustomerSelector() {
               className="text-[10px] px-2.5 py-1 rounded-lg bg-amber-900/80 hover:bg-amber-800 text-amber-100 border border-amber-600/70 font-bold shrink-0 cursor-pointer transition-all shadow-sm flex items-center gap-1 self-end sm:self-center"
               title="Revert back to original customer name"
             >
-              ↩ Revert to "{matchedCustomerByPhone.name}"
+              ↩ Revert to &quot;{matchedCustomerByPhone.name}&quot;
             </button>
-          </div>
-        )}
-
-        {/* REPEAT CLIENT STATS SUMMARY BANNER */}
-        {matchedCustomer && !isExistingNameEdited && (
-          <div className="p-2.5 rounded-xl bg-purple-950/30 border border-purple-800/30 flex items-center justify-between text-xs sm:text-[11px]">
-            <div className="flex items-center gap-1.5 text-purple-300">
-              <UserCheck className="h-4 w-4 sm:h-3.5 sm:w-3.5 text-purple-400 shrink-0" />
-              <span>
-                Returning client ({matchedCustomer.total_visits} visits)
-              </span>
-            </div>
-            <div className="font-semibold text-emerald-400 font-mono">
-              Spent: {formatCurrency(matchedCustomer.total_spent, settings.currency_symbol)}
-            </div>
           </div>
         )}
 
