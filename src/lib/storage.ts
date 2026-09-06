@@ -788,16 +788,14 @@ export const Storage = {
 
     const list = this.getCustomers();
     const otherCustomers = list.filter((c) => {
-      const cPhone = normalizePhoneNumber(c.phone);
-      if (cleanPhone.length >= 7 && cPhone.length >= 7 && cleanPhone === cPhone) return false;
-      if (c.id && customer.id && c.id === customer.id) return false;
+      if (customer.id && c.id && c.id === customer.id) return false;
+      if (!customer.id && cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone && normalizeCustomerName(c.name) === normalizeCustomerName(customer.name)) return false;
       return true;
     });
 
     const existing = list.find((c) => {
-      const cPhone = normalizePhoneNumber(c.phone);
-      if (cleanPhone.length >= 7 && cPhone.length >= 7 && cleanPhone === cPhone) return true;
-      if (c.id && customer.id && c.id === customer.id) return true;
+      if (customer.id && c.id && c.id === customer.id) return true;
+      if (!customer.id && cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone && normalizeCustomerName(c.name) === normalizeCustomerName(customer.name)) return true;
       return false;
     });
 
@@ -874,17 +872,17 @@ export const Storage = {
     if (cleanPhone && cleanPhone.length >= 7) {
       const customers = this.getCustomers();
       const existing = customers.find((c) => {
-        const cPhone = normalizePhoneNumber(c.phone);
-        if (cleanPhone === cPhone) return true;
         if (invoice.customer_id && c.id === invoice.customer_id) return true;
+        const cPhone = normalizePhoneNumber(c.phone);
+        if (!invoice.customer_id && cleanPhone === cPhone) return true;
         return false;
       });
 
       const allInvoices = this.getInvoices().filter((inv) => inv.status !== "void");
       const custInvoices = allInvoices.filter((inv) => {
-        const invPhone = normalizePhoneNumber(inv.customer_phone);
-        if (cleanPhone.length >= 7 && invPhone.length >= 7) return cleanPhone === invPhone;
         if (invoice.customer_id && inv.customer_id) return invoice.customer_id === inv.customer_id;
+        const invPhone = normalizePhoneNumber(inv.customer_phone);
+        if (!invoice.customer_id && cleanPhone.length >= 7 && invPhone.length >= 7) return cleanPhone === invPhone;
         return false;
       });
       const accurateVisits = Math.max(1, custInvoices.length);

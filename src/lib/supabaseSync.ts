@@ -997,6 +997,18 @@ export const SupabaseSync = {
         notes: customer.notes?.trim() || null,
       };
 
+      if (customer.id) {
+        const { data: updated, error: updateError } = await supabase
+          .from("customers")
+          .update(payload)
+          .eq("id", customer.id)
+          .select();
+
+        if (!updateError && updated && updated.length > 0) {
+          return updated[0];
+        }
+      }
+
       const { data, error } = await supabase
         .from("customers")
         .upsert(payload, { onConflict: "phone" })

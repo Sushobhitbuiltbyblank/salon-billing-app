@@ -139,11 +139,16 @@ export function CustomerSelector() {
 
       // AUTO-PREFILL IF PHONE NUMBER ALREADY EXISTS IN CRM
       if (cleanValue.length === 10 || cleanValue.length >= 7) {
-        const existing = allAvailableCustomers.find(
+        const matches = allAvailableCustomers.filter(
           (c: Customer) => normalizePhoneNumber(c.phone) === cleanValue
         );
 
-        if (existing) {
+        if (matches.length > 0) {
+          // If draftCustomer already has an ID that matches one of the profiles, keep that profile
+          const existing = draftCustomer?.id
+            ? matches.find((c) => c.id === draftCustomer.id) || matches[0]
+            : matches[0];
+
           const currentName = draftCustomer?.name?.trim() || "";
           const isCurrentAnon = isAnonymousCustomerName(currentName);
           const nameToSet =
@@ -153,7 +158,7 @@ export function CustomerSelector() {
 
           setDraftCustomer({
             ...(draftCustomer || {}),
-            id: existing.id || draftCustomer?.id,
+            id: existing.id,
             phone: cleanValue,
             name: nameToSet,
             gender:
@@ -195,18 +200,36 @@ export function CustomerSelector() {
     setShowAdvanced(false);
   };
 
+  // All customer profiles matching the entered phone number (can be multiple)
+  const matchingCustomersForPhone = useMemo(() => {
+    if (!draftCustomer?.phone) return [];
+    const cleanPhone = normalizePhoneNumber(draftCustomer.phone);
+    if (cleanPhone.length < 7) return [];
+
+    return allAvailableCustomers.filter(
+      (c: Customer) => normalizePhoneNumber(c.phone) === cleanPhone
+    );
+  }, [draftCustomer?.phone, allAvailableCustomers]);
+
   // Specific customer record matched by the entered phone number
   const matchedCustomerByPhone = useMemo(() => {
     if (!draftCustomer?.phone) return null;
     const cleanPhone = normalizePhoneNumber(draftCustomer.phone);
     if (cleanPhone.length < 7) return null;
 
+    if (draftCustomer.id) {
+      const byId = allAvailableCustomers.find(
+        (c: Customer) => c.id === draftCustomer.id && normalizePhoneNumber(c.phone) === cleanPhone
+      );
+      if (byId) return byId;
+    }
+
     return (
       allAvailableCustomers.find(
         (c: Customer) => normalizePhoneNumber(c.phone) === cleanPhone
       ) || null
     );
-  }, [draftCustomer?.phone, allAvailableCustomers]);
+  }, [draftCustomer?.phone, draftCustomer?.id, allAvailableCustomers]);
 
   // Detect if user has modified the registered name of this existing customer
   const isExistingNameEdited = useMemo(() => {
@@ -216,27 +239,33 @@ export function CustomerSelector() {
     const currentDraftName = draftCustomer?.name?.trim() || "";
     if (!currentDraftName || isAnonymousCustomerName(currentDraftName)) return false;
 
+    // If current name matches any registered customer with this phone number, it's not edited
+    const matchesAny = matchingCustomersForPhone.some(
+      (c) => normalizeCustomerName(c.name) === normalizeCustomerName(currentDraftName)
+    );
+    if (matchesAny) return false;
+
     return (
       normalizeCustomerName(currentDraftName) !==
       normalizeCustomerName(matchedCustomerByPhone.name)
     );
-  }, [matchedCustomerByPhone, draftCustomer?.name]);
+  }, [matchedCustomerByPhone, draftCustomer?.name, matchingCustomersForPhone]);
 
   const matchedCustomer = useMemo(() => {
     if (!draftCustomer) return null;
-    const cleanPhone = normalizePhoneNumber(draftCustomer.phone);
 
+    // Prioritize matched ID if draftCustomer already has an ID
+    if (draftCustomer.id) {
+      const byId = allAvailableCustomers.find((c: Customer) => c.id === draftCustomer.id);
+      if (byId) return byId;
+    }
+
+    const cleanPhone = normalizePhoneNumber(draftCustomer.phone);
     if (cleanPhone.length >= 7) {
       const byPhone = allAvailableCustomers.find(
         (c: Customer) => normalizePhoneNumber(c.phone) === cleanPhone
       );
       if (byPhone) return byPhone;
-    }
-
-    if (draftCustomer.id) {
-      return (
-        allAvailableCustomers.find((c: Customer) => c.id === draftCustomer.id) || null
-      );
     }
 
     return null;
@@ -625,11 +654,11 @@ export function CustomerSelector() {
 
                       const cleanP = normalizePhoneNumber(draftCustomer?.phone);
                       if (draftCustomer?.name?.trim() && cleanP && cleanP.length >= 7) {
-                        const matched = allAvailableCustomers.find(
-                          (c) => normalizePhoneNumber(c.phone) === cleanP
-                        );
+                        const matched = draftCustomer?.id
+                          ? allAvailableCustomers.find((c) => c.id === draftCustomer.id)
+                          : allAvailableCustomers.find((c) => normalizePhoneNumber(c.phone) === cleanP);
                         saveCustomer({
-                          id: matched?.id || draftCustomer?.id || generateUUID(),
+                          id: draftCustomer?.id || matched?.id || generateUUID(),
                           name: draftCustomer.name.trim(),
                           phone: cleanP,
                           gender: newGender,
@@ -657,6 +686,43 @@ export function CustomerSelector() {
             </div>
           </div>
         </div>
+
+        {/* MULTIPLE CLIENTS SHARE THIS PHONE NUMBER SWITCHER WIDGET */}
+        {matchingCustomersForPhone.length > 1 && (
+          <div className="p-2.5 sm:p-3 rounded-xl bg-purple-950/40 border border-purple-500/40 text-xs shadow-md animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
+                <UserCheck className="h-3.5 w-3.5 text-purple-400" />
+                <span>{matchingCustomersForPhone.length} Client Profiles Found with number <strong className="font-mono text-white">{draftCustomer?.phone}</strong></span>
+              </span>
+              <span className="text-[10px] text-zinc-400">Click a profile to switch</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {matchingCustomersForPhone.map((c) => {
+                const isSelected = draftCustomer?.id === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => handleSelectCustomer(c)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 cursor-pointer transition-all border ${
+                      isSelected
+                        ? "bg-purple-600 text-white border-purple-400 shadow-md font-bold ring-2 ring-purple-400/50"
+                        : "bg-zinc-900/90 text-zinc-300 border-zinc-700/80 hover:border-purple-500/60 hover:bg-zinc-800"
+                    }`}
+                  >
+                    <span>{c.gender === "female" ? "👩" : c.gender === "male" ? "👨" : "👤"}</span>
+                    <span className="font-semibold">{c.name}</span>
+                    <span className="text-[10px] opacity-80 font-mono">
+                      ({c.total_visits || 0} {c.total_visits === 1 ? "visit" : "visits"} • {formatCurrency(c.total_spent || 0, settings.currency_symbol)})
+                    </span>
+                    {isSelected && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300 ml-0.5" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* WARNING WHEN EDITING EXISTING USER'S NAME */}
         {isExistingNameEdited && matchedCustomerByPhone && (

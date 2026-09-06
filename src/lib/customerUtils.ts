@@ -43,13 +43,13 @@ export function isAnonymousCustomerName(name?: string | null): boolean {
 
 /**
  * Deduplicates an array of Customer objects.
- * Merges duplicate records by Phone or Name while preserving richer details.
+ * Merges duplicate records by ID or exact same Phone + Name while preserving richer details.
+ * Distinct customer IDs sharing the same phone number (e.g. family members) are preserved.
  */
 export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
   if (!Array.isArray(customers) || customers.length === 0) return [];
 
   const idMap = new Map<string, Customer>();
-  const phoneMap = new Map<string, Customer>();
   const unifiedList: Customer[] = [];
 
   customers.forEach((cust) => {
@@ -58,17 +58,22 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
     // STRICT CRM RULE: Only save/keep customers with a valid mobile number (>= 7 digits)
     if (!cleanPhone || cleanPhone.length < 7) return;
 
-    // Match strictly by Phone Number or ID (Never by Name alone)
+    // Match strictly by ID if present, or by Phone + Name if ID is missing
     let matched: Customer | undefined;
 
-    if (cleanPhone.length >= 7 && phoneMap.has(cleanPhone)) {
-      matched = phoneMap.get(cleanPhone);
-    } else if (cust.id && idMap.has(cust.id)) {
+    if (cust.id && idMap.has(cust.id)) {
       matched = idMap.get(cust.id);
+    } else if (!cust.id) {
+      const normName = normalizeCustomerName(cust.name);
+      matched = unifiedList.find(
+        (c) =>
+          normalizePhoneNumber(c.phone) === cleanPhone &&
+          normalizeCustomerName(c.name) === normName
+      );
     }
 
     if (matched) {
-      // Merge records for the exact same mobile number, keeping the most complete information
+      // Merge records for the exact same customer identity, keeping the most complete information
       if ((!matched.phone || matched.phone.length < 10) && cust.phone) {
         matched.phone = cleanPhone.length === 10 ? cleanPhone : cust.phone;
       }
@@ -109,7 +114,6 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
 
       // Update index mappings with merged data
       if (matched.id) idMap.set(matched.id, matched);
-      if (cleanPhone.length >= 7) phoneMap.set(cleanPhone, matched);
     } else {
       const newEntry: Customer = {
         ...cust,
@@ -124,7 +128,6 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
 
       unifiedList.push(newEntry);
       if (newEntry.id) idMap.set(newEntry.id, newEntry);
-      if (cleanPhone.length >= 7) phoneMap.set(cleanPhone, newEntry);
     }
   });
 
@@ -132,24 +135,21 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
 }
 
 /**
- * Combines registered customer records and invoices into a single unified, deduplicated list
- * with recalculated visit totals and revenue figures strictly based on Mobile Number.
+ * Combines registered customer records and invoices into a single unified list
+ * with recalculated visit totals and revenue figures strictly based on Customer ID and Mobile Number.
  */
 export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): Customer[] {
   // 1. First deduplicate all registered customer records (only with valid mobile numbers)
   const registered = deduplicateCustomerArray(customers || []);
 
   const idMap = new Map<string, Customer>();
-  const phoneMap = new Map<string, Customer>();
   const unifiedList: Customer[] = [...registered];
 
   registered.forEach((cust) => {
     if (cust.id) idMap.set(cust.id, cust);
-    const cleanPhone = normalizePhoneNumber(cust.phone);
-    if (cleanPhone.length >= 7) phoneMap.set(cleanPhone, cust);
   });
 
-  // 2. Scan all non-void invoices to discover or augment customers strictly by Mobile Number
+  // 2. Scan all non-void invoices to discover or augment customers
   (invoices || []).forEach((inv) => {
     if (inv.status === "void") return;
 
@@ -160,19 +160,31 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
     // STRICT CRM RULE: Skip invoices with no valid mobile number
     if (!cleanPhone || cleanPhone.length < 7) return;
 
-    // Check if we already have this customer by Mobile Number or ID (never by name alone)
+    // Check if we already have this customer by Customer ID first
     let matched: Customer | undefined;
-    if (phoneMap.has(cleanPhone)) {
-      matched = phoneMap.get(cleanPhone);
-    } else if (inv.customer_id && idMap.has(inv.customer_id)) {
+    if (inv.customer_id && idMap.has(inv.customer_id)) {
       matched = idMap.get(inv.customer_id);
+    } else {
+      const normInvName = normalizeCustomerName(rawName);
+      matched = unifiedList.find((c) => {
+        const cPhone = normalizePhoneNumber(c.phone);
+        if (cPhone !== cleanPhone) return false;
+        if (!isAnon && normInvName && normalizeCustomerName(c.name) === normInvName) return true;
+        return false;
+      });
+
+      if (!matched) {
+        const phoneMatches = unifiedList.filter((c) => normalizePhoneNumber(c.phone) === cleanPhone);
+        if (phoneMatches.length === 1) {
+          matched = phoneMatches[0];
+        }
+      }
     }
 
     if (matched) {
       // Augment existing customer details
       if ((!matched.phone || matched.phone.length < 10) && cleanPhone) {
         matched.phone = cleanPhone.length === 10 ? cleanPhone : (inv.customer_phone || "");
-        phoneMap.set(cleanPhone, matched);
       }
       if ((!matched.name || isAnonymousCustomerName(matched.name)) && !isAnon && rawName) {
         matched.name = rawName;
@@ -188,7 +200,7 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
     }
   });
 
-  // 3. Accurately compute visit counts and spend from real invoices strictly by Mobile Number
+  // 3. Accurately compute visit counts and spend from real invoices
   return unifiedList
     .filter((c) => {
       const p = normalizePhoneNumber(c.phone);
@@ -196,17 +208,29 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
     })
     .map((cust) => {
       const custPhone = normalizePhoneNumber(cust.phone);
+      const normCustName = normalizeCustomerName(cust.name);
 
       const custInvoices = (invoices || []).filter((inv) => {
         if (inv.status === "void") return false;
         const invPhone = normalizePhoneNumber(inv.customer_phone);
 
-        // Strict matching: ONLY by matching mobile number or explicit customer_id
-        if (custPhone.length >= 7 && invPhone.length >= 7) {
-          return custPhone === invPhone;
-        }
+        // Strict matching:
+        // Priority 1: Match by customer_id if available on invoice
         if (cust.id && inv.customer_id) {
           return cust.id === inv.customer_id;
+        }
+
+        // Priority 2: If no customer_id on invoice, match by phone and name
+        if (custPhone.length >= 7 && invPhone.length >= 7 && custPhone === invPhone) {
+          const invName = normalizeCustomerName(inv.customer_name);
+          if (invName && normCustName && !isAnonymousCustomerName(invName) && !isAnonymousCustomerName(normCustName)) {
+            return invName === normCustName;
+          }
+          // If only 1 customer in the database shares this phone number, match it
+          const phoneMatches = unifiedList.filter((c) => normalizePhoneNumber(c.phone) === custPhone);
+          if (phoneMatches.length === 1) {
+            return true;
+          }
         }
         return false;
       });
@@ -224,9 +248,6 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
         }
       });
 
-      // If invoice records exist in the application, customer visit counts and spend
-      // strictly reflect their active settled invoices. If invoices were deleted or voided,
-      // visits and spent reset cleanly to 0.
       const hasAnyInvoices = Array.isArray(invoices) && invoices.length > 0;
 
       return {
