@@ -41,6 +41,7 @@ export function EditInvoiceModal() {
     setPrintInvoice,
     customers,
     saveCustomer,
+    deleteCustomer,
     catalog,
     categories,
     staff,
@@ -423,28 +424,77 @@ export function EditInvoiceModal() {
             }
           : undefined;
 
-      // Also sync and persist customer profile with updated gender
+      // Reconcile and update customer profile when invoice details are edited
       let linkedCustomerId = editingInvoice.customer_id;
       const clean10Phone = customerPhone.replace(/\D/g, "").slice(-10);
+      const oldCleanPhone = (editingInvoice.customer_phone || "").replace(/\D/g, "").slice(-10);
+
       if (clean10Phone.length >= 7 || editingInvoice.customer_id) {
-        const matchedCust = customers.find(
-          (c) =>
-            (c.id && c.id === editingInvoice.customer_id) ||
-            (clean10Phone.length >= 7 && c.phone && c.phone.replace(/\D/g, "").slice(-10) === clean10Phone)
-        );
+        // 1. Check if the invoice was already linked to a customer
+        let existingCustomer = editingInvoice.customer_id
+          ? customers.find((c) => c.id === editingInvoice.customer_id)
+          : undefined;
+
+        if (!existingCustomer && oldCleanPhone) {
+          existingCustomer = customers.find(
+            (c) => (c.phone || "").replace(/\D/g, "").slice(-10) === oldCleanPhone
+          );
+        }
+
+        // 2. Check if another customer profile ALREADY exists with the new phone number
+        const customerWithNewPhone = clean10Phone.length >= 7
+          ? customers.find(
+              (c) =>
+                (c.phone || "").replace(/\D/g, "").slice(-10) === clean10Phone &&
+                c.id !== existingCustomer?.id
+            )
+          : undefined;
+
+        let targetCustomerId: string;
+
+        if (customerWithNewPhone) {
+          // New phone already belongs to an existing customer in CRM!
+          targetCustomerId = customerWithNewPhone.id;
+
+          // If the old customer was created ONLY for this invoice and has no other invoices, clean up the typo customer
+          if (existingCustomer && existingCustomer.id !== customerWithNewPhone.id) {
+            const otherInvoices = invoices.filter(
+              (inv) =>
+                inv.id !== editingInvoice.id &&
+                inv.status !== "void" &&
+                (inv.customer_id === existingCustomer!.id ||
+                  (inv.customer_phone || "").replace(/\D/g, "").slice(-10) === oldCleanPhone)
+            );
+            if (otherInvoices.length === 0) {
+              deleteCustomer(existingCustomer.id);
+            }
+          }
+        } else if (existingCustomer) {
+          // The existing customer's phone number or name was corrected!
+          // UPDATE the existing customer profile directly with the new phone/name!
+          targetCustomerId = existingCustomer.id;
+        } else {
+          // Brand new customer profile
+          targetCustomerId = generateUUID();
+        }
+
+        const baseCust = customerWithNewPhone || existingCustomer;
 
         const savedCust = await saveCustomer({
-          id: matchedCust?.id || editingInvoice.customer_id || generateUUID(),
-          name: customerName.trim() || matchedCust?.name || "Guest",
-          phone: clean10Phone.length >= 7 ? clean10Phone : (matchedCust?.phone || ""),
-          email: customerEmail.trim() || matchedCust?.email || undefined,
+          id: targetCustomerId,
+          name: customerName.trim() || baseCust?.name || "Guest",
+          phone: clean10Phone.length >= 7 ? clean10Phone : (baseCust?.phone || ""),
+          email: customerEmail.trim() || baseCust?.email || undefined,
           gender: customerGender,
-          total_visits: matchedCust?.total_visits || 1,
-          total_spent: matchedCust?.total_spent || totals.grandTotal,
+          total_visits: baseCust?.total_visits || 1,
+          total_spent: baseCust?.total_spent || totals.grandTotal,
           last_visit: editingInvoice.created_at,
-          notes: matchedCust?.notes || undefined,
+          notes: baseCust?.notes || undefined,
         });
-        if (savedCust?.id) linkedCustomerId = savedCust.id;
+
+        if (savedCust?.id) {
+          linkedCustomerId = savedCust.id;
+        }
       }
 
       const updatedInvoice: Invoice = {

@@ -182,11 +182,11 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
     }
 
     if (matched) {
-      // Augment existing customer details
-      if ((!matched.phone || matched.phone.length < 10) && cleanPhone) {
-        matched.phone = cleanPhone.length === 10 ? cleanPhone : (inv.customer_phone || "");
+      // Augment and update existing customer details from invoice
+      if (cleanPhone && cleanPhone.length >= 7) {
+        matched.phone = cleanPhone.length === 10 ? cleanPhone : (inv.customer_phone || matched.phone);
       }
-      if ((!matched.name || isAnonymousCustomerName(matched.name)) && !isAnon && rawName) {
+      if (rawName && !isAnon) {
         matched.name = rawName;
       }
       if (!matched.email && inv.customer_email) {

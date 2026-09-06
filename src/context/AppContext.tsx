@@ -726,15 +726,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const remoteCust = await SupabaseSync.saveCustomer(saved);
         if (remoteCust) {
           const fresh = Storage.getCustomers();
-          const p = normalizePhoneNumber(remoteCust.phone);
-          const idx = fresh.findIndex((c) => normalizePhoneNumber(c.phone) === p);
+          const targetId = remoteCust.id || saved.id;
+          const idx = fresh.findIndex(
+            (c) => (targetId && c.id === targetId) || (saved.id && c.id === saved.id)
+          );
           if (idx >= 0) {
             fresh[idx] = { ...fresh[idx], ...remoteCust };
           } else {
-            fresh.unshift(remoteCust);
+            const p = normalizePhoneNumber(remoteCust.phone);
+            const pIdx = fresh.findIndex((c) => normalizePhoneNumber(c.phone) === p);
+            if (pIdx >= 0) {
+              fresh[pIdx] = { ...fresh[pIdx], ...remoteCust };
+            } else {
+              fresh.unshift(remoteCust);
+            }
           }
-          Storage.saveCustomers(fresh);
-          setCustomers(fresh);
+
+          // Ensure no duplicate leftover with old ID if remoteCust has a different ID
+          const dedupedFresh = fresh.filter((c) => {
+            if (saved.id && remoteCust.id && saved.id !== remoteCust.id && c.id === saved.id) {
+              return false;
+            }
+            return true;
+          });
+
+          Storage.saveCustomers(dedupedFresh);
+          setCustomers(dedupedFresh);
         }
       } catch (err) {
         console.error("Supabase sync customer error:", err);

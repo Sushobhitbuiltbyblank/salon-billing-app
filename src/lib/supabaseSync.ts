@@ -1007,11 +1007,34 @@ export const SupabaseSync = {
         if (!updateError && updated && updated.length > 0) {
           return updated[0];
         }
+
+        // If duplicate phone error (23505), another record in Supabase already has this phone!
+        if (updateError && (updateError.code === "23505" || updateError.message?.includes("customers_phone_key"))) {
+          const { data: existingByPhone } = await supabase
+            .from("customers")
+            .select("*")
+            .eq("phone", standardPhone)
+            .maybeSingle();
+
+          if (existingByPhone) {
+            const { data: mergedCust } = await supabase
+              .from("customers")
+              .update(payload)
+              .eq("id", existingByPhone.id)
+              .select();
+
+            if (customer.id !== existingByPhone.id) {
+              await supabase.from("customers").delete().eq("id", customer.id);
+            }
+
+            return Array.isArray(mergedCust) && mergedCust.length > 0 ? mergedCust[0] : existingByPhone;
+          }
+        }
       }
 
       const { data, error } = await supabase
         .from("customers")
-        .upsert(payload, { onConflict: "phone" })
+        .upsert({ ...(customer.id ? { id: customer.id } : {}), ...payload }, { onConflict: "phone" })
         .select();
 
       if (error) {

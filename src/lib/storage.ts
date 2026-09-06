@@ -401,6 +401,8 @@ export function initStorage() {
         (c) =>
           c.id !== "00082bcc-7e03-428b-9bc6-ca7eccfbd112" &&
           c.id !== "5d9a9338-b39c-478c-98c5-7dc2d0a610a6" &&
+          c.id !== "305afba3-15dc-468f-8e09-5edb1ee5d812" &&
+          normalizePhoneNumber(c.phone) !== "8118298469" &&
           normalizePhoneNumber(c.phone) !== "9250755665" &&
           normalizePhoneNumber(c.phone) !== "6092153532"
       );
@@ -929,6 +931,28 @@ export const Storage = {
       this.saveInvoices(invoices);
       this.addToInvoiceSyncQueue(invoice.id);
       this.archiveInvoice(invoice);
+
+      // Reconcile and update customer profile if linked
+      if (invoice.customer_id) {
+        const customers = this.getCustomers();
+        const custIdx = customers.findIndex((c) => c.id === invoice.customer_id);
+        if (custIdx !== -1) {
+          const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
+          if (cleanPhone && cleanPhone.length >= 7 && normalizePhoneNumber(customers[custIdx].phone) !== cleanPhone) {
+            customers[custIdx].phone = cleanPhone;
+          }
+          if (invoice.customer_name && !isAnonymousCustomerName(invoice.customer_name)) {
+            customers[custIdx].name = invoice.customer_name;
+          }
+          if (invoice.customer_email && !customers[custIdx].email) {
+            customers[custIdx].email = invoice.customer_email;
+          }
+          if (invoice.customer_gender && invoice.customer_gender !== "unspecified") {
+            customers[custIdx].gender = invoice.customer_gender;
+          }
+          this.saveCustomers(customers);
+        }
+      }
     }
     return invoice;
   },
