@@ -396,16 +396,46 @@ export function initStorage() {
         sushobhit.last_visit = remaining[0]?.created_at || undefined;
       }
 
-      // Explicitly purge typo duplicate customers
+      // Ensure BZ-20260906-5532 has the correct phone 8118298469
+      const localInvoices = Storage.getInvoices();
+      let invChanged = false;
+      localInvoices.forEach((inv) => {
+        if (inv.invoice_number === "BZ-20260906-5532" || inv.id === "e5ac68a4-40b4-4c1b-8c8b-fbd82bbf99d2") {
+          if (normalizePhoneNumber(inv.customer_phone) !== "8118298469") {
+            inv.customer_phone = "8118298469";
+            inv.customer_name = "Swati ji";
+            inv.customer_id = "cc9b6ac6-4e7e-479e-af91-bb3d7a2fc677";
+            invChanged = true;
+          }
+        }
+      });
+      if (invChanged) {
+        Storage.saveInvoices(localInvoices);
+      }
+
+      // Explicitly purge typo duplicate customers and ensure correct Swati ji (8118298469)
       const cleanCusts = custs.filter(
         (c) =>
           c.id !== "00082bcc-7e03-428b-9bc6-ca7eccfbd112" &&
           c.id !== "5d9a9338-b39c-478c-98c5-7dc2d0a610a6" &&
-          c.id !== "305afba3-15dc-468f-8e09-5edb1ee5d812" &&
-          normalizePhoneNumber(c.phone) !== "8118298469" &&
+          c.id !== "2d99bb9a-15f7-4ff2-aaa3-4920df80d820" &&
+          normalizePhoneNumber(c.phone) !== "8178298469" &&
           normalizePhoneNumber(c.phone) !== "9250755665" &&
           normalizePhoneNumber(c.phone) !== "6092153532"
       );
+
+      if (!cleanCusts.some((c) => normalizePhoneNumber(c.phone) === "8118298469")) {
+        cleanCusts.unshift({
+          id: "cc9b6ac6-4e7e-479e-af91-bb3d7a2fc677",
+          name: "Swati ji",
+          phone: "8118298469",
+          gender: "female",
+          total_visits: 1,
+          total_spent: 400,
+          last_visit: "2026-09-06T06:44:37.198Z",
+          created_at: "2026-09-06T06:44:37.198Z",
+        });
+      }
       Storage.saveCustomers(cleanCusts);
     }
   } catch (err) {

@@ -35,10 +35,10 @@ describe("Invoice Customer Detail Editing & Client Reconciliation", () => {
   });
 
   it("updates existing client details in-place when invoice client phone is edited, and does NOT create a new client", () => {
-    // 1. Initial State: A bill was created for 'Swati ji' with an initial typo in the phone number
-    const initialCustomerId = "cust-swati-001";
-    const typoPhone = "8118298469";
-    const correctedPhone = "8178298469";
+    // 1. Initial State: A bill was created for a client with an initial typo in the phone number
+    const initialCustomerId = "cust-client-001";
+    const typoPhone = "9810011111";
+    const correctedPhone = "9810022222";
 
     const initialCustomer: Customer = {
       id: initialCustomerId,
@@ -53,8 +53,8 @@ describe("Invoice Customer Detail Editing & Client Reconciliation", () => {
     Storage.saveCustomer(initialCustomer);
 
     const initialInvoice: Invoice = {
-      id: "inv-swati-001",
-      invoice_number: "BZ-20260906-5532",
+      id: "inv-client-001",
+      invoice_number: "BZ-99990001",
       customer_id: initialCustomerId,
       customer_name: "Swati ji",
       customer_phone: typoPhone,
