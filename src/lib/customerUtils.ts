@@ -50,6 +50,7 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
   if (!Array.isArray(customers) || customers.length === 0) return [];
 
   const idMap = new Map<string, Customer>();
+  const phoneMap = new Map<string, Customer>();
   const unifiedList: Customer[] = [];
 
   customers.forEach((cust) => {
@@ -58,11 +59,16 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
     // STRICT CRM RULE: Only save/keep customers with a valid mobile number (>= 7 digits)
     if (!cleanPhone || cleanPhone.length < 7) return;
 
-    // Match strictly by ID if present, or by Phone + Name if ID is missing
+    // Explicitly allow multiple profiles for 9250755655
+    const isSpecialMulti = cleanPhone === "9250755655";
+
+    // Match strictly by ID if present, or by Phone (unless special multi-profile number)
     let matched: Customer | undefined;
 
     if (cust.id && idMap.has(cust.id)) {
       matched = idMap.get(cust.id);
+    } else if (!isSpecialMulti && cleanPhone.length >= 7 && phoneMap.has(cleanPhone)) {
+      matched = phoneMap.get(cleanPhone);
     } else if (!cust.id) {
       const normName = normalizeCustomerName(cust.name);
       matched = unifiedList.find(
@@ -114,6 +120,7 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
 
       // Update index mappings with merged data
       if (matched.id) idMap.set(matched.id, matched);
+      if (cleanPhone.length >= 7) phoneMap.set(cleanPhone, matched);
     } else {
       const newEntry: Customer = {
         ...cust,
@@ -128,6 +135,7 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
 
       unifiedList.push(newEntry);
       if (newEntry.id) idMap.set(newEntry.id, newEntry);
+      if (cleanPhone.length >= 7) phoneMap.set(cleanPhone, newEntry);
     }
   });
 
