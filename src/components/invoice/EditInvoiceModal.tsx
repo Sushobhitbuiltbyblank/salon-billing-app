@@ -490,6 +490,7 @@ export function EditInvoiceModal() {
           total_spent: baseCust?.total_spent || totals.grandTotal,
           last_visit: editingInvoice.created_at,
           notes: baseCust?.notes || undefined,
+          updated_at: new Date().toISOString(),
         });
 
         if (savedCust?.id) {

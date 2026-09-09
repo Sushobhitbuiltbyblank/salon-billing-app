@@ -858,6 +858,7 @@ export const Storage = {
       last_visit: customer.last_visit || existing?.last_visit,
       last_reminder_sent_at: customer.last_reminder_sent_at || existing?.last_reminder_sent_at,
       created_at: existing?.created_at || customer.created_at || new Date().toISOString(),
+      updated_at: customer.updated_at || new Date().toISOString(),
     };
 
     otherCustomers.unshift(merged);
@@ -931,7 +932,6 @@ export const Storage = {
 
     // STRICT CRM RULE: Update customer stats ONLY if phone has a valid mobile number (>= 7 digits)
     const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
-    const cleanName = normalizeCustomerName(invoice.customer_name);
     const isAnon = isAnonymousCustomerName(invoice.customer_name);
 
     if (cleanPhone && cleanPhone.length >= 7) {
@@ -980,6 +980,8 @@ export const Storage = {
           total_visits: accurateVisits,
           total_spent: accurateSpent,
           last_visit: invoice.created_at,
+          created_at: invoice.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         });
       }
     }
@@ -996,24 +998,53 @@ export const Storage = {
       this.archiveInvoice(invoice);
 
       // Reconcile and update customer profile if linked
+      const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
+      const customers = this.getCustomers();
+      let custIdx = -1;
       if (invoice.customer_id) {
-        const customers = this.getCustomers();
-        const custIdx = customers.findIndex((c) => c.id === invoice.customer_id);
-        if (custIdx !== -1) {
-          const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
-          if (cleanPhone && cleanPhone.length >= 7 && normalizePhoneNumber(customers[custIdx].phone) !== cleanPhone) {
-            customers[custIdx].phone = cleanPhone;
+        custIdx = customers.findIndex((c) => c.id === invoice.customer_id);
+      }
+      if (custIdx === -1 && cleanPhone && cleanPhone.length >= 7) {
+        custIdx = customers.findIndex((c) => normalizePhoneNumber(c.phone) === cleanPhone);
+      }
+
+      if (custIdx !== -1) {
+        const nowIso = new Date().toISOString();
+        customers[custIdx].updated_at = nowIso;
+        if (cleanPhone && cleanPhone.length >= 7) {
+          customers[custIdx].phone = cleanPhone.length === 10 ? cleanPhone : (invoice.customer_phone || customers[custIdx].phone);
+        }
+        if (invoice.customer_name && !isAnonymousCustomerName(invoice.customer_name)) {
+          customers[custIdx].name = invoice.customer_name.trim();
+        }
+        if (invoice.customer_email) {
+          customers[custIdx].email = invoice.customer_email.trim();
+        }
+        if (invoice.customer_gender && invoice.customer_gender !== "unspecified") {
+          customers[custIdx].gender = invoice.customer_gender;
+        }
+        this.saveCustomers(customers);
+
+        // Keep all other linked invoices synchronized with the updated customer details
+        const targetId = customers[custIdx].id;
+        const targetName = customers[custIdx].name;
+        const targetPhone = customers[custIdx].phone;
+        const targetGender = customers[custIdx].gender;
+        const targetEmail = customers[custIdx].email;
+
+        let otherInvoicesModified = false;
+        invoices.forEach((inv) => {
+          if (inv.id !== invoice.id && inv.customer_id && inv.customer_id === targetId) {
+            inv.customer_name = targetName;
+            inv.customer_phone = targetPhone;
+            if (targetGender && targetGender !== "unspecified") inv.customer_gender = targetGender;
+            if (targetEmail !== undefined) inv.customer_email = targetEmail;
+            this.archiveInvoice(inv);
+            otherInvoicesModified = true;
           }
-          if (invoice.customer_name && !isAnonymousCustomerName(invoice.customer_name)) {
-            customers[custIdx].name = invoice.customer_name;
-          }
-          if (invoice.customer_email && !customers[custIdx].email) {
-            customers[custIdx].email = invoice.customer_email;
-          }
-          if (invoice.customer_gender && invoice.customer_gender !== "unspecified") {
-            customers[custIdx].gender = invoice.customer_gender;
-          }
-          this.saveCustomers(customers);
+        });
+        if (otherInvoicesModified) {
+          this.saveInvoices(invoices);
         }
       }
     }

@@ -79,23 +79,57 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
     }
 
     if (matched) {
-      // Merge records for the exact same customer identity, keeping the most complete information
-      if ((!matched.phone || matched.phone.length < 10) && cust.phone) {
-        matched.phone = cleanPhone.length === 10 ? cleanPhone : cust.phone;
-      }
-      if ((!matched.name || isAnonymousCustomerName(matched.name)) && cust.name && !isAnonymousCustomerName(cust.name)) {
-        matched.name = cust.name;
-      }
+      const custUpdatedAt = cust.updated_at ? new Date(cust.updated_at).getTime() : 0;
+      const matchedUpdatedAt = matched.updated_at ? new Date(matched.updated_at).getTime() : 0;
 
-      // Preserve specific gender and do not let older duplicate entries overwrite
-      if ((!matched.gender || matched.gender === "unspecified") && cust.gender && cust.gender !== "unspecified") {
-        matched.gender = cust.gender;
-      }
+      if (custUpdatedAt > matchedUpdatedAt) {
+        // Incoming record has a newer update timestamp: adopt updated attributes
+        if (cust.name && !isAnonymousCustomerName(cust.name)) {
+          matched.name = cust.name;
+        }
+        if (cleanPhone.length >= 7) {
+          matched.phone = cleanPhone.length === 10 ? cleanPhone : cust.phone;
+        }
+        if (cust.gender && cust.gender !== "unspecified") {
+          matched.gender = cust.gender;
+        }
+        if (cust.email !== undefined) matched.email = cust.email;
+        if (cust.birthday !== undefined) matched.birthday = cust.birthday;
+        if (cust.anniversary !== undefined) matched.anniversary = cust.anniversary;
+        if (cust.notes !== undefined) matched.notes = cust.notes;
+        matched.updated_at = cust.updated_at;
+      } else if (matchedUpdatedAt > custUpdatedAt) {
+        // matched is strictly newer: preserve matched's name, phone, and metadata, only fill missing attributes
+        if (!matched.email && cust.email) matched.email = cust.email;
+        if (!matched.birthday && cust.birthday) matched.birthday = cust.birthday;
+        if (!matched.anniversary && cust.anniversary) matched.anniversary = cust.anniversary;
+        if (!matched.notes && cust.notes) matched.notes = cust.notes;
+        if ((!matched.gender || matched.gender === "unspecified") && cust.gender && cust.gender !== "unspecified") {
+          matched.gender = cust.gender;
+        }
+      } else {
+        // Timestamps equal or absent: standard merge preferring non-anonymous and complete data
+        if ((!matched.phone || matched.phone.length < 10) && cust.phone) {
+          matched.phone = cleanPhone.length === 10 ? cleanPhone : cust.phone;
+        }
 
-      if (!matched.email && cust.email) matched.email = cust.email;
-      if (!matched.birthday && cust.birthday) matched.birthday = cust.birthday;
-      if (!matched.anniversary && cust.anniversary) matched.anniversary = cust.anniversary;
-      if (!matched.notes && cust.notes) matched.notes = cust.notes;
+        if ((!matched.name || isAnonymousCustomerName(matched.name)) && cust.name && !isAnonymousCustomerName(cust.name)) {
+          matched.name = cust.name;
+        }
+
+        if ((!matched.gender || matched.gender === "unspecified") && cust.gender && cust.gender !== "unspecified") {
+          matched.gender = cust.gender;
+        }
+
+        if (!matched.email && cust.email) matched.email = cust.email;
+        if (!matched.birthday && cust.birthday) matched.birthday = cust.birthday;
+        if (!matched.anniversary && cust.anniversary) matched.anniversary = cust.anniversary;
+        if (!matched.notes && cust.notes) matched.notes = cust.notes;
+
+        if (cust.updated_at) {
+          matched.updated_at = cust.updated_at;
+        }
+      }
 
       matched.total_visits = Math.max(matched.total_visits || 0, cust.total_visits || 0);
       matched.total_spent = Math.max(matched.total_spent || 0, cust.total_spent || 0);
@@ -129,6 +163,7 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
         total_visits: Number(cust.total_visits) || 0,
         total_spent: Number(cust.total_spent) || 0,
         created_at: cust.created_at || new Date().toISOString(),
+        updated_at: cust.updated_at,
       };
 
       unifiedList.push(newEntry);
@@ -155,10 +190,13 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
     if (cust.id) idMap.set(cust.id, cust);
   });
 
-  // 2. Scan all non-void invoices to discover or augment customers
-  (invoices || []).forEach((inv) => {
-    if (inv.status === "void") return;
+  // Sort invoices chronologically ascending so newest invoices are processed last and determine the latest customer details
+  const sortedInvoices = [...(invoices || [])]
+    .filter((inv) => inv.status !== "void")
+    .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
 
+  // 2. Scan all non-void invoices to discover or augment customers
+  sortedInvoices.forEach((inv) => {
     const rawName = inv.customer_name?.trim() || "";
     const cleanPhone = normalizePhoneNumber(inv.customer_phone);
     const isAnon = isAnonymousCustomerName(rawName);
@@ -188,6 +226,10 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
     }
 
     if (matched) {
+      const custUpdatedAt = matched.updated_at ? new Date(matched.updated_at).getTime() : 0;
+      const invTime = inv.created_at ? new Date(inv.created_at).getTime() : 0;
+      const isInvoiceNewerOrEqual = invTime >= custUpdatedAt;
+
       // Invoices augment missing fields on existing CRM profiles
       if ((!matched.phone || matched.phone.length < 7) && cleanPhone) {
         matched.phone = cleanPhone.length === 10 ? cleanPhone : (inv.customer_phone || matched.phone);
@@ -203,12 +245,12 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
           matched.last_visit = inv.created_at;
         }
       }
-      // If invoice was edited directly with customer_id link, reflect updated phone/name
+      // If invoice was edited directly with customer_id link, reflect updated phone/name if invoice is newer than customer's manual edit
       if (inv.customer_id && matched.id && inv.customer_id === matched.id) {
-        if (cleanPhone && cleanPhone.length >= 7) {
+        if (cleanPhone && cleanPhone.length >= 7 && isInvoiceNewerOrEqual) {
           matched.phone = cleanPhone.length === 10 ? cleanPhone : (inv.customer_phone || matched.phone);
         }
-        if (rawName && !isAnon) {
+        if (rawName && !isAnon && isInvoiceNewerOrEqual) {
           matched.name = rawName;
         }
       }

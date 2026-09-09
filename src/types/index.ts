@@ -88,6 +88,7 @@ export interface Customer {
   last_reminder_sent_at?: string;
   notes?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface CustomerReminderInfo {

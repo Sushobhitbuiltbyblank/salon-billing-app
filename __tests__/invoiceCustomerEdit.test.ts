@@ -314,4 +314,182 @@ describe("Invoice Customer Detail Editing & Client Reconciliation", () => {
     expect(unified[0].total_visits).toBe(1);
     expect(unified[0].total_spent).toBe(400);
   });
+
+  it("updates customer name from aarti to aditi and phone number in invoice, and older invoices do NOT revert the CRM detail", () => {
+    localStorage.clear();
+
+    const customerId = "390a10bd-6aca-48e1-bc65-7f152ba81df0";
+    const initialPhone = "9716462401";
+
+    const customer: Customer = {
+      id: customerId,
+      name: "aarti ji",
+      phone: initialPhone,
+      gender: "female",
+      total_visits: 2,
+      total_spent: 1550,
+      created_at: "2026-09-07T15:05:30.000Z",
+      updated_at: "2026-09-07T15:05:30.000Z",
+    };
+    Storage.saveCustomer(customer);
+
+    // Older invoice from 2 days ago
+    const olderInvoice: Invoice = {
+      id: "inv-older-1",
+      invoice_number: "BZ-20260907-6690",
+      customer_id: customerId,
+      customer_name: "aarti ji",
+      customer_phone: initialPhone,
+      subtotal: 650,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 650,
+      payment_mode: "cash",
+      status: "paid",
+      created_at: "2026-09-07T15:05:30.000Z",
+      items: [],
+    };
+    Storage.createInvoice(olderInvoice);
+
+    // Newer invoice from today
+    const newerInvoice: Invoice = {
+      id: "inv-newer-2",
+      invoice_number: "BZ-20260909-1321",
+      customer_id: customerId,
+      customer_name: "aarti ji",
+      customer_phone: initialPhone,
+      subtotal: 900,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 900,
+      payment_mode: "upi",
+      status: "paid",
+      created_at: "2026-09-09T15:00:52.000Z",
+      items: [],
+    };
+    Storage.createInvoice(newerInvoice);
+
+    // Cashier edits invoice BZ-20260909-1321: changes name from "aarti ji" to "Aditi" and updates phone to "9716462499"
+    const correctedPhone = "9716462499";
+    const updatedInvoice: Invoice = {
+      ...newerInvoice,
+      customer_name: "Aditi",
+      customer_phone: correctedPhone,
+    };
+
+    // Update invoice in Storage
+    Storage.updateInvoice(updatedInvoice);
+
+    // Verify customer profile in storage was updated
+    const customersInStorage = Storage.getCustomers();
+    const targetCust = customersInStorage.find((c) => c.id === customerId);
+    expect(targetCust).toBeDefined();
+    expect(targetCust!.name).toBe("Aditi");
+    expect(normalizePhoneNumber(targetCust!.phone)).toBe(correctedPhone);
+
+    // Verify CRM unified list shows Aditi and corrected phone, NOT reverted by older invoice
+    const crmList = unifyCustomerList(customersInStorage, Storage.getInvoices());
+    expect(crmList.length).toBe(1);
+    expect(crmList[0].id).toBe(customerId);
+    expect(crmList[0].name).toBe("Aditi");
+    expect(normalizePhoneNumber(crmList[0].phone)).toBe(correctedPhone);
+    expect(crmList[0].total_visits).toBe(2);
+    expect(crmList[0].total_spent).toBe(1550);
+  });
+
+  it("updates customer name from 'Priyanka.....' to 'Priyanka' and CRM preserves the updated name", () => {
+    localStorage.clear();
+
+    const customerId = "37f77587-2aca-457c-8c12-577d113fff29";
+    const phone = "9818732459";
+
+    const customer: Customer = {
+      id: customerId,
+      name: "Priyanka.....",
+      phone: phone,
+      gender: "female",
+      total_visits: 1,
+      total_spent: 500,
+      created_at: "2026-09-09T13:44:21.000Z",
+      updated_at: "2026-09-09T13:44:21.000Z",
+    };
+    Storage.saveCustomer(customer);
+
+    const invoice: Invoice = {
+      id: "inv-priyanka-1",
+      invoice_number: "BZ-20260909-6741",
+      customer_id: customerId,
+      customer_name: "Priyanka.....",
+      customer_phone: phone,
+      subtotal: 500,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 500,
+      payment_mode: "cash",
+      status: "paid",
+      created_at: "2026-09-09T13:44:21.000Z",
+      items: [],
+    };
+    Storage.createInvoice(invoice);
+
+    // Update customer in invoice to clean name "Priyanka"
+    const updatedInvoice: Invoice = {
+      ...invoice,
+      customer_name: "Priyanka",
+    };
+    Storage.updateInvoice(updatedInvoice);
+
+    // CRM unification must show "Priyanka"
+    const crmList = unifyCustomerList(Storage.getCustomers(), Storage.getInvoices());
+    expect(crmList.length).toBe(1);
+    expect(crmList[0].name).toBe("Priyanka");
+  });
+
+  it("multi-device conflict resolution: Device B adopts Device A's customer updates based on newer updated_at timestamp", () => {
+    // Device B currently has stale local cached customer "Aarti" with timestamp T1
+    const deviceBCachedCustomer: Customer = {
+      id: "cust-sync-version-1",
+      name: "Aarti",
+      phone: "9810011111",
+      gender: "female",
+      total_visits: 1,
+      total_spent: 400,
+      created_at: "2026-09-09T10:00:00.000Z",
+      updated_at: "2026-09-09T10:00:00.000Z",
+    };
+
+    // Device A updated customer to "Aditi" with corrected phone "9810022222" at timestamp T2 (newer)
+    const deviceACloudCustomer: Customer = {
+      id: "cust-sync-version-1",
+      name: "Aditi",
+      phone: "9810022222",
+      gender: "female",
+      total_visits: 1,
+      total_spent: 400,
+      created_at: "2026-09-09T10:00:00.000Z",
+      updated_at: "2026-09-09T12:30:00.000Z", // Newer!
+    };
+
+    // When Device B receives cloud update and runs deduplicateCustomerArray([...cloud, ...local])
+    const mergedOnDeviceB = deduplicateCustomerArray([deviceACloudCustomer, deviceBCachedCustomer]);
+    expect(mergedOnDeviceB.length).toBe(1);
+    expect(mergedOnDeviceB[0].name).toBe("Aditi");
+    expect(normalizePhoneNumber(mergedOnDeviceB[0].phone)).toBe("9810022222");
+    expect(mergedOnDeviceB[0].updated_at).toBe("2026-09-09T12:30:00.000Z");
+
+    // Also test reverse array order to ensure timestamp priority holds regardless of list order
+    const mergedReverseOrder = deduplicateCustomerArray([deviceBCachedCustomer, deviceACloudCustomer]);
+    expect(mergedReverseOrder.length).toBe(1);
+    expect(mergedReverseOrder[0].name).toBe("Aditi");
+    expect(normalizePhoneNumber(mergedReverseOrder[0].phone)).toBe("9810022222");
+  });
 });

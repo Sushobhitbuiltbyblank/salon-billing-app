@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
 import { DEFAULT_USERS, DEFAULT_CATEGORIES, DEFAULT_CATALOG, Storage } from "./storage";
-import { normalizePhoneNumber } from "./customerUtils";
+import { normalizePhoneNumber, isAnonymousCustomerName } from "./customerUtils";
 import {
   AppUser,
   CatalogItem,
@@ -212,10 +212,31 @@ export const SupabaseSync = {
 
           return remoteCatalog;
         })(),
-        customers: (customersRes.data || []).map((cust: any) => ({
-          ...cust,
-          total_spent: Number(cust.total_spent) || 0,
-        })),
+        customers: (customersRes.data || []).map((cust: any) => {
+          let userNotes = cust.notes || "";
+          let updatedAt = cust.updated_at || cust.created_at;
+
+          if (cust.notes && typeof cust.notes === "string" && cust.notes.trim().startsWith("{")) {
+            try {
+              const parsed = JSON.parse(cust.notes);
+              if (parsed.updated_at) {
+                updatedAt = parsed.updated_at;
+              }
+              if (parsed.text !== undefined) {
+                userNotes = parsed.text;
+              } else if (parsed.user_notes !== undefined) {
+                userNotes = parsed.user_notes;
+              }
+            } catch {}
+          }
+
+          return {
+            ...cust,
+            notes: userNotes,
+            updated_at: updatedAt,
+            total_spent: Number(cust.total_spent) || 0,
+          };
+        }),
         invoices: (invoicesRes.data || []).map((inv: any) => {
           let userNotes = inv.notes || "";
           let itemsFromMeta: InvoiceItem[] | null = null;
@@ -655,6 +676,71 @@ export const SupabaseSync = {
         }
       }
 
+      // 3. Synchronize customer profile in Supabase customers table and all other invoices
+      try {
+        const cleanPhone = normalizePhoneNumber(invoice.customer_phone);
+        const standardPhone = cleanPhone.length === 10 ? cleanPhone : (invoice.customer_phone || null);
+        let targetCustId = finalCustomerId;
+
+        if (!targetCustId && standardPhone && standardPhone.length >= 7) {
+          const { data: matchedCust } = await supabase
+            .from("customers")
+            .select("id, notes")
+            .eq("phone", standardPhone)
+            .maybeSingle();
+          if (matchedCust?.id) {
+            targetCustId = matchedCust.id;
+          }
+        }
+
+        if (targetCustId) {
+          const custUpdatedAt = new Date().toISOString();
+          const updateCustPayload: any = {
+            notes: JSON.stringify({ text: "", updated_at: custUpdatedAt }),
+          };
+          if (invoice.customer_name && !isAnonymousCustomerName(invoice.customer_name)) {
+            updateCustPayload.name = invoice.customer_name.trim();
+          }
+          if (standardPhone && standardPhone.length >= 7) {
+            updateCustPayload.phone = standardPhone;
+          }
+          if (invoice.customer_email) {
+            updateCustPayload.email = invoice.customer_email.trim();
+          }
+          if (invoice.customer_gender && invoice.customer_gender !== "unspecified") {
+            updateCustPayload.gender = invoice.customer_gender;
+          }
+
+          await supabase
+            .from("customers")
+            .update(updateCustPayload)
+            .eq("id", targetCustId);
+
+          // Synchronize other invoices in Supabase linked to this customer
+          const syncOtherInvs: any = {};
+          if (updateCustPayload.name) syncOtherInvs.customer_name = updateCustPayload.name;
+          if (updateCustPayload.phone) syncOtherInvs.customer_phone = updateCustPayload.phone;
+          if (updateCustPayload.gender) syncOtherInvs.customer_gender = updateCustPayload.gender;
+          if (updateCustPayload.email) syncOtherInvs.customer_email = updateCustPayload.email;
+
+          if (Object.keys(syncOtherInvs).length > 0) {
+            await supabase
+              .from("invoices")
+              .update(syncOtherInvs)
+              .eq("customer_id", targetCustId);
+
+            if (standardPhone && standardPhone.length >= 7) {
+              await supabase
+                .from("invoices")
+                .update(syncOtherInvs)
+                .eq("customer_phone", standardPhone);
+            }
+          }
+        }
+      } catch (custSyncErr) {
+        console.warn("Supabase updateInvoice customer sync non-blocking warning:", custSyncErr);
+      }
+
       return updatedInv;
     } catch (err) {
       console.error("Supabase updateInvoice error:", err);
@@ -984,6 +1070,20 @@ export const SupabaseSync = {
           ? customer.gender
           : "female";
 
+      const updatedAtIso = customer.updated_at || new Date().toISOString();
+      let rawNotes = customer.notes?.trim() || "";
+      if (rawNotes.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(rawNotes);
+          rawNotes = parsed.text !== undefined ? parsed.text : (parsed.user_notes !== undefined ? parsed.user_notes : "");
+        } catch {}
+      }
+
+      const notesPayload = JSON.stringify({
+        text: rawNotes,
+        updated_at: updatedAtIso,
+      });
+
       const payload: any = {
         name: customer.name?.trim() || `Guest (${standardPhone})`,
         phone: standardPhone,
@@ -994,7 +1094,7 @@ export const SupabaseSync = {
         total_visits: Number(customer.total_visits) >= 0 ? Number(customer.total_visits) : 0,
         total_spent: Number(customer.total_spent) >= 0 ? Number(customer.total_spent) : 0,
         last_visit: customer.last_visit || null,
-        notes: customer.notes?.trim() || null,
+        notes: notesPayload,
       };
 
       let savedCust: any = null;
@@ -1074,8 +1174,36 @@ export const SupabaseSync = {
           })
           .eq("customer_id", finalId);
       }
+      if (standardPhone && standardPhone.length >= 7) {
+        await supabase
+          .from("invoices")
+          .update({
+            customer_name: payload.name,
+            customer_phone: payload.phone,
+            customer_email: payload.email || "",
+            customer_gender: payload.gender,
+          })
+          .eq("customer_phone", standardPhone);
+      }
 
-      return savedCust || null;
+      if (savedCust) {
+        let userNotes = savedCust.notes || "";
+        let finalUpdatedAt = updatedAtIso;
+        if (savedCust.notes && typeof savedCust.notes === "string" && savedCust.notes.trim().startsWith("{")) {
+          try {
+            const parsed = JSON.parse(savedCust.notes);
+            if (parsed.updated_at) finalUpdatedAt = parsed.updated_at;
+            if (parsed.text !== undefined) userNotes = parsed.text;
+          } catch {}
+        }
+        return {
+          ...savedCust,
+          notes: userNotes,
+          updated_at: finalUpdatedAt,
+        };
+      }
+
+      return null;
     } catch (err) {
       console.error("Supabase saveCustomer exception:", err);
       return null;

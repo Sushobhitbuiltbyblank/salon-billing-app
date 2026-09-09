@@ -270,14 +270,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const cloudList = deduplicateCustomerArray(cloudData.customers);
           const localList = Storage.getCustomers();
 
-          // Preserve any very recent customer created in the last 60 seconds that might be in-flight
-          const nowTime = Date.now();
-          const inFlightLocal = localList.filter((c) => {
-            const createdTime = c.created_at ? new Date(c.created_at).getTime() : 0;
-            return nowTime - createdTime < 60000;
-          });
-
-          const deduplicatedCloud = deduplicateCustomerArray([...cloudList, ...inFlightLocal]);
+          // Merge cloud customers with local customers using versioned deduplicateCustomerArray
+          const deduplicatedCloud = deduplicateCustomerArray([...cloudList, ...localList]);
           setCustomers((prev) =>
             JSON.stringify(prev) !== JSON.stringify(deduplicatedCloud) ? deduplicatedCloud : prev
           );
@@ -798,6 +792,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateInvoice = async (inv: Invoice): Promise<Invoice> => {
     const updated = Storage.updateInvoice(inv);
     setInvoices(Storage.getInvoices());
+    setCustomers(Storage.getCustomers());
     setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
     if (isSupabaseConfigured()) {
       try {
@@ -813,8 +808,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.saveInvoices(merged);
         }
         if (cloudData?.customers) {
-          setCustomers(cloudData.customers);
-          Storage.saveCustomers(cloudData.customers);
+          const cloudList = deduplicateCustomerArray(cloudData.customers);
+          const localList = Storage.getCustomers();
+          const mergedCusts = deduplicateCustomerArray([...cloudList, ...localList]);
+          setCustomers(mergedCusts);
+          Storage.saveCustomers(mergedCusts);
         }
       } catch (e) {
         console.warn("Failed to sync invoice update to cloud; safely retained in offline queue:", e);
