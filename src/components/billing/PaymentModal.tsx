@@ -44,13 +44,14 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
     clearDraft,
     createInvoice,
     setPrintInvoice,
-    settings,
     customers,
+    invoices,
     saveCustomer,
   } = useApp();
 
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("upi");
   const [cashTendered, setCashTendered] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [splitBreakdown, setSplitBreakdown] = useState<PaymentBreakdown>({
     cash: 0,
     upi: 0,
@@ -82,6 +83,13 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
     }
   }, [paymentMode, totals.grandTotal]);
 
+  // Reset isSubmitting when modal closes or opens
+  useEffect(() => {
+    if (!open) {
+      setIsSubmitting(false);
+    }
+  }, [open]);
+
   // UPI payment QR string (Standard Indian NPCI UPI intent)
   const upiIntentString = `upi://pay?pa=${settings.upi_id}&pn=${encodeURIComponent(
     settings.salon_name
@@ -96,7 +104,8 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
   );
 
   const handleCheckout = async () => {
-    if (draftItems.length === 0) return;
+    // Immediate double-click guard: prevent re-entrance while already processing or if cart is empty
+    if (isSubmitting || draftItems.length === 0) return;
 
     // VALIDATE GENDER MANDATORY ONLY FOR SPECIFIC NAMED / REGISTERED CUSTOMERS (OPTIONAL FOR GUEST / WALK-IN)
     if (hasNamedCustomer && (!draftCustomer?.gender || draftCustomer.gender === "unspecified")) {
@@ -106,7 +115,10 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
       return;
     }
 
-    const invoiceNumber = generateInvoiceNumber(settings.invoice_prefix);
+    setIsSubmitting(true);
+
+    try {
+      const invoiceNumber = generateInvoiceNumber(settings.invoice_prefix, invoices);
 
     const chosenGender: "female" | "male" | "other" | "unspecified" =
       draftCustomer?.gender && draftCustomer.gender !== "unspecified"
@@ -193,7 +205,12 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
 
     // Open Print Modal with saved invoice
     setPrintInvoice(saved);
-  };
+  } catch (err) {
+    console.error("Checkout failed:", err);
+    alert("An error occurred while finalizing the bill. Please try again.");
+    setIsSubmitting(false);
+  }
+};
 
   const splitTotal =
     (splitBreakdown.cash || 0) +
@@ -608,18 +625,27 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
       </div>
 
       <DialogFooter>
-        <Button variant="secondary" onClick={() => onOpenChange(false)}>
+        <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
           Back
         </Button>
         <Button
           variant="glow"
           size="lg"
           onClick={handleCheckout}
-          disabled={draftItems.length === 0 || (paymentMode === "split" && !isSplitBalanced)}
+          disabled={isSubmitting || draftItems.length === 0 || (paymentMode === "split" && !isSplitBalanced)}
           className="w-full sm:w-auto"
         >
-          <Receipt className="h-4 w-4 mr-1.5" />
-          Complete & Print Receipt
+          {isSubmitting ? (
+            <>
+              <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1.5" />
+              Processing & Saving...
+            </>
+          ) : (
+            <>
+              <Receipt className="h-4 w-4 mr-1.5" />
+              Complete & Print Receipt
+            </>
+          )}
         </Button>
       </DialogFooter>
     </Dialog>

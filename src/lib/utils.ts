@@ -58,13 +58,33 @@ export function formatShortDate(dateInput: string | Date | undefined): string {
   }).format(date);
 }
 
-export function generateInvoiceNumber(prefix: string = "BZ-"): string {
+export function generateInvoiceNumber(prefix: string = "BZ-", existingInvoices?: { invoice_number: string }[]): string {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
-  const random = Math.floor(1000 + Math.random() * 9000);
-  return `${prefix}${year}${month}${day}-${random}`;
+  const datePart = `${year}${month}${day}`;
+
+  // Time-based high-resolution suffix: HHMMSS + 2-digit random (e.g. 143022-84)
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const seconds = String(now.getSeconds()).padStart(2, "0");
+  const randomSuffix = Math.floor(10 + Math.random() * 90);
+  
+  let candidate = `${prefix}${datePart}-${hours}${minutes}${seconds}${randomSuffix}`;
+
+  // If existing invoices list is provided, guarantee absolute uniqueness
+  if (existingInvoices && existingInvoices.length > 0) {
+    const existingSet = new Set(existingInvoices.map((inv) => inv.invoice_number));
+    let attempts = 0;
+    while (existingSet.has(candidate) && attempts < 50) {
+      const extraRandom = Math.floor(1000 + Math.random() * 9000);
+      candidate = `${prefix}${datePart}-${extraRandom}`;
+      attempts++;
+    }
+  }
+
+  return candidate;
 }
 
 export function getReceiptPublicUrl(invoice: Invoice): string {
