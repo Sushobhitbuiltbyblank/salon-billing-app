@@ -15,15 +15,23 @@ import {
   QrCode,
   Banknote,
   Layers,
+  ShoppingBag,
+  Package,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { getInvoiceRealizationFactor } from "@/lib/calculations";
+import {
+  getInvoiceRealizationFactor,
+  calculateInvoiceProductSaleTotal,
+} from "@/lib/calculations";
+import { SalesBreakdownScope } from "@/lib/salesAnalytics";
 import { Card } from "@/components/ui/card";
 import { SalesBreakdownView } from "./SalesBreakdownView";
 
 export function SalesOverview() {
   const { invoices, expenses, settings, staff, catalog, setActiveTab } = useApp();
   const [timeframe, setTimeframe] = useState<"today" | "week" | "month" | "all">("today");
+  const [breakdownScope, setBreakdownScope] = useState<SalesBreakdownScope>("all");
+  const [topItemsTab, setTopItemsTab] = useState<"services" | "products">("services");
 
   // Filter invoices and expenses by timeframe
   const { filteredInvoices, filteredExpenses } = useMemo(() => {
@@ -61,6 +69,32 @@ export function SalesOverview() {
   const netProfit = grossSales - totalExpenses;
   const profitMargin = grossSales > 0 ? ((netProfit / grossSales) * 100).toFixed(1) : "0";
 
+  // Retail Product Sales KPIs
+  const { retailProductSales, retailUnitsSold, retailInvoicesCount } = useMemo(() => {
+    let sales = 0;
+    let units = 0;
+    let count = 0;
+
+    filteredInvoices.forEach((inv) => {
+      const pSale = calculateInvoiceProductSaleTotal(inv);
+      const hasProduct = (inv.items || []).some((it) => it.item_type === "product");
+      if (pSale > 0 || hasProduct) {
+        sales += pSale;
+        count += 1;
+        const pUnits = (inv.items || [])
+          .filter((it) => it.item_type === "product")
+          .reduce((sum, it) => sum + (Number(it.quantity) || 1), 0);
+        units += pUnits;
+      }
+    });
+
+    return {
+      retailProductSales: sales,
+      retailUnitsSold: units,
+      retailInvoicesCount: count,
+    };
+  }, [filteredInvoices]);
+
   // Payment Mode Breakdown
   const paymentBreakdown = useMemo(() => {
     const counts = { upi: 0, cash: 0, card: 0, split: 0 };
@@ -72,30 +106,52 @@ export function SalesOverview() {
     return counts;
   }, [filteredInvoices]);
 
-  // Top Services Breakdown
-  const topItems = useMemo(() => {
-    const itemMap = new Map<string, { name: string; type: string; count: number; revenue: number }>();
+  // Top Items Breakdown (Services vs Products)
+  const { topServices, topProducts } = useMemo(() => {
+    const serviceMap = new Map<string, { name: string; type: string; count: number; revenue: number }>();
+    const productMap = new Map<string, { name: string; type: string; count: number; revenue: number }>();
+
     filteredInvoices.forEach((inv) => {
       const factor = getInvoiceRealizationFactor(inv);
       inv.items.forEach((item) => {
-        const existing = itemMap.get(item.item_name) || {
-          name: item.item_name,
-          type: item.item_type,
-          count: 0,
-          revenue: 0,
-        };
-        existing.count += item.quantity;
         const itemNet =
           item.total_price !== undefined
             ? item.total_price
             : (item.unit_price || 0) * (item.quantity || 1) - (item.discount || 0);
-        existing.revenue += itemNet * factor;
-        itemMap.set(item.item_name, existing);
+        const realizedRevenue = itemNet * factor;
+
+        if (item.item_type === "product") {
+          const existing = productMap.get(item.item_name) || {
+            name: item.item_name,
+            type: "product",
+            count: 0,
+            revenue: 0,
+          };
+          existing.count += item.quantity || 1;
+          existing.revenue += realizedRevenue;
+          productMap.set(item.item_name, existing);
+        } else {
+          const existing = serviceMap.get(item.item_name) || {
+            name: item.item_name,
+            type: "service",
+            count: 0,
+            revenue: 0,
+          };
+          existing.count += item.quantity || 1;
+          existing.revenue += realizedRevenue;
+          serviceMap.set(item.item_name, existing);
+        }
       });
     });
-    return Array.from(itemMap.values())
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
+
+    return {
+      topServices: Array.from(serviceMap.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5),
+      topProducts: Array.from(productMap.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5),
+    };
   }, [filteredInvoices]);
 
   return (
@@ -108,7 +164,7 @@ export function SalesOverview() {
             <span>Today's Daily Register & Shift Dashboard</span>
           </h2>
           <p className="text-xs text-zinc-400">
-            Real-time daily collections, settled tickets, today's cash drawer, and shift expenses.
+            Real-time daily collections, retail products sold, settled tickets, and cash drawer.
           </p>
         </div>
 
@@ -147,10 +203,17 @@ export function SalesOverview() {
         </div>
       </div>
 
-      {/* KPI METRIC CARDS (3-COLUMN LAYOUT) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* KPI METRIC CARDS (4-COLUMN LAYOUT WITH RETAIL PRODUCTS SALE) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* GROSS REVENUE */}
-        <Card className="border-purple-500/20 bg-gradient-to-br from-purple-950/30 to-zinc-900/90">
+        <Card
+          onClick={() => setBreakdownScope("all")}
+          className={`cursor-pointer transition-all duration-200 hover:border-purple-500/50 ${
+            breakdownScope === "all"
+              ? "border-purple-500 ring-1 ring-purple-500/30 bg-gradient-to-br from-purple-950/40 via-purple-900/20 to-zinc-900/90"
+              : "border-purple-500/20 bg-gradient-to-br from-purple-950/30 to-zinc-900/90"
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-purple-300">Gross Sales</span>
             <div className="h-8 w-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
@@ -160,8 +223,37 @@ export function SalesOverview() {
           <div className="mt-2 text-2xl font-black text-white font-mono">
             {formatCurrency(grossSales, settings.currency_symbol)}
           </div>
-          <div className="text-[11px] text-zinc-400 mt-1 flex items-center gap-1">
-            <span className="text-purple-400 font-bold">{filteredInvoices.length}</span> invoices settled
+          <div className="text-[11px] text-zinc-400 mt-1 flex items-center justify-between">
+            <span>
+              <span className="text-purple-400 font-bold">{filteredInvoices.length}</span> invoices
+            </span>
+            <span className="text-[10px] text-purple-400 hover:underline">View All →</span>
+          </div>
+        </Card>
+
+        {/* RETAIL PRODUCTS SALE */}
+        <Card
+          onClick={() => setBreakdownScope("product")}
+          className={`cursor-pointer transition-all duration-200 hover:border-pink-500/50 ${
+            breakdownScope === "product"
+              ? "border-pink-500 ring-1 ring-pink-500/30 bg-gradient-to-br from-pink-950/40 via-rose-900/20 to-zinc-900/90"
+              : "border-pink-500/20 bg-gradient-to-br from-pink-950/30 to-zinc-900/90"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-pink-300">Retail Products Sale</span>
+            <div className="h-8 w-8 rounded-xl bg-pink-500/20 text-pink-400 flex items-center justify-center shadow-inner">
+              <ShoppingBag className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2 text-2xl font-black text-pink-300 font-mono">
+            {formatCurrency(retailProductSales, settings.currency_symbol)}
+          </div>
+          <div className="text-[11px] text-zinc-400 mt-1 flex items-center justify-between">
+            <span>
+              <span className="text-pink-400 font-bold">{retailUnitsSold}</span> units sold ({retailInvoicesCount} bills)
+            </span>
+            <span className="text-[10px] text-pink-400 hover:underline">Breakdown →</span>
           </div>
         </Card>
 
@@ -198,7 +290,7 @@ export function SalesOverview() {
         </Card>
       </div>
 
-      {/* SECOND ROW: PAYMENT BREAKDOWN & TOP TREATMENTS (BELOW NET PROFIT) */}
+      {/* SECOND ROW: PAYMENT BREAKDOWN & TOP ITEMS (TREATMENTS vs RETAIL PRODUCTS) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* PAYMENT CHANNELS DISTRIBUTION */}
         <Card>
@@ -249,24 +341,92 @@ export function SalesOverview() {
           </div>
         </Card>
 
-        {/* TOP PERFORMING SERVICES & RETAIL */}
+        {/* TOP PERFORMING SERVICES & RETAIL PRODUCTS TABBED CARD */}
         <Card>
-          <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-amber-400" />
-            Top Revenue Generating Treatments
-          </h3>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              {topItemsTab === "services" ? (
+                <>
+                  <Sparkles className="h-4 w-4 text-amber-400" />
+                  Top Revenue Treatments
+                </>
+              ) : (
+                <>
+                  <ShoppingBag className="h-4 w-4 text-pink-400" />
+                  Top Selling Retail Products
+                </>
+              )}
+            </h3>
+
+            {/* TAB SWITCHER */}
+            <div className="flex items-center bg-zinc-900 p-0.5 rounded-lg border border-zinc-800 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setTopItemsTab("services")}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  topItemsTab === "services"
+                    ? "bg-purple-600 text-white font-bold shadow-sm"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                Treatments
+              </button>
+              <button
+                type="button"
+                onClick={() => setTopItemsTab("products")}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                  topItemsTab === "products"
+                    ? "bg-pink-600 text-white font-bold shadow-sm"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                Retail Products
+              </button>
+            </div>
+          </div>
 
           <div className="space-y-2.5">
-            {topItems.length === 0 ? (
-              <p className="text-xs text-zinc-500 text-center py-6">No service sales in this period.</p>
+            {topItemsTab === "services" ? (
+              topServices.length === 0 ? (
+                <p className="text-xs text-zinc-500 text-center py-6">No treatment sales in this period.</p>
+              ) : (
+                topServices.map((item, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-600/30 text-purple-300 text-[10px] font-bold font-mono">
+                        {index + 1}
+                      </span>
+                      <div>
+                        <div className="text-xs font-bold text-white leading-tight">
+                          {item.name}
+                        </div>
+                        <div className="text-[10px] text-zinc-400">
+                          {item.count} orders booked
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-xs font-extrabold text-emerald-400 font-mono">
+                        {formatCurrency(item.revenue, settings.currency_symbol)}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )
+            ) : topProducts.length === 0 ? (
+              <p className="text-xs text-zinc-500 text-center py-6">No retail product sales in this period.</p>
             ) : (
-              topItems.map((item, index) => (
+              topProducts.map((item, index) => (
                 <div
                   key={index}
                   className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80"
                 >
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-600/30 text-purple-300 text-[10px] font-bold font-mono">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-pink-600/30 text-pink-300 text-[10px] font-bold font-mono">
                       {index + 1}
                     </span>
                     <div>
@@ -274,13 +434,13 @@ export function SalesOverview() {
                         {item.name}
                       </div>
                       <div className="text-[10px] text-zinc-400">
-                        {item.count} orders booked
+                        {item.count} units sold
                       </div>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <div className="text-xs font-extrabold text-emerald-400 font-mono">
+                    <div className="text-xs font-extrabold text-pink-400 font-mono">
                       {formatCurrency(item.revenue, settings.currency_symbol)}
                     </div>
                   </div>
@@ -292,7 +452,10 @@ export function SalesOverview() {
       </div>
 
       {/* PERIODIC SALES INTELLIGENCE: DAY-WISE (WEEK & MONTH) AND MONTH-WISE (YEAR) BREAKDOWN */}
-      <SalesBreakdownView />
+      <SalesBreakdownView
+        activeScope={breakdownScope}
+        onScopeChange={setBreakdownScope}
+      />
     </div>
   );
 }

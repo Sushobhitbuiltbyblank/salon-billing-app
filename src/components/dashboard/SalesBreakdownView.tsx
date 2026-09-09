@@ -12,6 +12,7 @@ import {
   getYearMonthWiseSales,
   PeriodicSalesSummary,
   SalesDataPoint,
+  SalesBreakdownScope,
 } from "@/lib/salesAnalytics";
 import {
   Calendar,
@@ -31,17 +32,35 @@ import {
   Sparkles,
   Info,
   CheckCircle2,
+  ShoppingBag,
+  Package,
 } from "lucide-react";
 
 export type SalesPeriodTab = "week" | "month" | "year";
 
 interface SalesBreakdownViewProps {
   initialTab?: SalesPeriodTab;
+  initialScope?: SalesBreakdownScope;
+  activeScope?: SalesBreakdownScope;
+  onScopeChange?: (scope: SalesBreakdownScope) => void;
 }
 
-export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewProps) {
+export function SalesBreakdownView({
+  initialTab = "week",
+  initialScope = "all",
+  activeScope: controlledScope,
+  onScopeChange,
+}: SalesBreakdownViewProps) {
   const { invoices, settings } = useApp();
   const [selectedPeriod, setSelectedPeriod] = useState<SalesPeriodTab>(initialTab);
+  const [internalScope, setInternalScope] = useState<SalesBreakdownScope>(initialScope);
+  const currentScope = controlledScope ?? internalScope;
+
+  const handleScopeChange = (scope: SalesBreakdownScope) => {
+    setInternalScope(scope);
+    onScopeChange?.(scope);
+  };
+
   const [viewMode, setViewMode] = useState<"both" | "chart" | "table">("both");
   const [onlyActiveDays, setOnlyActiveDays] = useState<boolean>(false);
   const [hoveredPointKey, setHoveredPointKey] = useState<string | null>(null);
@@ -50,13 +69,13 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
   // Compute the periodic summary data
   const summary: PeriodicSalesSummary = useMemo(() => {
     if (selectedPeriod === "week") {
-      return getWeekDayWiseSales(invoices);
+      return getWeekDayWiseSales(invoices, undefined, currentScope);
     }
     if (selectedPeriod === "month") {
-      return getMonthDayWiseSales(invoices);
+      return getMonthDayWiseSales(invoices, undefined, currentScope);
     }
-    return getYearMonthWiseSales(invoices);
-  }, [invoices, selectedPeriod]);
+    return getYearMonthWiseSales(invoices, undefined, currentScope);
+  }, [invoices, selectedPeriod, currentScope]);
 
   // Determine peak sales value for scaling bars (minimum 1 to avoid division by 0)
   const maxSales = useMemo(() => {
@@ -88,40 +107,74 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
 
   // CSV Export
   const handleExportCSV = () => {
-    const headers = [
-      "DATE / PERIOD",
-      "FULL DATE",
-      "TOTAL SALES (INR)",
-      "INVOICES COUNT",
-      "UPI (INR)",
-      "CASH (INR)",
-      "CARD (INR)",
-      "SPLIT (INR)",
-      "SUBTOTAL (INR)",
-      "DISCOUNT (INR)",
-      "TAX (INR)",
-    ];
+    const isProductScope = currentScope === "product";
+    const headers = isProductScope
+      ? [
+          "DATE / PERIOD",
+          "FULL DATE",
+          "RETAIL PRODUCT SALES (INR)",
+          "UNITS SOLD",
+          "INVOICES WITH PRODUCTS",
+          "UPI (INR)",
+          "CASH (INR)",
+          "CARD (INR)",
+          "SPLIT (INR)",
+          "SUBTOTAL (INR)",
+          "PRODUCT DISCOUNT (INR)",
+        ]
+      : [
+          "DATE / PERIOD",
+          "FULL DATE",
+          "TOTAL SALES (INR)",
+          "INVOICES COUNT",
+          "UPI (INR)",
+          "CASH (INR)",
+          "CARD (INR)",
+          "SPLIT (INR)",
+          "SUBTOTAL (INR)",
+          "DISCOUNT (INR)",
+          "TAX (INR)",
+        ];
 
-    const rows = summary.dataPoints.map((p) => [
-      `"${p.label}"`,
-      `"${p.fullDateStr}"`,
-      p.totalSales,
-      p.invoiceCount,
-      p.paymentBreakdown.upi,
-      p.paymentBreakdown.cash,
-      p.paymentBreakdown.card,
-      p.paymentBreakdown.split,
-      p.subtotal,
-      p.discount,
-      p.tax,
-    ]);
+    const rows = summary.dataPoints.map((p) =>
+      isProductScope
+        ? [
+            `"${p.label}"`,
+            `"${p.fullDateStr}"`,
+            p.totalSales,
+            p.productUnits,
+            p.invoiceCount,
+            p.paymentBreakdown.upi,
+            p.paymentBreakdown.cash,
+            p.paymentBreakdown.card,
+            p.paymentBreakdown.split,
+            p.subtotal,
+            p.discount,
+          ]
+        : [
+            `"${p.label}"`,
+            `"${p.fullDateStr}"`,
+            p.totalSales,
+            p.invoiceCount,
+            p.paymentBreakdown.upi,
+            p.paymentBreakdown.cash,
+            p.paymentBreakdown.card,
+            p.paymentBreakdown.split,
+            p.subtotal,
+            p.discount,
+            p.tax,
+          ]
+    );
 
     const csvContent =
       "data:text/csv;charset=utf-8," +
       [
         [`"PERIOD: ${summary.periodTitle.toUpperCase()} - ${summary.dateRangeLabel}"`],
-        [`"TOTAL SALES: ${summary.totalSales}"`],
-        [`"TOTAL INVOICES: ${summary.totalInvoices}"`],
+        [`"SCOPE: ${isProductScope ? "RETAIL PRODUCTS SALE" : "TOTAL SALES (SERVICES & PRODUCTS)"}"`],
+        [`"TOTAL REVENUE: ${summary.totalSales}"`],
+        isProductScope
+          ? [`"TOTAL UNITS SOLD: ${summary.totalProductUnits}"`]
+          : [`"TOTAL INVOICES: ${summary.totalInvoices}"`],
         [],
         headers,
         ...rows,
@@ -134,33 +187,58 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
     link.setAttribute("href", encodedUri);
     link.setAttribute(
       "download",
-      `Sales_Breakdown_${selectedPeriod}_${new Date().toISOString().slice(0, 10)}.csv`
+      `${isProductScope ? "Retail_Product_Sales" : "Sales_Breakdown"}_${selectedPeriod}_${new Date().toISOString().slice(0, 10)}.csv`
     );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  return (
-    <Card className="p-4 sm:p-6 bg-gradient-to-b from-zinc-950 via-zinc-900/90 to-zinc-950 border-purple-500/20 shadow-2xl relative overflow-hidden">
-      {/* BACKGROUND DECORATIVE ACCENTS */}
-      <div className="absolute -right-16 -top-16 w-64 h-64 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -left-16 -bottom-16 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+  const isProduct = currentScope === "product";
 
-      {/* HEADER WITH VIEW SELECTOR TABS */}
+  return (
+    <Card
+      className={`p-4 sm:p-6 bg-gradient-to-b from-zinc-950 via-zinc-900/90 to-zinc-950 shadow-2xl relative overflow-hidden transition-all duration-300 ${
+        isProduct ? "border-pink-500/30" : "border-purple-500/20"
+      }`}
+    >
+      {/* BACKGROUND DECORATIVE ACCENTS */}
+      <div
+        className={`absolute -right-16 -top-16 w-64 h-64 rounded-full blur-3xl pointer-events-none transition-colors duration-500 ${
+          isProduct ? "bg-pink-600/15" : "bg-purple-600/10"
+        }`}
+      />
+      <div
+        className={`absolute -left-16 -bottom-16 w-64 h-64 rounded-full blur-3xl pointer-events-none transition-colors duration-500 ${
+          isProduct ? "bg-rose-600/15" : "bg-indigo-600/10"
+        }`}
+      />
+
+      {/* HEADER WITH SCOPE TABS & VIEW SELECTOR TABS */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-zinc-800/80 relative z-10">
         <div className="flex items-center gap-3">
-          <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-500 to-indigo-500 p-0.5 shadow-lg shadow-purple-600/30 shrink-0">
-            <div className="h-full w-full bg-zinc-950 rounded-[14px] flex items-center justify-center text-purple-400">
-              <TrendingUp className="h-5 w-5" />
+          <div
+            className={`h-11 w-11 rounded-2xl p-0.5 shadow-lg shrink-0 transition-all ${
+              isProduct
+                ? "bg-gradient-to-tr from-pink-600 via-rose-500 to-amber-500 shadow-pink-600/30 text-pink-400"
+                : "bg-gradient-to-tr from-purple-600 via-pink-500 to-indigo-500 shadow-purple-600/30 text-purple-400"
+            }`}
+          >
+            <div className="h-full w-full bg-zinc-950 rounded-[14px] flex items-center justify-center">
+              {isProduct ? <ShoppingBag className="h-5 w-5" /> : <TrendingUp className="h-5 w-5" />}
             </div>
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
-                Total Sales & Periodic Breakdown
+                {isProduct ? "Retail Products Sale & Periodic Breakdown" : "Total Sales & Periodic Breakdown"}
               </h3>
-              <Badge variant="purple" className="text-[10px] uppercase font-mono tracking-wider font-bold">
+              <Badge
+                variant={isProduct ? "secondary" : "purple"}
+                className={`text-[10px] uppercase font-mono tracking-wider font-bold ${
+                  isProduct ? "bg-pink-950/80 text-pink-300 border-pink-700/60" : ""
+                }`}
+              >
                 {selectedPeriod === "week"
                   ? "This Week (Day-wise)"
                   : selectedPeriod === "month"
@@ -169,13 +247,42 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
               </Badge>
             </div>
             <p className="text-xs text-zinc-400 mt-0.5">
-              {summary.dateRangeLabel} • Comprehensive daily & monthly sales ledger
+              {summary.dateRangeLabel} • {isProduct ? "Net product realization & units ledger" : "Comprehensive daily & monthly sales ledger"}
             </p>
           </div>
         </div>
 
-        {/* PERIOD TABS (WEEK, MONTH, YEAR) & ACTIONS */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* SCOPE TOGGLES + PERIOD TABS + ACTIONS */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* SCOPE SWITCHER: TOTAL SALES vs RETAIL PRODUCTS */}
+          <div className="flex items-center bg-zinc-900 p-1 rounded-xl border border-zinc-800 shadow-inner">
+            <button
+              type="button"
+              onClick={() => handleScopeChange("all")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                !isProduct
+                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+              }`}
+            >
+              <TrendingUp className="h-3.5 w-3.5" />
+              <span>Total Sales</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleScopeChange("product")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                isProduct
+                  ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-md shadow-pink-600/30"
+                  : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+              }`}
+            >
+              <ShoppingBag className="h-3.5 w-3.5" />
+              <span>Retail Products Sale</span>
+            </button>
+          </div>
+
           {/* 3 PERIOD SELECTORS */}
           <div className="flex items-center bg-zinc-900 p-1 rounded-xl border border-zinc-800 shadow-inner">
             <button
@@ -186,7 +293,9 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 selectedPeriod === "week"
-                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  ? isProduct
+                    ? "bg-pink-600 text-white shadow-md shadow-pink-600/30"
+                    : "bg-purple-600 text-white shadow-md shadow-purple-600/30"
                   : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
               }`}
             >
@@ -202,7 +311,9 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 selectedPeriod === "month"
-                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  ? isProduct
+                    ? "bg-pink-600 text-white shadow-md shadow-pink-600/30"
+                    : "bg-purple-600 text-white shadow-md shadow-purple-600/30"
                   : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
               }`}
             >
@@ -218,7 +329,9 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 selectedPeriod === "year"
-                  ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
+                  ? isProduct
+                    ? "bg-pink-600 text-white shadow-md shadow-pink-600/30"
+                    : "bg-purple-600 text-white shadow-md shadow-purple-600/30"
                   : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
               }`}
             >
@@ -234,7 +347,9 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
               onClick={() => setViewMode("both")}
               className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
                 viewMode === "both"
-                  ? "bg-zinc-800 text-purple-300 font-bold"
+                  ? isProduct
+                    ? "bg-zinc-800 text-pink-300 font-bold"
+                    : "bg-zinc-800 text-purple-300 font-bold"
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
               title="Show Chart & Table"
@@ -246,7 +361,9 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
               onClick={() => setViewMode("chart")}
               className={`p-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
                 viewMode === "chart"
-                  ? "bg-zinc-800 text-purple-300"
+                  ? isProduct
+                    ? "bg-zinc-800 text-pink-300"
+                    : "bg-zinc-800 text-purple-300"
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
               title="Chart View"
@@ -258,7 +375,9 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
               onClick={() => setViewMode("table")}
               className={`p-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
                 viewMode === "table"
-                  ? "bg-zinc-800 text-purple-300"
+                  ? isProduct
+                    ? "bg-zinc-800 text-pink-300"
+                    : "bg-zinc-800 text-purple-300"
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
               title="Table View"
@@ -272,7 +391,11 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
             variant="outline"
             size="sm"
             onClick={handleExportCSV}
-            className="h-8 px-2.5 text-xs text-purple-300 hover:text-white border-purple-800/60 hover:bg-purple-950/50 cursor-pointer gap-1"
+            className={`h-8 px-2.5 text-xs cursor-pointer gap-1 transition-colors ${
+              isProduct
+                ? "text-pink-300 hover:text-white border-pink-800/60 hover:bg-pink-950/50"
+                : "text-purple-300 hover:text-white border-purple-800/60 hover:bg-purple-950/50"
+            }`}
           >
             <Download className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Export</span>
@@ -282,10 +405,26 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
 
       {/* KPI METRIC HIGHLIGHTS STRIP */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-4">
-        {/* TOTAL SALES */}
-        <div className="p-3.5 rounded-xl bg-purple-950/30 border border-purple-800/40 relative overflow-hidden">
-          <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider block">
-            {selectedPeriod === "week"
+        {/* TOTAL SALES / PRODUCT SALES */}
+        <div
+          className={`p-3.5 rounded-xl border relative overflow-hidden ${
+            isProduct
+              ? "bg-pink-950/30 border-pink-800/40"
+              : "bg-purple-950/30 border-purple-800/40"
+          }`}
+        >
+          <span
+            className={`text-[10px] font-bold uppercase tracking-wider block ${
+              isProduct ? "text-pink-300" : "text-purple-300"
+            }`}
+          >
+            {isProduct
+              ? selectedPeriod === "week"
+                ? "Week's Retail Products"
+                : selectedPeriod === "month"
+                ? "Month's Retail Products"
+                : "Year's Retail Products"
+              : selectedPeriod === "week"
               ? "Total Week Sales"
               : selectedPeriod === "month"
               ? "Total Month Sales"
@@ -295,22 +434,32 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
             {formatCurrency(summary.totalSales, settings.currency_symbol)}
           </div>
           <div className="text-[10px] text-zinc-400 mt-1 flex items-center gap-1">
-            <span className="text-purple-400 font-bold">{summary.totalInvoices}</span> bills settled
+            {isProduct ? (
+              <>
+                <span className="text-pink-400 font-bold">{summary.totalProductUnits}</span> units sold (
+                {summary.totalInvoices} bills)
+              </>
+            ) : (
+              <>
+                <span className="text-purple-400 font-bold">{summary.totalInvoices}</span> bills settled
+              </>
+            )}
           </div>
         </div>
 
         {/* AVERAGE SALE */}
         <div className="p-3.5 rounded-xl bg-blue-950/30 border border-blue-800/40">
           <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wider block">
-            {selectedPeriod === "year" ? "Average / Month" : "Average / Day"}
+            {isProduct ? "Retail Avg / " : "Average / "}
+            {selectedPeriod === "year" ? "Month" : "Day"}
           </span>
           <div className="text-xl sm:text-2xl font-black text-blue-300 font-mono mt-1">
             {formatCurrency(summary.averageSales, settings.currency_symbol)}
           </div>
           <div className="text-[10px] text-zinc-400 mt-1">
             {selectedPeriod === "year"
-              ? `${summary.activeDaysCount} active revenue months`
-              : `${summary.activeDaysCount} active billing days`}
+              ? `${summary.activeDaysCount} active retail months`
+              : `${summary.activeDaysCount} active selling days`}
           </div>
         </div>
 
@@ -335,7 +484,11 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
             {activeInspectionPoint?.isCurrent
               ? selectedPeriod === "year"
-                ? "Current Month Run Rate"
+                ? isProduct
+                  ? "Current Month Product Run Rate"
+                  : "Current Month Run Rate"
+                : isProduct
+                ? "Today's Product Sales"
                 : "Today's Collection"
               : "Inspected Period"}
           </span>
@@ -345,7 +498,11 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
               : "₹0.00"}
           </div>
           <div className="text-[10px] text-zinc-400 mt-1 truncate">
-            {activeInspectionPoint ? activeInspectionPoint.label : "Hover over a bar"}
+            {activeInspectionPoint
+              ? isProduct
+                ? `${activeInspectionPoint.label} (${activeInspectionPoint.productUnits} units)`
+                : activeInspectionPoint.label
+              : "Hover over a bar"}
           </div>
         </div>
       </div>
@@ -355,9 +512,15 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
         <div className="mt-2 mb-6 p-4 rounded-2xl bg-zinc-950/70 border border-zinc-800/80">
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-zinc-800/60">
             <div className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-purple-400" />
+              <BarChart3 className={`h-4 w-4 ${isProduct ? "text-pink-400" : "text-purple-400"}`} />
               <span className="text-xs font-bold text-white uppercase tracking-wider">
-                {selectedPeriod === "week"
+                {isProduct
+                  ? selectedPeriod === "week"
+                    ? "Day-wise Retail Product Revenue (This Week)"
+                    : selectedPeriod === "month"
+                    ? "Day-wise Retail Product Revenue (This Month)"
+                    : "Month-wise Retail Product Revenue (This Year)"
+                  : selectedPeriod === "week"
                   ? "Day-wise Revenue Histogram (This Week)"
                   : selectedPeriod === "month"
                   ? "Day-wise Revenue Histogram (This Month)"
@@ -422,7 +585,11 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
                             : isPeak
                             ? "bg-gradient-to-t from-emerald-600 via-teal-500 to-emerald-400 shadow-lg shadow-emerald-500/20"
                             : point.isCurrent
-                            ? "bg-gradient-to-t from-amber-600 via-pink-500 to-purple-500 shadow-lg shadow-purple-500/30"
+                            ? isProduct
+                              ? "bg-gradient-to-t from-amber-600 via-rose-500 to-pink-500 shadow-lg shadow-pink-500/30"
+                              : "bg-gradient-to-t from-amber-600 via-pink-500 to-purple-500 shadow-lg shadow-purple-500/30"
+                            : isProduct
+                            ? "bg-gradient-to-t from-pink-800/80 via-pink-600 to-rose-500 group-hover:from-pink-700 group-hover:to-amber-500"
                             : "bg-gradient-to-t from-purple-800/80 via-purple-600 to-indigo-500 group-hover:from-purple-700 group-hover:to-pink-500"
                         } ${isSelected ? "ring-2 ring-white/60" : ""}`}
                       >
@@ -464,6 +631,8 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
                   className={`h-8 w-8 rounded-lg flex items-center justify-center font-bold text-xs ${
                     activeInspectionPoint.isCurrent
                       ? "bg-amber-500/20 text-amber-300"
+                      : isProduct
+                      ? "bg-pink-500/20 text-pink-300"
                       : "bg-purple-500/20 text-purple-300"
                   }`}
                 >
@@ -485,10 +654,22 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
                       )}
                   </div>
                   <div className="text-[11px] text-zinc-400">
-                    {activeInspectionPoint.invoiceCount} invoices settled •{" "}
-                    <span className="font-mono font-bold text-purple-300">
-                      {formatCurrency(activeInspectionPoint.totalSales, settings.currency_symbol)}
-                    </span>
+                    {isProduct ? (
+                      <>
+                        <span className="font-bold text-pink-300">{activeInspectionPoint.productUnits} units</span> sold across{" "}
+                        {activeInspectionPoint.invoiceCount} invoices •{" "}
+                        <span className="font-mono font-bold text-pink-300">
+                          {formatCurrency(activeInspectionPoint.totalSales, settings.currency_symbol)}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        {activeInspectionPoint.invoiceCount} invoices settled •{" "}
+                        <span className="font-mono font-bold text-purple-300">
+                          {formatCurrency(activeInspectionPoint.totalSales, settings.currency_symbol)}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -496,8 +677,12 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
               {/* PAYMENT BREAKDOWN MINI PILLS */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] text-zinc-500 uppercase font-bold">Collections:</span>
-                <div className="flex items-center gap-1 bg-zinc-950 px-2 py-1 rounded-lg border border-purple-900/40 text-purple-300 font-mono text-[11px]">
-                  <QrCode className="h-3 w-3 text-purple-400" />
+                <div
+                  className={`flex items-center gap-1 bg-zinc-950 px-2 py-1 rounded-lg border font-mono text-[11px] ${
+                    isProduct ? "border-pink-900/40 text-pink-300" : "border-purple-900/40 text-purple-300"
+                  }`}
+                >
+                  <QrCode className={`h-3 w-3 ${isProduct ? "text-pink-400" : "text-purple-400"}`} />
                   <span>UPI: {formatCurrency(activeInspectionPoint.paymentBreakdown.upi, settings.currency_symbol)}</span>
                 </div>
                 <div className="flex items-center gap-1 bg-zinc-950 px-2 py-1 rounded-lg border border-emerald-900/40 text-emerald-300 font-mono text-[11px]">
@@ -525,9 +710,15 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
         <div className="mt-2 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <TableIcon className="h-4 w-4 text-purple-400" />
+              <TableIcon className={`h-4 w-4 ${isProduct ? "text-pink-400" : "text-purple-400"}`} />
               <span className="text-xs font-bold text-white uppercase tracking-wider">
-                {selectedPeriod === "week"
+                {isProduct
+                  ? selectedPeriod === "week"
+                    ? "Retail Products Ledger: This Week"
+                    : selectedPeriod === "month"
+                    ? "Retail Products Ledger: This Month"
+                    : "Retail Products Ledger: This Year"
+                  : selectedPeriod === "week"
                   ? "Daily Ledger: This Week"
                   : selectedPeriod === "month"
                   ? "Daily Ledger: This Month"
@@ -543,7 +734,9 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
                   onClick={() => setOnlyActiveDays(!onlyActiveDays)}
                   className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
                     onlyActiveDays
-                      ? "bg-purple-950/60 border-purple-700 text-purple-200 font-bold"
+                      ? isProduct
+                        ? "bg-pink-950/60 border-pink-700 text-pink-200 font-bold"
+                        : "bg-purple-950/60 border-purple-700 text-purple-200 font-bold"
                       : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
                   }`}
                 >
@@ -560,17 +753,26 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
                   <th className="py-2.5 px-3.5">
                     {selectedPeriod === "year" ? "Month" : "Date & Day"}
                   </th>
-                  <th className="py-2.5 px-3 text-center">Settled Bills</th>
+                  <th className="py-2.5 px-3 text-center">
+                    {isProduct ? "Bills / Invoices" : "Settled Bills"}
+                  </th>
+                  {isProduct && (
+                    <th className="py-2.5 px-3 text-center">Units Sold</th>
+                  )}
                   <th className="py-2.5 px-3 hidden md:table-cell">Payment Channels</th>
                   <th className="py-2.5 px-3 hidden sm:table-cell">Share of Peak</th>
-                  <th className="py-2.5 px-3.5 text-right">Total Revenue</th>
+                  <th className="py-2.5 px-3.5 text-right">
+                    {isProduct ? "Retail Realization" : "Total Revenue"}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-900">
                 {tableDataPoints.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-zinc-500 text-xs">
-                      No billing activity recorded for this period.
+                    <td colSpan={isProduct ? 6 : 5} className="py-8 text-center text-zinc-500 text-xs">
+                      {isProduct
+                        ? "No retail product sales recorded for this period."
+                        : "No billing activity recorded for this period."}
                     </td>
                   </tr>
                 ) : (
@@ -584,7 +786,9 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
                         onClick={() => setSelectedPointKey(point.key)}
                         className={`hover:bg-zinc-900/70 transition-colors cursor-pointer ${
                           point.isCurrent
-                            ? "bg-purple-950/20"
+                            ? isProduct
+                              ? "bg-pink-950/20"
+                              : "bg-purple-950/20"
                             : isPeak
                             ? "bg-emerald-950/15"
                             : ""
@@ -628,12 +832,31 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
                           )}
                         </td>
 
+                        {/* PRODUCT UNITS (WHEN IN PRODUCT SCOPE) */}
+                        {isProduct && (
+                          <td className="py-2.5 px-3 text-center">
+                            {point.productUnits > 0 ? (
+                              <span className="font-mono font-bold text-pink-300 bg-pink-950/40 px-2 py-0.5 rounded-md border border-pink-800/30">
+                                {point.productUnits}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-600 font-mono">0</span>
+                            )}
+                          </td>
+                        )}
+
                         {/* PAYMENT BREAKDOWN */}
                         <td className="py-2.5 px-3 hidden md:table-cell">
                           {point.totalSales > 0 ? (
                             <div className="flex items-center gap-1.5 text-[10px] font-mono flex-wrap">
                               {point.paymentBreakdown.upi > 0 && (
-                                <span className="text-purple-300 bg-purple-950/40 px-1.5 py-0.5 rounded border border-purple-800/30">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded border ${
+                                    isProduct
+                                      ? "text-pink-300 bg-pink-950/40 border-pink-800/30"
+                                      : "text-purple-300 bg-purple-950/40 border-purple-800/30"
+                                  }`}
+                                >
                                   UPI: {formatCurrency(point.paymentBreakdown.upi, settings.currency_symbol)}
                                 </span>
                               )}
@@ -668,6 +891,8 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
                                     ? "bg-emerald-500"
                                     : point.isCurrent
                                     ? "bg-amber-400"
+                                    : isProduct
+                                    ? "bg-pink-500"
                                     : "bg-purple-500"
                                 }`}
                                 style={{ width: `${peakShare}%` }}
@@ -688,6 +913,8 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
                                   ? "text-emerald-400 font-black"
                                   : point.isCurrent
                                   ? "text-amber-300 font-black"
+                                  : isProduct
+                                  ? "text-pink-300 font-black"
                                   : "text-white"
                               }
                             >
@@ -706,11 +933,22 @@ export function SalesBreakdownView({ initialTab = "week" }: SalesBreakdownViewPr
               <tfoot>
                 <tr className="border-t-2 border-zinc-800 bg-zinc-900/90 text-xs font-bold">
                   <td className="py-3 px-3.5 text-white uppercase tracking-wider">
-                    Total {selectedPeriod.toUpperCase()} Sales
+                    {isProduct
+                      ? `Total ${selectedPeriod.toUpperCase()} Retail Products`
+                      : `Total ${selectedPeriod.toUpperCase()} Sales`}
                   </td>
-                  <td className="py-3 px-3 text-center text-purple-300 font-mono">
+                  <td
+                    className={`py-3 px-3 text-center font-mono ${
+                      isProduct ? "text-pink-300" : "text-purple-300"
+                    }`}
+                  >
                     {summary.totalInvoices} bills
                   </td>
+                  {isProduct && (
+                    <td className="py-3 px-3 text-center text-pink-300 font-mono font-bold">
+                      {summary.totalProductUnits} units
+                    </td>
+                  )}
                   <td className="py-3 px-3 hidden md:table-cell text-zinc-400 text-[11px]">
                     Avg: {formatCurrency(summary.averageSales, settings.currency_symbol)} /{" "}
                     {selectedPeriod === "year" ? "month" : "day"}

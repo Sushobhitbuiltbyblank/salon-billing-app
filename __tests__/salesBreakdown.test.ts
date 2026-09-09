@@ -154,4 +154,141 @@ describe("salesAnalytics tests", () => {
     expect(yearData.peakPoint?.totalSales).toBe(50000);
     expect(yearData.peakPoint?.shortLabel).toBe("Sep");
   });
+
+  it("should correctly aggregate Retail Products Sale scope with discounts subtracted", () => {
+    // Invoice 1: Pure service ₹1,000 on Saturday 5 Sep 2026
+    const invService: Invoice = {
+      id: "p1",
+      invoice_number: "BZ-p1",
+      customer_name: "Service Customer",
+      subtotal: 1000,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 1000,
+      payment_mode: "upi",
+      status: "paid",
+      created_at: "2026-09-05T10:00:00",
+      items: [
+        {
+          id: "it1",
+          item_id: "s1",
+          item_name: "Hair Cut",
+          item_type: "service",
+          quantity: 1,
+          unit_price: 1000,
+          discount: 0,
+          total_price: 1000,
+        },
+      ],
+    };
+
+    // Invoice 2: Pure product with discount (e.g. shampoo subtotal ₹2,410 - ₹140 invoice discount = ₹2,270) on Saturday 5 Sep 2026
+    const invProduct: Invoice = {
+      id: "p2",
+      invoice_number: "BZ-p2",
+      customer_name: "Product Customer",
+      subtotal: 2410,
+      discount_amount: 140,
+      discount_type: "flat",
+      discount_value: 140,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 2270,
+      payment_mode: "cash",
+      status: "paid",
+      created_at: "2026-09-05T14:00:00",
+      items: [
+        {
+          id: "it2",
+          item_id: "prod1",
+          item_name: "Loreal Shampoo",
+          item_type: "product",
+          quantity: 2,
+          unit_price: 1205,
+          discount: 0,
+          total_price: 2410,
+        },
+      ],
+    };
+
+    // Invoice 3: Mixed invoice on Wednesday 2 Sep 2026
+    // Service: ₹2,000, Product: ₹1,000 (1 unit), Total Subtotal = 3,000, 10% invoice discount (₹300) -> Net Product = 900
+    const invMixed: Invoice = {
+      id: "p3",
+      invoice_number: "BZ-p3",
+      customer_name: "Mixed Customer",
+      subtotal: 3000,
+      discount_amount: 300,
+      discount_type: "flat",
+      discount_value: 300,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 2700,
+      payment_mode: "card",
+      status: "paid",
+      created_at: "2026-09-02T16:00:00",
+      items: [
+        {
+          id: "it3",
+          item_id: "s2",
+          item_name: "Facial",
+          item_type: "service",
+          quantity: 1,
+          unit_price: 2000,
+          discount: 0,
+          total_price: 2000,
+        },
+        {
+          id: "it4",
+          item_id: "prod2",
+          item_name: "Face Serum",
+          item_type: "product",
+          quantity: 1,
+          unit_price: 1000,
+          discount: 0,
+          total_price: 1000,
+        },
+      ],
+    };
+
+    const invoices = [invService, invProduct, invMixed];
+
+    // 1. Week breakdown in "product" scope
+    const weekProd = getWeekDayWiseSales(invoices, refDate, "product");
+    expect(weekProd.saleScope).toBe("product");
+    expect(weekProd.periodTitle).toContain("Retail Product Sales");
+    // Wed = ₹900, Sat = ₹2,270. Total = ₹3,170 (Service ₹1000 and ₹1800 excluded)
+    expect(weekProd.totalSales).toBe(3170);
+    // Product units: 1 on Wed + 2 on Sat = 3 units
+    expect(weekProd.totalProductUnits).toBe(3);
+    // Invoices with products: 1 on Wed + 1 on Sat = 2 bills
+    expect(weekProd.totalInvoices).toBe(2);
+
+    // Check Wed data point (index 2)
+    expect(weekProd.dataPoints[2].totalSales).toBe(900);
+    expect(weekProd.dataPoints[2].productUnits).toBe(1);
+    expect(weekProd.dataPoints[2].invoiceCount).toBe(1);
+    expect(weekProd.dataPoints[2].paymentBreakdown.card).toBe(900);
+
+    // Check Sat data point (index 5)
+    expect(weekProd.dataPoints[5].totalSales).toBe(2270);
+    expect(weekProd.dataPoints[5].productUnits).toBe(2);
+    expect(weekProd.dataPoints[5].invoiceCount).toBe(1);
+    expect(weekProd.dataPoints[5].paymentBreakdown.cash).toBe(2270);
+
+    // 2. Month breakdown in "product" scope
+    const monthProd = getMonthDayWiseSales(invoices, refDate, "product");
+    expect(monthProd.saleScope).toBe("product");
+    expect(monthProd.totalSales).toBe(3170);
+    expect(monthProd.totalProductUnits).toBe(3);
+
+    // 3. Year breakdown in "product" scope
+    const yearProd = getYearMonthWiseSales(invoices, refDate, "product");
+    expect(yearProd.saleScope).toBe("product");
+    expect(yearProd.totalSales).toBe(3170);
+    expect(yearProd.totalProductUnits).toBe(3);
+  });
 });

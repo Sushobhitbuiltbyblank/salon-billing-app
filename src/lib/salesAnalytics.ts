@@ -1,4 +1,7 @@
 import { Invoice } from "@/types";
+import { calculateInvoiceProductSaleTotal } from "./calculations";
+
+export type SalesBreakdownScope = "all" | "product";
 
 export interface SalesDataPoint {
   key: string; // unique key, e.g. '2026-09-01' or '2026-09'
@@ -16,6 +19,9 @@ export interface SalesDataPoint {
     card: number;
     split: number;
   };
+  productSales: number;
+  productUnits: number;
+  productInvoiceCount: number;
   isCurrent: boolean; // isToday or isCurrentMonth
   isFuture: boolean;
 }
@@ -31,13 +37,16 @@ export interface PeriodicSalesSummary {
   peakPoint: SalesDataPoint | null;
   lowestActivePoint: SalesDataPoint | null;
   dataPoints: SalesDataPoint[];
+  saleScope: SalesBreakdownScope;
+  totalProductSales: number;
+  totalProductUnits: number;
 }
 
 /**
  * Filter non-void valid invoices
  */
 export function getValidInvoices(invoices: Invoice[]): Invoice[] {
-  return invoices.filter((inv) => inv && inv.status !== "void");
+  return invoices.filter((inv) => inv && inv.status !== "void" && (inv.status as string) !== "cancelled");
 }
 
 /**
@@ -45,7 +54,8 @@ export function getValidInvoices(invoices: Invoice[]): Invoice[] {
  */
 export function getWeekDayWiseSales(
   invoices: Invoice[],
-  referenceDate: Date = new Date()
+  referenceDate: Date = new Date(),
+  saleScope: SalesBreakdownScope = "all"
 ): PeriodicSalesSummary {
   const validInvoices = getValidInvoices(invoices);
   const now = new Date(referenceDate);
@@ -79,17 +89,58 @@ export function getWeekDayWiseSales(
       return t >= dayStart && t <= dayEnd;
     });
 
-    const totalSales = dayInvoices.reduce((sum, inv) => sum + (Number(inv.grand_total) || 0), 0);
-    const subtotal = dayInvoices.reduce((sum, inv) => sum + (Number(inv.subtotal) || 0), 0);
-    const discount = dayInvoices.reduce((sum, inv) => sum + (Number(inv.discount_amount) || 0), 0);
-    const tax = dayInvoices.reduce((sum, inv) => sum + (Number(inv.tax_amount) || 0), 0);
+    let dayAllSales = 0;
+    let dayAllSubtotal = 0;
+    let dayAllDiscount = 0;
+    let dayAllTax = 0;
+    const allPaymentBreakdown = { cash: 0, upi: 0, card: 0, split: 0 };
 
-    const paymentBreakdown = { cash: 0, upi: 0, card: 0, split: 0 };
+    let dayProductSales = 0;
+    let dayProductSubtotal = 0;
+    let dayProductDiscount = 0;
+    let dayProductUnits = 0;
+    let dayProductInvoiceCount = 0;
+    const productPaymentBreakdown = { cash: 0, upi: 0, card: 0, split: 0 };
+
     dayInvoices.forEach((inv) => {
-      if (paymentBreakdown[inv.payment_mode] !== undefined) {
-        paymentBreakdown[inv.payment_mode] += Number(inv.grand_total) || 0;
+      const grandTotal = Number(inv.grand_total) || 0;
+      dayAllSales += grandTotal;
+      dayAllSubtotal += Number(inv.subtotal) || 0;
+      dayAllDiscount += Number(inv.discount_amount) || 0;
+      dayAllTax += Number(inv.tax_amount) || 0;
+      if (allPaymentBreakdown[inv.payment_mode] !== undefined) {
+        allPaymentBreakdown[inv.payment_mode] += grandTotal;
+      }
+
+      const pSale = calculateInvoiceProductSaleTotal(inv);
+      const hasProduct = (inv.items || []).some((it) => it.item_type === "product");
+      if (pSale > 0 || hasProduct) {
+        dayProductSales += pSale;
+        dayProductInvoiceCount += 1;
+        const pUnits = (inv.items || [])
+          .filter((it) => it.item_type === "product")
+          .reduce((sum, it) => sum + (Number(it.quantity) || 1), 0);
+        dayProductUnits += pUnits;
+
+        const pSub = (inv.items || [])
+          .filter((it) => it.item_type === "product")
+          .reduce((sum, it) => sum + (Number(it.total_price) || 0), 0);
+        dayProductSubtotal += pSub;
+        dayProductDiscount += Math.max(0, pSub - pSale);
+
+        if (productPaymentBreakdown[inv.payment_mode] !== undefined) {
+          productPaymentBreakdown[inv.payment_mode] += pSale;
+        }
       }
     });
+
+    const isProductScope = saleScope === "product";
+    const totalSales = isProductScope ? dayProductSales : dayAllSales;
+    const subtotal = isProductScope ? dayProductSubtotal : dayAllSubtotal;
+    const discount = isProductScope ? dayProductDiscount : dayAllDiscount;
+    const tax = isProductScope ? 0 : dayAllTax;
+    const invoiceCount = isProductScope ? dayProductInvoiceCount : dayInvoices.length;
+    const paymentBreakdown = isProductScope ? productPaymentBreakdown : allPaymentBreakdown;
 
     const monthName = dayDate.toLocaleString("en-IN", { month: "short" });
     const formattedLabel = `${dayNames[i]}, ${dayDate.getDate()} ${monthName}`;
@@ -109,8 +160,11 @@ export function getWeekDayWiseSales(
       subtotal,
       discount,
       tax,
-      invoiceCount: dayInvoices.length,
+      invoiceCount,
       paymentBreakdown,
+      productSales: dayProductSales,
+      productUnits: dayProductUnits,
+      productInvoiceCount: dayProductInvoiceCount,
       isCurrent: isToday,
       isFuture,
     });
@@ -118,8 +172,9 @@ export function getWeekDayWiseSales(
 
   const totalSales = dataPoints.reduce((s, p) => s + p.totalSales, 0);
   const totalInvoices = dataPoints.reduce((s, p) => s + p.invoiceCount, 0);
+  const totalProductSales = dataPoints.reduce((s, p) => s + p.productSales, 0);
+  const totalProductUnits = dataPoints.reduce((s, p) => s + p.productUnits, 0);
   const activeDays = dataPoints.filter((p) => p.totalSales > 0);
-  // Average across elapsed days (or active days if none elapsed yet)
   const elapsedDays = dataPoints.filter((p) => !p.isFuture).length || 1;
   const averageSales = Math.round(totalSales / elapsedDays);
 
@@ -129,9 +184,11 @@ export function getWeekDayWiseSales(
   const startStr = monday.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   const endStr = sunday.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 
+  const isProduct = saleScope === "product";
+
   return {
     periodType: "week",
-    periodTitle: "This Week's Daily Sales",
+    periodTitle: isProduct ? "This Week's Retail Product Sales" : "This Week's Daily Sales",
     dateRangeLabel: `${startStr} – ${endStr}`,
     totalSales,
     totalInvoices,
@@ -140,6 +197,9 @@ export function getWeekDayWiseSales(
     peakPoint: peakPoint && peakPoint.totalSales > 0 ? peakPoint : null,
     lowestActivePoint,
     dataPoints,
+    saleScope,
+    totalProductSales,
+    totalProductUnits,
   };
 }
 
@@ -148,7 +208,8 @@ export function getWeekDayWiseSales(
  */
 export function getMonthDayWiseSales(
   invoices: Invoice[],
-  referenceDate: Date = new Date()
+  referenceDate: Date = new Date(),
+  saleScope: SalesBreakdownScope = "all"
 ): PeriodicSalesSummary {
   const validInvoices = getValidInvoices(invoices);
   const now = new Date(referenceDate);
@@ -177,17 +238,58 @@ export function getMonthDayWiseSales(
       return t >= dayStart && t <= dayEnd;
     });
 
-    const totalSales = dayInvoices.reduce((sum, inv) => sum + (Number(inv.grand_total) || 0), 0);
-    const subtotal = dayInvoices.reduce((sum, inv) => sum + (Number(inv.subtotal) || 0), 0);
-    const discount = dayInvoices.reduce((sum, inv) => sum + (Number(inv.discount_amount) || 0), 0);
-    const tax = dayInvoices.reduce((sum, inv) => sum + (Number(inv.tax_amount) || 0), 0);
+    let dayAllSales = 0;
+    let dayAllSubtotal = 0;
+    let dayAllDiscount = 0;
+    let dayAllTax = 0;
+    const allPaymentBreakdown = { cash: 0, upi: 0, card: 0, split: 0 };
 
-    const paymentBreakdown = { cash: 0, upi: 0, card: 0, split: 0 };
+    let dayProductSales = 0;
+    let dayProductSubtotal = 0;
+    let dayProductDiscount = 0;
+    let dayProductUnits = 0;
+    let dayProductInvoiceCount = 0;
+    const productPaymentBreakdown = { cash: 0, upi: 0, card: 0, split: 0 };
+
     dayInvoices.forEach((inv) => {
-      if (paymentBreakdown[inv.payment_mode] !== undefined) {
-        paymentBreakdown[inv.payment_mode] += Number(inv.grand_total) || 0;
+      const grandTotal = Number(inv.grand_total) || 0;
+      dayAllSales += grandTotal;
+      dayAllSubtotal += Number(inv.subtotal) || 0;
+      dayAllDiscount += Number(inv.discount_amount) || 0;
+      dayAllTax += Number(inv.tax_amount) || 0;
+      if (allPaymentBreakdown[inv.payment_mode] !== undefined) {
+        allPaymentBreakdown[inv.payment_mode] += grandTotal;
+      }
+
+      const pSale = calculateInvoiceProductSaleTotal(inv);
+      const hasProduct = (inv.items || []).some((it) => it.item_type === "product");
+      if (pSale > 0 || hasProduct) {
+        dayProductSales += pSale;
+        dayProductInvoiceCount += 1;
+        const pUnits = (inv.items || [])
+          .filter((it) => it.item_type === "product")
+          .reduce((sum, it) => sum + (Number(it.quantity) || 1), 0);
+        dayProductUnits += pUnits;
+
+        const pSub = (inv.items || [])
+          .filter((it) => it.item_type === "product")
+          .reduce((sum, it) => sum + (Number(it.total_price) || 0), 0);
+        dayProductSubtotal += pSub;
+        dayProductDiscount += Math.max(0, pSub - pSale);
+
+        if (productPaymentBreakdown[inv.payment_mode] !== undefined) {
+          productPaymentBreakdown[inv.payment_mode] += pSale;
+        }
       }
     });
+
+    const isProductScope = saleScope === "product";
+    const totalSales = isProductScope ? dayProductSales : dayAllSales;
+    const subtotal = isProductScope ? dayProductSubtotal : dayAllSubtotal;
+    const discount = isProductScope ? dayProductDiscount : dayAllDiscount;
+    const tax = isProductScope ? 0 : dayAllTax;
+    const invoiceCount = isProductScope ? dayProductInvoiceCount : dayInvoices.length;
+    const paymentBreakdown = isProductScope ? productPaymentBreakdown : allPaymentBreakdown;
 
     const weekdayShort = dayDate.toLocaleString("en-IN", { weekday: "short" });
     const formattedLabel = `${day} ${monthName.slice(0, 3)} (${weekdayShort})`;
@@ -207,8 +309,11 @@ export function getMonthDayWiseSales(
       subtotal,
       discount,
       tax,
-      invoiceCount: dayInvoices.length,
+      invoiceCount,
       paymentBreakdown,
+      productSales: dayProductSales,
+      productUnits: dayProductUnits,
+      productInvoiceCount: dayProductInvoiceCount,
       isCurrent: isToday,
       isFuture,
     });
@@ -216,6 +321,8 @@ export function getMonthDayWiseSales(
 
   const totalSales = dataPoints.reduce((s, p) => s + p.totalSales, 0);
   const totalInvoices = dataPoints.reduce((s, p) => s + p.invoiceCount, 0);
+  const totalProductSales = dataPoints.reduce((s, p) => s + p.productSales, 0);
+  const totalProductUnits = dataPoints.reduce((s, p) => s + p.productUnits, 0);
   const activeDays = dataPoints.filter((p) => p.totalSales > 0);
   const elapsedDays = Math.min(now.getDate(), daysInMonth);
   const averageSales = Math.round(totalSales / (elapsedDays || 1));
@@ -223,9 +330,11 @@ export function getMonthDayWiseSales(
   const peakPoint = [...dataPoints].sort((a, b) => b.totalSales - a.totalSales)[0] || null;
   const lowestActivePoint = activeDays.length > 0 ? [...activeDays].sort((a, b) => a.totalSales - b.totalSales)[0] : null;
 
+  const isProduct = saleScope === "product";
+
   return {
     periodType: "month",
-    periodTitle: "This Month's Daily Sales",
+    periodTitle: isProduct ? "This Month's Retail Product Sales" : "This Month's Daily Sales",
     dateRangeLabel: `${monthName} ${year} (1 – ${daysInMonth})`,
     totalSales,
     totalInvoices,
@@ -234,6 +343,9 @@ export function getMonthDayWiseSales(
     peakPoint: peakPoint && peakPoint.totalSales > 0 ? peakPoint : null,
     lowestActivePoint,
     dataPoints,
+    saleScope,
+    totalProductSales,
+    totalProductUnits,
   };
 }
 
@@ -242,7 +354,8 @@ export function getMonthDayWiseSales(
  */
 export function getYearMonthWiseSales(
   invoices: Invoice[],
-  referenceDate: Date = new Date()
+  referenceDate: Date = new Date(),
+  saleScope: SalesBreakdownScope = "all"
 ): PeriodicSalesSummary {
   const validInvoices = getValidInvoices(invoices);
   const now = new Date(referenceDate);
@@ -292,17 +405,58 @@ export function getYearMonthWiseSales(
       return t >= monthStart && t <= monthEnd;
     });
 
-    const totalSales = monthInvoices.reduce((sum, inv) => sum + (Number(inv.grand_total) || 0), 0);
-    const subtotal = monthInvoices.reduce((sum, inv) => sum + (Number(inv.subtotal) || 0), 0);
-    const discount = monthInvoices.reduce((sum, inv) => sum + (Number(inv.discount_amount) || 0), 0);
-    const tax = monthInvoices.reduce((sum, inv) => sum + (Number(inv.tax_amount) || 0), 0);
+    let monthAllSales = 0;
+    let monthAllSubtotal = 0;
+    let monthAllDiscount = 0;
+    let monthAllTax = 0;
+    const allPaymentBreakdown = { cash: 0, upi: 0, card: 0, split: 0 };
 
-    const paymentBreakdown = { cash: 0, upi: 0, card: 0, split: 0 };
+    let monthProductSales = 0;
+    let monthProductSubtotal = 0;
+    let monthProductDiscount = 0;
+    let monthProductUnits = 0;
+    let monthProductInvoiceCount = 0;
+    const productPaymentBreakdown = { cash: 0, upi: 0, card: 0, split: 0 };
+
     monthInvoices.forEach((inv) => {
-      if (paymentBreakdown[inv.payment_mode] !== undefined) {
-        paymentBreakdown[inv.payment_mode] += Number(inv.grand_total) || 0;
+      const grandTotal = Number(inv.grand_total) || 0;
+      monthAllSales += grandTotal;
+      monthAllSubtotal += Number(inv.subtotal) || 0;
+      monthAllDiscount += Number(inv.discount_amount) || 0;
+      monthAllTax += Number(inv.tax_amount) || 0;
+      if (allPaymentBreakdown[inv.payment_mode] !== undefined) {
+        allPaymentBreakdown[inv.payment_mode] += grandTotal;
+      }
+
+      const pSale = calculateInvoiceProductSaleTotal(inv);
+      const hasProduct = (inv.items || []).some((it) => it.item_type === "product");
+      if (pSale > 0 || hasProduct) {
+        monthProductSales += pSale;
+        monthProductInvoiceCount += 1;
+        const pUnits = (inv.items || [])
+          .filter((it) => it.item_type === "product")
+          .reduce((sum, it) => sum + (Number(it.quantity) || 1), 0);
+        monthProductUnits += pUnits;
+
+        const pSub = (inv.items || [])
+          .filter((it) => it.item_type === "product")
+          .reduce((sum, it) => sum + (Number(it.total_price) || 0), 0);
+        monthProductSubtotal += pSub;
+        monthProductDiscount += Math.max(0, pSub - pSale);
+
+        if (productPaymentBreakdown[inv.payment_mode] !== undefined) {
+          productPaymentBreakdown[inv.payment_mode] += pSale;
+        }
       }
     });
+
+    const isProductScope = saleScope === "product";
+    const totalSales = isProductScope ? monthProductSales : monthAllSales;
+    const subtotal = isProductScope ? monthProductSubtotal : monthAllSubtotal;
+    const discount = isProductScope ? monthProductDiscount : monthAllDiscount;
+    const tax = isProductScope ? 0 : monthAllTax;
+    const invoiceCount = isProductScope ? monthProductInvoiceCount : monthInvoices.length;
+    const paymentBreakdown = isProductScope ? productPaymentBreakdown : allPaymentBreakdown;
 
     const formattedLabel = `${fullMonthNames[m]} ${year}`;
     const fullDateStr = `${fullMonthNames[m]} ${year}`;
@@ -316,8 +470,11 @@ export function getYearMonthWiseSales(
       subtotal,
       discount,
       tax,
-      invoiceCount: monthInvoices.length,
+      invoiceCount,
       paymentBreakdown,
+      productSales: monthProductSales,
+      productUnits: monthProductUnits,
+      productInvoiceCount: monthProductInvoiceCount,
       isCurrent: isCurrentMonth,
       isFuture,
     });
@@ -325,6 +482,8 @@ export function getYearMonthWiseSales(
 
   const totalSales = dataPoints.reduce((s, p) => s + p.totalSales, 0);
   const totalInvoices = dataPoints.reduce((s, p) => s + p.invoiceCount, 0);
+  const totalProductSales = dataPoints.reduce((s, p) => s + p.productSales, 0);
+  const totalProductUnits = dataPoints.reduce((s, p) => s + p.productUnits, 0);
   const activeMonths = dataPoints.filter((p) => p.totalSales > 0);
   const elapsedMonths = now.getMonth() + 1;
   const averageSales = Math.round(totalSales / (elapsedMonths || 1));
@@ -332,9 +491,11 @@ export function getYearMonthWiseSales(
   const peakPoint = [...dataPoints].sort((a, b) => b.totalSales - a.totalSales)[0] || null;
   const lowestActivePoint = activeMonths.length > 0 ? [...activeMonths].sort((a, b) => a.totalSales - b.totalSales)[0] : null;
 
+  const isProduct = saleScope === "product";
+
   return {
     periodType: "year",
-    periodTitle: "This Year's Monthly Sales",
+    periodTitle: isProduct ? "This Year's Retail Product Sales" : "This Year's Monthly Sales",
     dateRangeLabel: `Calendar Year ${year} (Jan – Dec)`,
     totalSales,
     totalInvoices,
@@ -343,5 +504,9 @@ export function getYearMonthWiseSales(
     peakPoint: peakPoint && peakPoint.totalSales > 0 ? peakPoint : null,
     lowestActivePoint,
     dataPoints,
+    saleScope,
+    totalProductSales,
+    totalProductUnits,
   };
 }
+
