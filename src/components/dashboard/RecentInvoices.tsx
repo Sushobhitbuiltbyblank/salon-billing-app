@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { Invoice } from "@/types";
 import { formatCurrency, formatDate, generateWhatsAppReceiptUrl, cn } from "@/lib/utils";
+import { calculateInvoiceProductSaleTotal } from "@/lib/calculations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -115,14 +116,10 @@ export function RecentInvoices() {
   const todayTotalCollection = todaySettled.reduce((sum, i) => sum + (i.grand_total || 0), 0);
   const todayVoidCount = todaysInvoices.filter((i) => i.status === "void").length;
 
-  let todayProductsTotal = 0;
-  todaySettled.forEach((inv) => {
-    (inv.items || []).forEach((item) => {
-      if (item.item_type === "product") {
-        todayProductsTotal += item.total_price || 0;
-      }
-    });
-  });
+  // Actual realized sale price sum of retail products (deducting discounts)
+  const todayProductsTotal = todaySettled.reduce((sum, inv) => {
+    return sum + calculateInvoiceProductSaleTotal(inv);
+  }, 0);
 
   return (
     <div className="space-y-6">
@@ -503,38 +500,47 @@ export function RecentInvoices() {
                               )}
 
                               {/* 2. PRODUCT LIST (ONLY IF PURCHASED) */}
-                              {productItems.length > 0 && (
-                                <div className="space-y-1 pt-1.5 border-t border-zinc-800/80">
-                                  <div className="text-[10px] font-bold text-pink-400 uppercase tracking-wider">
-                                    Product
-                                  </div>
-                                  {productItems.map((item, pIdx) => {
-                                    const primaryStaffName = staff.find((s) => s.id === item.primary_staff_id)?.name;
-                                    return (
-                                      <div key={item.id || `prod-${pIdx}`} className="flex items-center justify-between text-zinc-200 text-xs">
-                                        <span>
-                                          • <span className="font-semibold text-pink-200">{item.item_name}</span>{" "}
-                                          {item.quantity > 1 ? (
-                                            <span className="text-zinc-400 font-mono text-[11px]">(x{item.quantity})</span>
-                                          ) : (
-                                            ""
-                                          )}
-                                          {primaryStaffName && (
-                                            <span className="text-purple-400 text-[10.5px] ml-1">
-                                              ({primaryStaffName})
+                              {productItems.length > 0 && (() => {
+                                const prodSale = calculateInvoiceProductSaleTotal(inv);
+                                const hasDiscount = (inv.discount_amount || 0) > 0;
+                                return (
+                                  <div className="space-y-1 pt-1.5 border-t border-zinc-800/80">
+                                    <div className="flex items-center justify-between text-[10px] font-bold text-pink-400 uppercase tracking-wider">
+                                      <span>Product</span>
+                                      {hasDiscount && (
+                                        <span className="font-mono text-pink-300 font-semibold normal-case text-[10px]">
+                                          Net Sale: {formatCurrency(prodSale, settings.currency_symbol)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {productItems.map((item, pIdx) => {
+                                      const primaryStaffName = staff.find((s) => s.id === item.primary_staff_id)?.name;
+                                      return (
+                                        <div key={item.id || `prod-${pIdx}`} className="flex items-center justify-between text-zinc-200 text-xs">
+                                          <span>
+                                            • <span className="font-semibold text-pink-200">{item.item_name}</span>{" "}
+                                            {item.quantity > 1 ? (
+                                              <span className="text-zinc-400 font-mono text-[11px]">(x{item.quantity})</span>
+                                            ) : (
+                                              ""
+                                            )}
+                                            {primaryStaffName && (
+                                              <span className="text-purple-400 text-[10.5px] ml-1">
+                                                ({primaryStaffName})
+                                              </span>
+                                            )}
+                                          </span>
+                                          {item.total_price !== undefined && (
+                                            <span className="text-[11px] font-mono text-pink-300 ml-2">
+                                              ₹{item.total_price}
                                             </span>
                                           )}
-                                        </span>
-                                        {item.total_price !== undefined && (
-                                          <span className="text-[11px] font-mono text-pink-300 ml-2">
-                                            ₹{item.total_price}
-                                          </span>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           );
                         })()}
@@ -569,6 +575,11 @@ export function RecentInvoices() {
                       {/* GRAND TOTAL */}
                       <td className="py-3 px-4 text-right font-mono font-extrabold text-emerald-400 text-sm">
                         {formatCurrency(inv.grand_total, settings.currency_symbol)}
+                        {(inv.discount_amount || 0) > 0 && (
+                          <div className="text-[10px] font-normal text-rose-400/90 font-sans mt-0.5">
+                            Disc: -{formatCurrency(inv.discount_amount, settings.currency_symbol)}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

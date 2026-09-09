@@ -8,6 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { normalizePhoneNumber } from "@/lib/customerUtils";
 import {
+  calculateInvoiceProductSaleTotal,
+  calculateInvoiceServiceSaleTotal,
+  getInvoiceRealizationFactor,
+} from "@/lib/calculations";
+import {
   BarChart3,
   TrendingUp,
   DollarSign,
@@ -110,15 +115,11 @@ export function AdminAnalyticsDashboard() {
     let retailRevenue = 0;
 
     filteredInvoices.forEach((inv) => {
-      inv.items?.forEach((it) => {
-        if (it.item_type === "product") {
-          const itemPrice = it.total_price || (it.unit_price || 0) * (it.quantity || 1);
-          retailRevenue += itemPrice;
-          totalCOGS += itemPrice / 2; // Sale price is 2x purchase cost -> COGS = 50%
-        } else {
-          servicesRevenue += it.total_price || (it.unit_price || 0) * (it.quantity || 1);
-        }
-      });
+      const prodSale = calculateInvoiceProductSaleTotal(inv);
+      const servSale = calculateInvoiceServiceSaleTotal(inv);
+      retailRevenue += prodSale;
+      servicesRevenue += servSale;
+      totalCOGS += prodSale / 2; // Sale price is 2x purchase cost -> COGS = 50%
     });
 
     const netProfit = grossSales - totalCOGS - totalExpenses;
@@ -171,12 +172,17 @@ export function AdminAnalyticsDashboard() {
     const pMap = new Map<string, { name: string; count: number; revenue: number }>();
 
     filteredInvoices.forEach((inv) => {
+      const factor = getInvoiceRealizationFactor(inv);
       inv.items?.forEach((it) => {
         const targetMap = it.item_type === "product" ? pMap : sMap;
         const key = it.item_name;
         const curr = targetMap.get(key) || { name: key, count: 0, revenue: 0 };
         curr.count += it.quantity || 1;
-        curr.revenue += it.total_price || 0;
+        const itemNet =
+          it.total_price !== undefined
+            ? it.total_price
+            : (it.unit_price || 0) * (it.quantity || 1) - (it.discount || 0);
+        curr.revenue += itemNet * factor;
         targetMap.set(key, curr);
       });
     });

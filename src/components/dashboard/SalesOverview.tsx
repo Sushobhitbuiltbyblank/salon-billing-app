@@ -17,6 +17,7 @@ import {
   Layers,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { getInvoiceRealizationFactor } from "@/lib/calculations";
 import { Card } from "@/components/ui/card";
 import { SalesBreakdownView } from "./SalesBreakdownView";
 
@@ -75,6 +76,7 @@ export function SalesOverview() {
   const topItems = useMemo(() => {
     const itemMap = new Map<string, { name: string; type: string; count: number; revenue: number }>();
     filteredInvoices.forEach((inv) => {
+      const factor = getInvoiceRealizationFactor(inv);
       inv.items.forEach((item) => {
         const existing = itemMap.get(item.item_name) || {
           name: item.item_name,
@@ -83,7 +85,11 @@ export function SalesOverview() {
           revenue: 0,
         };
         existing.count += item.quantity;
-        existing.revenue += item.total_price;
+        const itemNet =
+          item.total_price !== undefined
+            ? item.total_price
+            : (item.unit_price || 0) * (item.quantity || 1) - (item.discount || 0);
+        existing.revenue += itemNet * factor;
         itemMap.set(item.item_name, existing);
       });
     });

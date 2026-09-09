@@ -48,16 +48,161 @@ export function calculateInvoiceTotals(params: {
   // Grand Total rounded to nearest integer / standard currency
   const grandTotal = Math.round(taxableAmount + taxAmount);
 
+  // Proportional net totals after invoice-level discount
+  const realizationFactor = subtotal > 0 ? Math.max(0, (subtotal - discountAmount) / subtotal) : 1;
+  const servicesNetTotal = servicesSubtotal * realizationFactor;
+  const productsNetTotal = productsSubtotal * realizationFactor;
+
   return {
     subtotal,
     servicesSubtotal,
     productsSubtotal,
+    servicesNetTotal,
+    productsNetTotal,
     discountAmount,
     taxableAmount,
     taxAmount,
     grandTotal,
   };
 }
+
+/**
+ * Calculates the realization factor (net sales / subtotal) for an invoice after overall bill discounts.
+ */
+export function getInvoiceRealizationFactor(invoice: Partial<Invoice>): number {
+  const items = invoice.items || [];
+  const invoiceSubtotal =
+    invoice.subtotal !== undefined && invoice.subtotal > 0
+      ? invoice.subtotal
+      : items.reduce(
+          (sum, it) =>
+            sum +
+            (it.total_price !== undefined
+              ? it.total_price
+              : calculateItemTotal(it.unit_price, it.quantity, it.discount)),
+          0
+        );
+
+  if (invoiceSubtotal <= 0) return 0;
+
+  const discountAmount =
+    invoice.discount_amount !== undefined
+      ? invoice.discount_amount
+      : invoice.discount_type === "percentage"
+      ? (invoiceSubtotal * (invoice.discount_value || 0)) / 100
+      : Math.min(invoiceSubtotal, invoice.discount_value || 0);
+
+  return Math.max(0, (invoiceSubtotal - discountAmount) / invoiceSubtotal);
+}
+
+/**
+ * Calculates the actual realized sale price sum of retail products in an invoice,
+ * deducting both item-level discounts and any bill-level invoice discount.
+ * 
+ * For a retail-only invoice (e.g. BZ-20260909-5317), this equals the products subtotal
+ * minus the invoice discount given. For mixed bills, discounts are allocated proportionally.
+ */
+export function calculateInvoiceProductSaleTotal(invoice: Partial<Invoice>): number {
+  if (invoice.status === "void" || (invoice.status as string) === "cancelled") {
+    return 0;
+  }
+
+  const items = invoice.items || [];
+  const productItems = items.filter((it) => it.item_type === "product");
+  if (productItems.length === 0) return 0;
+
+  const invoiceSubtotal =
+    invoice.subtotal !== undefined && invoice.subtotal > 0
+      ? invoice.subtotal
+      : items.reduce(
+          (sum, it) =>
+            sum +
+            (it.total_price !== undefined
+              ? it.total_price
+              : calculateItemTotal(it.unit_price, it.quantity, it.discount)),
+          0
+        );
+
+  const discountAmount =
+    invoice.discount_amount !== undefined
+      ? invoice.discount_amount
+      : invoice.discount_type === "percentage"
+      ? (invoiceSubtotal * (invoice.discount_value || 0)) / 100
+      : Math.min(invoiceSubtotal, invoice.discount_value || 0);
+
+  const productsSubtotal = productItems.reduce(
+    (sum, it) =>
+      sum +
+      (it.total_price !== undefined
+        ? it.total_price
+        : calculateItemTotal(it.unit_price, it.quantity, it.discount)),
+    0
+  );
+
+  // If there are only products in the invoice (no services/packages),
+  // the entire bill discount was given directly on retail products.
+  const nonProductItems = items.filter((it) => it.item_type !== "product");
+  if (nonProductItems.length === 0) {
+    return Math.max(0, productsSubtotal - discountAmount);
+  }
+
+  // Mixed bill (services & products): allocate bill discount proportionally
+  if (invoiceSubtotal <= 0) return 0;
+  const productDiscountShare = discountAmount * (productsSubtotal / invoiceSubtotal);
+  return Math.max(0, productsSubtotal - productDiscountShare);
+}
+
+/**
+ * Calculates the actual realized sale price sum of services/packages in an invoice,
+ * deducting both item-level discounts and any bill-level invoice discount.
+ */
+export function calculateInvoiceServiceSaleTotal(invoice: Partial<Invoice>): number {
+  if (invoice.status === "void" || (invoice.status as string) === "cancelled") {
+    return 0;
+  }
+
+  const items = invoice.items || [];
+  const serviceItems = items.filter((it) => it.item_type !== "product");
+  if (serviceItems.length === 0) return 0;
+
+  const invoiceSubtotal =
+    invoice.subtotal !== undefined && invoice.subtotal > 0
+      ? invoice.subtotal
+      : items.reduce(
+          (sum, it) =>
+            sum +
+            (it.total_price !== undefined
+              ? it.total_price
+              : calculateItemTotal(it.unit_price, it.quantity, it.discount)),
+          0
+        );
+
+  const discountAmount =
+    invoice.discount_amount !== undefined
+      ? invoice.discount_amount
+      : invoice.discount_type === "percentage"
+      ? (invoiceSubtotal * (invoice.discount_value || 0)) / 100
+      : Math.min(invoiceSubtotal, invoice.discount_value || 0);
+
+  const servicesSubtotal = serviceItems.reduce(
+    (sum, it) =>
+      sum +
+      (it.total_price !== undefined
+        ? it.total_price
+        : calculateItemTotal(it.unit_price, it.quantity, it.discount)),
+    0
+  );
+
+  const productItems = items.filter((it) => it.item_type === "product");
+  if (productItems.length === 0) {
+    return Math.max(0, servicesSubtotal - discountAmount);
+  }
+
+  if (invoiceSubtotal <= 0) return 0;
+  const serviceDiscountShare = discountAmount * (servicesSubtotal / invoiceSubtotal);
+  return Math.max(0, servicesSubtotal - serviceDiscountShare);
+}
+
 
 export interface IndividualStaffCommission {
   staffId: string;
@@ -246,33 +391,8 @@ export function calculateStaffPerformance(
   invoices
     .filter((inv) => inv.status !== "void" && (inv.status as string) !== "cancelled")
     .forEach((invoice) => {
-      // Calculate invoice-level subtotal and realization factor after overall bill discount
-      const invoiceSubtotal =
-        invoice.subtotal !== undefined && invoice.subtotal > 0
-          ? invoice.subtotal
-          : (invoice.items || []).reduce(
-              (sum, it) =>
-                sum +
-                (it.total_price !== undefined
-                  ? it.total_price
-                  : calculateItemTotal(it.unit_price, it.quantity, it.discount)),
-              0
-            );
-
-      const discountAmount =
-        invoice.discount_amount !== undefined
-          ? invoice.discount_amount
-          : invoice.discount_type === "percentage"
-          ? (invoiceSubtotal * (invoice.discount_value || 0)) / 100
-          : Math.min(invoiceSubtotal, invoice.discount_value || 0);
-
       // Realization factor across all items on this bill (e.g. 200/250 = 0.8)
-      const invoiceRealizationFactor =
-        invoiceSubtotal > 0
-          ? Math.max(0, (invoiceSubtotal - discountAmount) / invoiceSubtotal)
-          : invoiceSubtotal === 0
-          ? 0
-          : 1;
+      const invoiceRealizationFactor = getInvoiceRealizationFactor(invoice);
 
       (invoice.items || []).forEach((item) => {
         // PACKAGE COMBO: CREDIT INDIVIDUAL SERVICES TO RESPECTIVE ASSIGNED STYLISTS

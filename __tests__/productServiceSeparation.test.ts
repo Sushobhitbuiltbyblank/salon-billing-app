@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { calculateInvoiceTotals } from "@/lib/calculations";
+import {
+  calculateInvoiceTotals,
+  calculateInvoiceProductSaleTotal,
+  calculateInvoiceServiceSaleTotal,
+  getInvoiceRealizationFactor,
+} from "@/lib/calculations";
 import { generateWhatsAppMessageText } from "@/lib/utils";
 import { Invoice, InvoiceItem, SalonSettings } from "@/types";
 
@@ -10,7 +15,7 @@ describe("Product and Service Sales Separation", () => {
     address: "Laxmi Nagar, Delhi",
     phone: "9876543210",
     email: "info@belezia.com",
-    gstin: "07AAAAA0000A1Z5",
+    gst_number: "07AAAAA0000A1Z5",
     currency_symbol: "₹",
     tax_enabled: true,
     tax_rate: 18,
@@ -95,6 +100,8 @@ describe("Product and Service Sales Separation", () => {
       customer_phone: "9876543210",
       subtotal: 4200,
       discount_amount: 200,
+      discount_type: "flat",
+      discount_value: 200,
       tax_amount: 0,
       tax_rate: 0,
       grand_total: 4000,
@@ -145,6 +152,8 @@ describe("Product and Service Sales Separation", () => {
       customer_phone: "9876543210",
       subtotal: 200,
       discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
       tax_amount: 0,
       tax_rate: 0,
       grand_total: 200,
@@ -169,11 +178,16 @@ describe("Product and Service Sales Separation", () => {
       customer_name: "Customer P",
       customer_phone: "9999999991",
       subtotal: 500,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
       grand_total: 500,
       status: "paid",
       payment_mode: "upi",
       created_at: new Date().toISOString(),
-      items: [{ id: "p1", item_name: "Serum", item_type: "product", quantity: 1, unit_price: 500, total_price: 500 }],
+      items: [{ id: "p1", item_name: "Serum", item_type: "product", quantity: 1, unit_price: 500, discount: 0, total_price: 500 }],
     };
 
     const invServiceOnly: Invoice = {
@@ -182,11 +196,16 @@ describe("Product and Service Sales Separation", () => {
       customer_name: "Customer S",
       customer_phone: "9999999992",
       subtotal: 400,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
       grand_total: 400,
       status: "paid",
       payment_mode: "cash",
       created_at: new Date().toISOString(),
-      items: [{ id: "s1", item_name: "Beard Trim", item_type: "service", quantity: 1, unit_price: 400, total_price: 400 }],
+      items: [{ id: "s1", item_name: "Beard Trim", item_type: "service", quantity: 1, unit_price: 400, discount: 0, total_price: 400 }],
     };
 
     const invMixed: Invoice = {
@@ -195,13 +214,18 @@ describe("Product and Service Sales Separation", () => {
       customer_name: "Customer M",
       customer_phone: "9999999993",
       subtotal: 900,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
       grand_total: 900,
       status: "paid",
       payment_mode: "card",
       created_at: new Date().toISOString(),
       items: [
-        { id: "s2", item_name: "Hair Cut", item_type: "service", quantity: 1, unit_price: 400, total_price: 400 },
-        { id: "p2", item_name: "Wax", item_type: "product", quantity: 1, unit_price: 500, total_price: 500 },
+        { id: "s2", item_name: "Hair Cut", item_type: "service", quantity: 1, unit_price: 400, discount: 0, total_price: 400 },
+        { id: "p2", item_name: "Wax", item_type: "product", quantity: 1, unit_price: 500, discount: 0, total_price: 500 },
       ],
     };
 
@@ -239,6 +263,131 @@ describe("Product and Service Sales Separation", () => {
     // 5. Service only returns only invServiceOnly
     const serviceOnly = filterBySaleType(allInvoices, "service_only");
     expect(serviceOnly.map((i) => i.id)).toEqual(["inv-s-only"]);
+  });
+
+  it("calculates retail products sale correctly deducting discount for invoice BZ-20260909-5317", () => {
+    // Exact representation of real invoice BZ-20260909-5317
+    const invoiceBZ5317: Invoice = {
+      id: "f63a6955-25ff-421f-9b4a-f73cef76aaba",
+      invoice_number: "BZ-20260909-5317",
+      customer_name: "Walk-in Guest",
+      subtotal: 2410,
+      discount_amount: 140,
+      discount_type: "flat",
+      discount_value: 140,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 2270,
+      payment_mode: "cash",
+      status: "paid",
+      created_at: "2026-09-09T09:41:52.41+00:00",
+      items: [
+        {
+          id: "item-shampoo-1",
+          item_name: "L'Oréal xtansho Gold - Shampoo",
+          item_type: "product",
+          quantity: 1,
+          unit_price: 1120,
+          discount: 0,
+          total_price: 1120,
+        },
+        {
+          id: "item-mask-1",
+          item_name: "L'Oréal xtansho Gold - Mask",
+          item_type: "product",
+          quantity: 1,
+          unit_price: 1290,
+          discount: 0,
+          total_price: 1290,
+        },
+      ],
+    };
+
+    const productSale = calculateInvoiceProductSaleTotal(invoiceBZ5317);
+    // Subtotal 2410 - 140 discount = 2270 actual sale price sum
+    expect(productSale).toBe(2270);
+    expect(calculateInvoiceServiceSaleTotal(invoiceBZ5317)).toBe(0);
+  });
+
+  it("calculates proportional retail product and service sales for mixed bills with discounts", () => {
+    const mixedInvoice: Invoice = {
+      id: "inv-mixed-discount",
+      invoice_number: "BZ-MIXED-01",
+      customer_name: "Priya Sharma",
+      subtotal: 5000, // 3000 service + 2000 product
+      discount_amount: 500, // 10% overall discount
+      discount_type: "flat",
+      discount_value: 500,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 4500,
+      payment_mode: "upi",
+      status: "paid",
+      created_at: new Date().toISOString(),
+      items: [
+        {
+          id: "svc-1",
+          item_name: "Balayage",
+          item_type: "service",
+          quantity: 1,
+          unit_price: 3000,
+          discount: 0,
+          total_price: 3000,
+        },
+        {
+          id: "prod-1",
+          item_name: "Moroccanoil Treatment",
+          item_type: "product",
+          quantity: 1,
+          unit_price: 2000,
+          discount: 0,
+          total_price: 2000,
+        },
+      ],
+    };
+
+    // Product share: 2000 / 5000 = 40% -> Product discount: 200 -> Product sale: 1800
+    const productSale = calculateInvoiceProductSaleTotal(mixedInvoice);
+    expect(productSale).toBe(1800);
+
+    // Service share: 3000 / 5000 = 60% -> Service discount: 300 -> Service sale: 2700
+    const serviceSale = calculateInvoiceServiceSaleTotal(mixedInvoice);
+    expect(serviceSale).toBe(2700);
+
+    // Combined product + service sales equal grand total (subtotal - discount)
+    expect(productSale + serviceSale).toBe(4500);
+  });
+
+  it("returns 0 product sale for voided invoices", () => {
+    const voidInvoice: Invoice = {
+      id: "inv-void-1",
+      invoice_number: "BZ-VOID-01",
+      customer_name: "Cancelled Guest",
+      subtotal: 1000,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 1000,
+      payment_mode: "cash",
+      status: "void",
+      created_at: new Date().toISOString(),
+      items: [
+        {
+          id: "p1",
+          item_name: "Serum",
+          item_type: "product",
+          quantity: 1,
+          unit_price: 1000,
+          discount: 0,
+          total_price: 1000,
+        },
+      ],
+    };
+
+    expect(calculateInvoiceProductSaleTotal(voidInvoice)).toBe(0);
+    expect(calculateInvoiceServiceSaleTotal(voidInvoice)).toBe(0);
   });
 });
 
