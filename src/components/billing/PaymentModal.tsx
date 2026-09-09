@@ -44,6 +44,7 @@ export function PaymentModal({ open, onOpenChange }: PaymentModalProps) {
     clearDraft,
     createInvoice,
     setPrintInvoice,
+    settings,
     customers,
     invoices,
     saveCustomer,
