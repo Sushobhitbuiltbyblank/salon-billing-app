@@ -825,9 +825,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             (c) => (targetId && c.id === targetId) || (saved.id && c.id === saved.id)
           );
           const effectiveReminderSentAt =
-            remoteCust.last_reminder_sent_at !== undefined
-              ? remoteCust.last_reminder_sent_at
-              : (saved.last_reminder_sent_at || undefined);
+            saved.last_reminder_sent_at !== undefined
+              ? (saved.last_reminder_sent_at || undefined)
+              : (remoteCust.last_reminder_sent_at || undefined);
           const effectiveReminderHistory =
             (remoteCust.reminder_history && remoteCust.reminder_history.length > 0)
               ? remoteCust.reminder_history
@@ -837,7 +837,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             fresh[idx] = {
               ...fresh[idx],
               ...remoteCust,
-              last_reminder_sent_at: effectiveReminderSentAt || fresh[idx].last_reminder_sent_at,
+              last_reminder_sent_at: effectiveReminderSentAt,
               reminder_history: effectiveReminderHistory.length > 0 ? effectiveReminderHistory : (fresh[idx].reminder_history || []),
             };
           } else {
@@ -847,7 +847,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               fresh[pIdx] = {
                 ...fresh[pIdx],
                 ...remoteCust,
-                last_reminder_sent_at: effectiveReminderSentAt || fresh[pIdx].last_reminder_sent_at,
+                last_reminder_sent_at: effectiveReminderSentAt,
                 reminder_history: effectiveReminderHistory.length > 0 ? effectiveReminderHistory : (fresh[pIdx].reminder_history || []),
               };
             } else {

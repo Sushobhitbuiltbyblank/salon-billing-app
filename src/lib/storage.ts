@@ -860,8 +860,10 @@ export const Storage = {
       total_visits: customer.total_visits !== undefined ? customer.total_visits : (existing?.total_visits || 0),
       last_visit: customer.last_visit || existing?.last_visit,
       last_reminder_sent_at:
-        customer.last_reminder_sent_at !== undefined
-          ? (customer.last_reminder_sent_at || undefined)
+        customer.last_reminder_sent_at === null || customer.last_reminder_sent_at === ""
+          ? undefined
+          : customer.last_reminder_sent_at !== undefined
+          ? customer.last_reminder_sent_at
           : existing?.last_reminder_sent_at,
       reminder_history:
         customer.reminder_history !== undefined

@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
-import { Customer, Invoice, CustomerReminderInfo, ReminderFilterType } from "@/types";
+import { Customer, Invoice, CustomerReminderInfo, CustomerReminderRecord, ReminderFilterType } from "@/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -107,6 +107,10 @@ export function CustomerDirectory() {
   const [isLoadingCustomerHistory, setIsLoadingCustomerHistory] = useState<boolean>(false);
   const [hasFetchedCloudHistory, setHasFetchedCloudHistory] = useState<boolean>(false);
 
+  // OPTIMISTIC LOCAL STATUS OVERRIDES FOR INSTANT 0MS UI FEEDBACK
+  const [reminderStatusOverrides, setReminderStatusOverrides] = useState<
+    Record<string, { sentToday: boolean; timestamp?: string; record?: CustomerReminderRecord }>
+  >({});
 
   // UNIFIED CUSTOMER LIST COMBINING REGISTERED PROFILES & INVOICE DATA
   const unifiedCustomers = useMemo(() => {
@@ -115,7 +119,53 @@ export function CustomerDirectory() {
 
   // DETECT REMINDER INFORMATION FOR ALL UNIFIED CUSTOMERS
   const reminderData = useMemo(() => {
-    const list = detectCustomerReminders(unifiedCustomers, invoices);
+    let list = detectCustomerReminders(unifiedCustomers, invoices);
+
+    // Apply any local optimistic overrides
+    if (Object.keys(reminderStatusOverrides).length > 0) {
+      list = list.map((rem) => {
+        const keyId = rem.customer.id;
+        const keyPhone = normalizePhoneNumber(rem.customer.phone);
+        const override =
+          (keyId && reminderStatusOverrides[keyId]) ||
+          (keyPhone && reminderStatusOverrides[keyPhone]);
+
+        if (!override) return rem;
+
+        const isSent = override.sentToday;
+        const lastSent = isSent ? (override.timestamp || new Date().toISOString()) : undefined;
+        const hist = override.record
+          ? [override.record, ...(rem.reminderHistory || [])]
+          : rem.reminderHistory;
+
+        return {
+          ...rem,
+          reminderSentToday: isSent,
+          lastReminderSentAt: lastSent,
+          reminderHistory: hist,
+          customer: {
+            ...rem.customer,
+            last_reminder_sent_at: lastSent,
+            reminder_history: hist,
+          },
+        };
+      });
+
+      // Maintain proper sorting:
+      // 1. Overdue and Pending (not sent today) first, sorted by highest overdue days
+      // 2. Overdue and Sent today, sorted by highest overdue days
+      // 3. Not overdue, sorted by days elapsed
+      list.sort((a, b) => {
+        const aPending = a.isOverdue && !a.reminderSentToday;
+        const bPending = b.isOverdue && !b.reminderSentToday;
+        if (aPending && !bPending) return -1;
+        if (!aPending && bPending) return 1;
+        if (a.isOverdue && !b.isOverdue) return -1;
+        if (!a.isOverdue && b.isOverdue) return 1;
+        return b.daysElapsed - a.daysElapsed;
+      });
+    }
+
     const map = new Map<string, CustomerReminderInfo>();
     list.forEach((r) => map.set(r.customer.id, r));
 
@@ -135,7 +185,7 @@ export function CustomerDirectory() {
       sentTodayCount: sentTodayList.length,
       pendingDueCount: pendingDueList.length,
     };
-  }, [unifiedCustomers, invoices]);
+  }, [unifiedCustomers, invoices, reminderStatusOverrides]);
 
   // COMPUTED STATS ACROSS UNIFIED CUSTOMERS
   const stats = useMemo(() => {
@@ -274,59 +324,113 @@ export function CustomerDirectory() {
   };
 
   // SEND WHATSAPP REMINDER ACTION TRIGGER
-  const handleSendWhatsAppReminder = (cust: Customer, info: CustomerReminderInfo) => {
+  const handleSendWhatsAppReminder = async (cust: Customer, info: CustomerReminderInfo) => {
     const url = generateWhatsAppReminderUrl(cust, info, settings.salon_name || "Belezia Salon");
     window.open(url, "_blank");
 
     const nowIso = new Date().toISOString();
-    const newRecord = {
+    const newRecord: CustomerReminderRecord = {
       id: generateUUID(),
       sent_at: nowIso,
-      channel: "whatsapp" as const,
+      channel: "whatsapp",
       service_name: info.serviceName,
       notes: `Sent personalized WhatsApp reminder for ${info.serviceName}`,
     };
+
+    // 1. Instant optimistic state update for 0ms UI response
+    const phoneKey = normalizePhoneNumber(cust.phone);
+    setReminderStatusOverrides((prev) => ({
+      ...prev,
+      ...(cust.id ? { [cust.id]: { sentToday: true, timestamp: nowIso, record: newRecord } } : {}),
+      ...(phoneKey ? { [phoneKey]: { sentToday: true, timestamp: nowIso, record: newRecord } } : {}),
+    }));
 
     const existingHistory = cust.reminder_history || [];
     const updatedCust: Customer = {
       ...cust,
       last_reminder_sent_at: nowIso,
       reminder_history: [newRecord, ...existingHistory],
+      updated_at: nowIso,
     };
-    saveCustomer(updatedCust);
 
-    setSyncMessage(`✓ WhatsApp reminder launched for ${cust.name}! Status updated to Reminder Sent.`);
-    setTimeout(() => setSyncMessage(null), 4000);
+    setSyncMessage(
+      reminderSubFilter === "pending"
+        ? `✓ WhatsApp reminder launched for ${cust.name}! Status updated to Reminder Sent (Moved to Sent Today tab).`
+        : `✓ WhatsApp reminder launched for ${cust.name}! Status updated to Reminder Sent.`
+    );
+    setTimeout(() => setSyncMessage(null), 4500);
+
+    try {
+      await saveCustomer(updatedCust);
+    } catch (err) {
+      console.error("Failed to save WhatsApp reminder status:", err);
+    }
   };
 
   // MANUALLY TOGGLE / UPDATE REMINDER STATUS (FOR TRACKING VIA CALL / SMS OR RESETTING)
-  const handleToggleReminderStatus = (cust: Customer, info: CustomerReminderInfo, markSent: boolean) => {
+  const handleToggleReminderStatus = async (cust: Customer, info: CustomerReminderInfo, markSent: boolean) => {
     const nowIso = new Date().toISOString();
+    const phoneKey = normalizePhoneNumber(cust.phone);
+
     if (markSent) {
-      const newRecord = {
+      const newRecord: CustomerReminderRecord = {
         id: generateUUID(),
         sent_at: nowIso,
-        channel: "manual" as const,
+        channel: "manual",
         service_name: info.serviceName,
         notes: "Manually marked as reminded (Phone call / SMS / Direct contact)",
       };
+
+      // 1. Instant optimistic state update for 0ms UI response
+      setReminderStatusOverrides((prev) => ({
+        ...prev,
+        ...(cust.id ? { [cust.id]: { sentToday: true, timestamp: nowIso, record: newRecord } } : {}),
+        ...(phoneKey ? { [phoneKey]: { sentToday: true, timestamp: nowIso, record: newRecord } } : {}),
+      }));
+
       const existingHistory = cust.reminder_history || [];
       const updatedCust: Customer = {
         ...cust,
         last_reminder_sent_at: nowIso,
         reminder_history: [newRecord, ...existingHistory],
+        updated_at: nowIso,
       };
-      saveCustomer(updatedCust);
-      setSyncMessage(`✓ Follow-up for ${cust.name} marked as Sent Today.`);
+
+      setSyncMessage(
+        reminderSubFilter === "pending"
+          ? `✓ Follow-up for ${cust.name} marked as Sent Today! (Moved to Sent Today tab)`
+          : `✓ Follow-up for ${cust.name} marked as Sent Today.`
+      );
+      setTimeout(() => setSyncMessage(null), 4500);
+
+      try {
+        await saveCustomer(updatedCust);
+      } catch (err) {
+        console.error("Failed to mark reminder as sent:", err);
+      }
     } else {
+      // 1. Instant optimistic reset back to pending
+      setReminderStatusOverrides((prev) => ({
+        ...prev,
+        ...(cust.id ? { [cust.id]: { sentToday: false, timestamp: undefined } } : {}),
+        ...(phoneKey ? { [phoneKey]: { sentToday: false, timestamp: undefined } } : {}),
+      }));
+
       const updatedCust: Customer = {
         ...cust,
-        last_reminder_sent_at: undefined,
+        last_reminder_sent_at: null as any,
+        updated_at: nowIso,
       };
-      saveCustomer(updatedCust);
+
       setSyncMessage(`Follow-up status for ${cust.name} reset to Pending.`);
+      setTimeout(() => setSyncMessage(null), 4000);
+
+      try {
+        await saveCustomer(updatedCust);
+      } catch (err) {
+        console.error("Failed to reset reminder status:", err);
+      }
     }
-    setTimeout(() => setSyncMessage(null), 4000);
   };
 
 

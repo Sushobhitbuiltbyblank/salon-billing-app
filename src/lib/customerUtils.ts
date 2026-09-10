@@ -97,6 +97,8 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
         if (cust.birthday !== undefined) matched.birthday = cust.birthday;
         if (cust.anniversary !== undefined) matched.anniversary = cust.anniversary;
         if (cust.notes !== undefined) matched.notes = cust.notes;
+        matched.last_reminder_sent_at = cust.last_reminder_sent_at || undefined;
+        if (cust.reminder_history !== undefined) matched.reminder_history = cust.reminder_history;
         matched.updated_at = cust.updated_at;
       } else if (matchedUpdatedAt > custUpdatedAt) {
         // matched is strictly newer: preserve matched's name, phone, and metadata, only fill missing attributes
@@ -125,6 +127,9 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
         if (!matched.birthday && cust.birthday) matched.birthday = cust.birthday;
         if (!matched.anniversary && cust.anniversary) matched.anniversary = cust.anniversary;
         if (!matched.notes && cust.notes) matched.notes = cust.notes;
+        if (cust.last_reminder_sent_at !== undefined) {
+          matched.last_reminder_sent_at = cust.last_reminder_sent_at || undefined;
+        }
 
         if (cust.updated_at) {
           matched.updated_at = cust.updated_at;
@@ -139,7 +144,7 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
           matched.last_visit = cust.last_visit;
         }
       }
-      if (cust.last_reminder_sent_at) {
+      if (custUpdatedAt <= matchedUpdatedAt && cust.last_reminder_sent_at) {
         if (!matched.last_reminder_sent_at || new Date(cust.last_reminder_sent_at) > new Date(matched.last_reminder_sent_at)) {
           matched.last_reminder_sent_at = cust.last_reminder_sent_at;
         }

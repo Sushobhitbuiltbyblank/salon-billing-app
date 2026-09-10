@@ -1243,10 +1243,11 @@ export const SupabaseSync = {
         } catch {}
       }
 
+      const isClearingReminder = customer.last_reminder_sent_at === null || customer.last_reminder_sent_at === "";
       const notesPayload = JSON.stringify({
         text: rawNotes,
         updated_at: updatedAtIso,
-        last_reminder_sent_at: customer.last_reminder_sent_at || undefined,
+        last_reminder_sent_at: isClearingReminder ? null : (customer.last_reminder_sent_at || undefined),
         reminder_history: customer.reminder_history || undefined,
       });
 
@@ -1355,7 +1356,9 @@ export const SupabaseSync = {
       if (savedCust) {
         let userNotes = savedCust.notes || "";
         let finalUpdatedAt = updatedAtIso;
-        let lastReminderSentAt = customer.last_reminder_sent_at || savedCust.last_reminder_sent_at || undefined;
+        let lastReminderSentAt = isClearingReminder
+          ? undefined
+          : (customer.last_reminder_sent_at || savedCust.last_reminder_sent_at || undefined);
         let reminderHistory = customer.reminder_history || savedCust.reminder_history || [];
 
         if (savedCust.notes && typeof savedCust.notes === "string" && savedCust.notes.trim().startsWith("{")) {
@@ -1363,7 +1366,11 @@ export const SupabaseSync = {
             const parsed = JSON.parse(savedCust.notes);
             if (parsed.updated_at) finalUpdatedAt = parsed.updated_at;
             if (parsed.text !== undefined) userNotes = parsed.text;
-            if (parsed.last_reminder_sent_at) lastReminderSentAt = parsed.last_reminder_sent_at;
+            if (isClearingReminder) {
+              lastReminderSentAt = undefined;
+            } else if (parsed.last_reminder_sent_at) {
+              lastReminderSentAt = parsed.last_reminder_sent_at;
+            }
             if (parsed.reminder_history && Array.isArray(parsed.reminder_history)) {
               reminderHistory = parsed.reminder_history;
             }

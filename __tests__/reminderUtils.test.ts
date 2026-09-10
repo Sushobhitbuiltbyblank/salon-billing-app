@@ -241,4 +241,71 @@ describe("Customer Reminder Engine & WhatsApp Trigger", () => {
     expect(reminders[1].customer.id).toBe("cust-sent");
     expect(reminders[1].reminderSentToday).toBe(true);
   });
+
+  it("handles status transitions: marking reminder as sent and resetting back to pending", () => {
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const customer: Customer = {
+      id: "cust-transition",
+      name: "Rohit",
+      phone: "9876543299",
+      gender: "male",
+      total_visits: 1,
+      total_spent: 150,
+      last_visit: tenDaysAgo,
+    };
+
+    const invoice: Invoice = {
+      id: "inv-t",
+      invoice_number: "BZ-T",
+      customer_id: "cust-transition",
+      customer_phone: "9876543299",
+      subtotal: 150,
+      discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
+      tax_amount: 0,
+      tax_rate: 0,
+      grand_total: 150,
+      payment_mode: "cash",
+      status: "paid",
+      created_at: tenDaysAgo,
+      items: [{ id: "it", item_name: "Beard Shave", item_type: "service", quantity: 1, unit_price: 150, discount: 0, total_price: 150 }],
+    };
+
+    // 1. Initial pending state
+    let rems = detectCustomerReminders([customer], [invoice]);
+    expect(rems[0].isOverdue).toBe(true);
+    expect(rems[0].reminderSentToday).toBe(false);
+
+    // 2. Mark sent today
+    const nowIso = new Date().toISOString();
+    const markedCustomer: Customer = {
+      ...customer,
+      last_reminder_sent_at: nowIso,
+      reminder_history: [
+        {
+          id: "hist-1",
+          sent_at: nowIso,
+          channel: "manual",
+          service_name: "Beard Shave",
+          notes: "Marked sent",
+        },
+      ],
+      updated_at: nowIso,
+    };
+    rems = detectCustomerReminders([markedCustomer], [invoice]);
+    expect(rems[0].reminderSentToday).toBe(true);
+    expect(rems[0].lastReminderSentAt).toBe(nowIso);
+    expect(rems[0].reminderHistory.length).toBe(1);
+
+    // 3. Reset back to pending (null or cleared)
+    const resetCustomer: Customer = {
+      ...markedCustomer,
+      last_reminder_sent_at: undefined,
+      updated_at: new Date().toISOString(),
+    };
+    rems = detectCustomerReminders([resetCustomer], [invoice]);
+    expect(rems[0].reminderSentToday).toBe(false);
+    expect(rems[0].lastReminderSentAt).toBeUndefined();
+  });
 });
