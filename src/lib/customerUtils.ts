@@ -144,6 +144,16 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
           matched.last_reminder_sent_at = cust.last_reminder_sent_at;
         }
       }
+      if (cust.reminder_history && Array.isArray(cust.reminder_history)) {
+        const existingHist = matched.reminder_history || [];
+        const mergedHist = [...existingHist];
+        for (const rh of cust.reminder_history) {
+          if (!mergedHist.some((m) => m.sent_at === rh.sent_at)) {
+            mergedHist.push(rh);
+          }
+        }
+        matched.reminder_history = mergedHist;
+      }
       if (cust.created_at) {
         if (!matched.created_at || new Date(cust.created_at) < new Date(matched.created_at)) {
           matched.created_at = cust.created_at;
@@ -162,6 +172,8 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
         gender: cust.gender && cust.gender !== "unspecified" ? cust.gender : "female",
         total_visits: Number(cust.total_visits) || 0,
         total_spent: Number(cust.total_spent) || 0,
+        last_reminder_sent_at: cust.last_reminder_sent_at,
+        reminder_history: cust.reminder_history || [],
         created_at: cust.created_at || new Date().toISOString(),
         updated_at: cust.updated_at,
       };

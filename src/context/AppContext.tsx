@@ -124,6 +124,19 @@ interface AppContextType {
   // GLOBAL ACTIONS
   resetDemoData: () => void;
   refreshData: () => void;
+
+  // ON-DEMAND HISTORICAL INVOICES & INCREMENTAL SYNC
+  fetchHistoricalInvoices: (params: {
+    startDate?: string;
+    endDate?: string;
+    searchQuery?: string;
+    customerId?: string;
+    customerPhone?: string;
+    limit?: number;
+    offset?: number;
+  }) => Promise<{ invoices: Invoice[]; totalCount: number }>;
+  fetchInvoiceById: (invoiceId: string) => Promise<Invoice | null>;
+  syncIncremental: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -325,9 +338,94 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setWheelInventory((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.wheelInventory) ? cloudData.wheelInventory : prev));
           Storage.saveWheelInventory(cloudData.wheelInventory);
         }
+        if (cloudData.syncTimestamp) {
+          Storage.saveLastSyncTimestamp(cloudData.syncTimestamp);
+        }
       }
     }
   }, []);
+
+  // INCREMENTAL DELTA SYNC: Lightweight sync querying only delta records since last sync
+  const syncIncremental = useCallback(async () => {
+    if (typeof window === "undefined" || !isSupabaseConfigured()) return;
+
+    const lastSync = Storage.getLastSyncTimestamp();
+    // If no sync timestamp exists yet, perform initial full load
+    if (!lastSync) {
+      return loadAllData();
+    }
+
+    try {
+      const delta = await SupabaseSync.loadIncrementalData(lastSync);
+      if (!delta) return;
+
+      if (delta.syncTimestamp) {
+        Storage.saveLastSyncTimestamp(delta.syncTimestamp);
+      }
+
+      // Merge incremental invoices
+      if (delta.invoices && delta.invoices.length > 0) {
+        const localInvoices = Storage.getInvoices();
+        const mergedInvoices = Storage.mergeInvoices(localInvoices, delta.invoices);
+        setInvoices((prev) => {
+          if (
+            prev.length === mergedInvoices.length &&
+            prev.every(
+              (inv, i) =>
+                inv.id === mergedInvoices[i]?.id &&
+                inv.status === mergedInvoices[i]?.status &&
+                inv.grand_total === mergedInvoices[i]?.grand_total
+            )
+          ) {
+            return prev;
+          }
+          return mergedInvoices;
+        });
+        Storage.saveInvoices(mergedInvoices);
+
+        // Reconcile pending queue against delta
+        const deltaIds = new Set(delta.invoices.map((c) => c.id).filter(Boolean));
+        const deltaNumbers = new Set(delta.invoices.map((c) => c.invoice_number).filter(Boolean));
+        const currentQueue = Storage.getPendingInvoiceSyncQueue();
+        const filteredQueue = currentQueue.filter((id) => !deltaIds.has(id) && !deltaNumbers.has(id));
+        if (filteredQueue.length !== currentQueue.length) {
+          Storage.savePendingInvoiceSyncQueue(filteredQueue);
+          setPendingSyncCount(filteredQueue.length);
+        }
+      }
+
+      // Merge incremental customers
+      if (delta.customers && delta.customers.length > 0) {
+        const localCustomers = Storage.getCustomers();
+        const mergedCusts = deduplicateCustomerArray([...delta.customers, ...localCustomers]);
+        setCustomers((prev) =>
+          JSON.stringify(prev) !== JSON.stringify(mergedCusts) ? mergedCusts : prev
+        );
+        Storage.saveCustomers(mergedCusts);
+      }
+
+      // Merge incremental expenses
+      if (delta.expenses && delta.expenses.length > 0) {
+        const localExpenses = Storage.getExpenses();
+        const expMap = new Map<string, Expense>();
+        localExpenses.forEach((e) => expMap.set(e.id, e));
+        delta.expenses.forEach((e) => expMap.set(e.id, e));
+        const mergedExpenses = Array.from(expMap.values()).sort(
+          (a, b) => new Date(b.expense_date || b.created_at || "").getTime() - new Date(a.expense_date || a.created_at || "").getTime()
+        );
+        setExpenses((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedExpenses) ? mergedExpenses : prev));
+        Storage.saveExpenses(mergedExpenses);
+      }
+
+      // Wheel inventory
+      if (delta.wheelInventory && delta.wheelInventory.length > 0) {
+        setWheelInventory((prev) => (JSON.stringify(prev) !== JSON.stringify(delta.wheelInventory) ? delta.wheelInventory : prev));
+        Storage.saveWheelInventory(delta.wheelInventory);
+      }
+    } catch (err) {
+      console.warn("Incremental delta sync error:", err);
+    }
+  }, [loadAllData]);
 
   // NETWORK CONNECTIVITY & BACKGROUND SYNC LISTENERS
   useEffect(() => {
@@ -339,7 +437,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const handleOnline = () => {
       setIsOnline(true);
-      syncPendingInvoices().then(() => loadAllData());
+      syncPendingInvoices().then(() => syncIncremental());
     };
     const handleOffline = () => {
       setIsOnline(false);
@@ -352,38 +450,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [syncPendingInvoices, loadAllData]);
+  }, [syncPendingInvoices, syncIncremental]);
 
   useEffect(() => {
+    // 1. Initial boot: full load once
     loadAllData();
 
-    // 1. Subscribe to Supabase Realtime multi-device database events
+    // 2. Subscribe to Supabase Realtime multi-device database events (uses incremental delta sync)
     const unsubscribe = SupabaseSync.subscribeToRealtimeUpdates(() => {
-      loadAllData();
+      syncIncremental();
     });
 
-    // 2. Multi-device 30-second heartbeat polling: sync pending queue and load cloud updates
+    // 3. Multi-device 30-second heartbeat polling: sync pending queue and pull incremental delta
     const interval = setInterval(() => {
       if (Storage.getPendingInvoiceSyncQueue().length > 0) {
         syncPendingInvoices();
       }
-      loadAllData();
+      syncIncremental();
     }, 30000);
 
-    // 3. Instant sync on window focus or screen unlock / tab switch
+    // 4. Instant incremental sync on window focus or screen unlock / tab switch
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         if (Storage.getPendingInvoiceSyncQueue().length > 0) {
           syncPendingInvoices();
         }
-        loadAllData();
+        syncIncremental();
       }
     };
     const onWindowFocus = () => {
       if (Storage.getPendingInvoiceSyncQueue().length > 0) {
         syncPendingInvoices();
       }
-      loadAllData();
+      syncIncremental();
     };
 
     window.addEventListener("focus", onWindowFocus);
@@ -395,7 +494,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("focus", onWindowFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [loadAllData, syncPendingInvoices]);
+  }, [loadAllData, syncIncremental, syncPendingInvoices]);
 
   // AUTH ACTIONS
   const loginWithPin = (userId: string, pin: string): boolean => {
@@ -725,15 +824,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const idx = fresh.findIndex(
             (c) => (targetId && c.id === targetId) || (saved.id && c.id === saved.id)
           );
+          const effectiveReminderSentAt =
+            remoteCust.last_reminder_sent_at !== undefined
+              ? remoteCust.last_reminder_sent_at
+              : (saved.last_reminder_sent_at || undefined);
+          const effectiveReminderHistory =
+            (remoteCust.reminder_history && remoteCust.reminder_history.length > 0)
+              ? remoteCust.reminder_history
+              : (saved.reminder_history || []);
+
           if (idx >= 0) {
-            fresh[idx] = { ...fresh[idx], ...remoteCust };
+            fresh[idx] = {
+              ...fresh[idx],
+              ...remoteCust,
+              last_reminder_sent_at: effectiveReminderSentAt || fresh[idx].last_reminder_sent_at,
+              reminder_history: effectiveReminderHistory.length > 0 ? effectiveReminderHistory : (fresh[idx].reminder_history || []),
+            };
           } else {
             const p = normalizePhoneNumber(remoteCust.phone);
             const pIdx = fresh.findIndex((c) => normalizePhoneNumber(c.phone) === p);
             if (pIdx >= 0) {
-              fresh[pIdx] = { ...fresh[pIdx], ...remoteCust };
+              fresh[pIdx] = {
+                ...fresh[pIdx],
+                ...remoteCust,
+                last_reminder_sent_at: effectiveReminderSentAt || fresh[pIdx].last_reminder_sent_at,
+                reminder_history: effectiveReminderHistory.length > 0 ? effectiveReminderHistory : (fresh[pIdx].reminder_history || []),
+              };
             } else {
-              fresh.unshift(remoteCust);
+              fresh.unshift({
+                ...remoteCust,
+                last_reminder_sent_at: effectiveReminderSentAt,
+                reminder_history: effectiveReminderHistory,
+              });
             }
           }
 
@@ -779,7 +901,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (remoteInv) {
             Storage.removeFromInvoiceSyncQueue(created.id);
             setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
-            loadAllData();
+            syncIncremental();
           }
         })
         .catch((err) => {
@@ -801,19 +923,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.removeFromInvoiceSyncQueue(inv.id);
           setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
         }
-        const cloudData = await SupabaseSync.loadAllData();
-        if (cloudData?.invoices) {
-          const merged = Storage.mergeInvoices(Storage.getInvoices(), cloudData.invoices);
-          setInvoices(merged);
-          Storage.saveInvoices(merged);
-        }
-        if (cloudData?.customers) {
-          const cloudList = deduplicateCustomerArray(cloudData.customers);
-          const localList = Storage.getCustomers();
-          const mergedCusts = deduplicateCustomerArray([...cloudList, ...localList]);
-          setCustomers(mergedCusts);
-          Storage.saveCustomers(mergedCusts);
-        }
+        await syncIncremental();
       } catch (e) {
         console.warn("Failed to sync invoice update to cloud; safely retained in offline queue:", e);
       }
@@ -832,12 +942,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.removeFromInvoiceSyncQueue(invoiceId);
           setPendingSyncCount(Storage.getPendingInvoiceSyncQueue().length);
         }
-        const cloudData = await SupabaseSync.loadAllData();
-        if (cloudData?.invoices) {
-          const merged = Storage.mergeInvoices(Storage.getInvoices(), cloudData.invoices);
-          setInvoices(merged);
-          Storage.saveInvoices(merged);
-        }
+        await syncIncremental();
       } catch (e) {
         console.warn("Failed to sync void invoice to cloud; safely retained in offline queue:", e);
       }
@@ -858,7 +963,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // 2. Delete from Supabase PostgreSQL
     if (isSupabaseConfigured()) {
       await SupabaseSync.deleteInvoice(invoiceId);
-      await loadAllData();
+      await syncIncremental();
     }
   };
 
@@ -1142,6 +1247,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         },
         resetDemoData,
         refreshData: loadAllData,
+        fetchHistoricalInvoices: SupabaseSync.fetchHistoricalInvoices.bind(SupabaseSync),
+        fetchInvoiceById: SupabaseSync.fetchInvoiceById.bind(SupabaseSync),
+        syncIncremental,
       }}
     >
       {children}

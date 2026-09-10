@@ -81,11 +81,84 @@ export function decodePackageSku(
 }
 
 export const SupabaseSync = {
+  // Helper to map remote customer row
+  mapRemoteCustomer(cust: any): Customer {
+    let userNotes = cust.notes || "";
+    let updatedAt = cust.updated_at || cust.created_at;
+    let lastReminderSentAt = cust.last_reminder_sent_at || undefined;
+    let reminderHistory = cust.reminder_history || [];
+
+    if (cust.notes && typeof cust.notes === "string" && cust.notes.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(cust.notes);
+        if (parsed.updated_at) {
+          updatedAt = parsed.updated_at;
+        }
+        if (parsed.text !== undefined) {
+          userNotes = parsed.text;
+        } else if (parsed.user_notes !== undefined) {
+          userNotes = parsed.user_notes;
+        }
+        if (parsed.last_reminder_sent_at) {
+          lastReminderSentAt = parsed.last_reminder_sent_at;
+        }
+        if (parsed.reminder_history && Array.isArray(parsed.reminder_history)) {
+          reminderHistory = parsed.reminder_history;
+        }
+      } catch {}
+    }
+
+    return {
+      ...cust,
+      notes: userNotes,
+      updated_at: updatedAt,
+      total_spent: Number(cust.total_spent) || 0,
+      last_reminder_sent_at: lastReminderSentAt || cust.last_reminder_sent_at || undefined,
+      reminder_history: reminderHistory,
+    };
+  },
+
+  // Helper to map remote invoice row
+  mapRemoteInvoice(inv: any): Invoice {
+    let userNotes = inv.notes || "";
+    let itemsFromMeta: InvoiceItem[] | null = null;
+
+    if (inv.notes && typeof inv.notes === "string" && inv.notes.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(inv.notes);
+        if (parsed.items_meta && Array.isArray(parsed.items_meta)) {
+          itemsFromMeta = parsed.items_meta;
+          userNotes = parsed.user_notes || "";
+        }
+      } catch {}
+    }
+
+    const lineItems =
+      itemsFromMeta ||
+      (inv.invoice_items || []).map((it: any) => ({
+        ...it,
+        unit_price: Number(it.unit_price) || 0,
+        discount: Number(it.discount) || 0,
+        total_price: Number(it.total_price) || 0,
+      }));
+
+    return {
+      ...inv,
+      notes: userNotes,
+      subtotal: Number(inv.subtotal) || 0,
+      tax_amount: Number(inv.tax_amount) || 0,
+      discount_amount: Number(inv.discount_amount) || 0,
+      grand_total: Number(inv.grand_total) || 0,
+      items: lineItems,
+    };
+  },
+
   // 1. FETCH ALL DATA FROM SUPABASE
   async loadAllData() {
     if (!isSupabaseConfigured() || !supabase) return null;
 
     try {
+      const nowIso = new Date().toISOString();
       const [
         settingsRes,
         staffRes,
@@ -102,13 +175,14 @@ export const SupabaseSync = {
         supabase.from("categories").select("*").order("name").limit(500),
         supabase.from("catalog_items").select("*").order("name").limit(2000),
         supabase.from("customers").select("*").order("created_at", { ascending: false }).limit(5000),
-        supabase.from("invoices").select("*, invoice_items(*)").order("created_at", { ascending: false }).limit(5000),
+        supabase.from("invoices").select("*, invoice_items(*)").order("created_at", { ascending: false }).limit(500),
         supabase.from("expenses").select("*").order("expense_date", { ascending: false }).limit(5000),
         supabase.from("app_users").select("*").order("role").limit(100),
         supabase.from("wheel_inventory").select("*").order("created_at").limit(100),
       ]);
 
       return {
+        syncTimestamp: nowIso,
         settings: settingsRes.data || null,
         staff: (staffRes.data || []).map((s: any) => {
           let parsedNotes = s.notes || "";
@@ -212,64 +286,8 @@ export const SupabaseSync = {
 
           return remoteCatalog;
         })(),
-        customers: (customersRes.data || []).map((cust: any) => {
-          let userNotes = cust.notes || "";
-          let updatedAt = cust.updated_at || cust.created_at;
-
-          if (cust.notes && typeof cust.notes === "string" && cust.notes.trim().startsWith("{")) {
-            try {
-              const parsed = JSON.parse(cust.notes);
-              if (parsed.updated_at) {
-                updatedAt = parsed.updated_at;
-              }
-              if (parsed.text !== undefined) {
-                userNotes = parsed.text;
-              } else if (parsed.user_notes !== undefined) {
-                userNotes = parsed.user_notes;
-              }
-            } catch {}
-          }
-
-          return {
-            ...cust,
-            notes: userNotes,
-            updated_at: updatedAt,
-            total_spent: Number(cust.total_spent) || 0,
-          };
-        }),
-        invoices: (invoicesRes.data || []).map((inv: any) => {
-          let userNotes = inv.notes || "";
-          let itemsFromMeta: InvoiceItem[] | null = null;
-
-          if (inv.notes && typeof inv.notes === "string" && inv.notes.startsWith("{")) {
-            try {
-              const parsed = JSON.parse(inv.notes);
-              if (parsed.items_meta && Array.isArray(parsed.items_meta)) {
-                itemsFromMeta = parsed.items_meta;
-                userNotes = parsed.user_notes || "";
-              }
-            } catch {}
-          }
-
-          const lineItems =
-            itemsFromMeta ||
-            (inv.invoice_items || []).map((it: any) => ({
-              ...it,
-              unit_price: Number(it.unit_price) || 0,
-              discount: Number(it.discount) || 0,
-              total_price: Number(it.total_price) || 0,
-            }));
-
-          return {
-            ...inv,
-            notes: userNotes,
-            subtotal: Number(inv.subtotal) || 0,
-            tax_amount: Number(inv.tax_amount) || 0,
-            discount_amount: Number(inv.discount_amount) || 0,
-            grand_total: Number(inv.grand_total) || 0,
-            items: lineItems,
-          };
-        }),
+        customers: (customersRes.data || []).map((cust: any) => this.mapRemoteCustomer(cust)),
+        invoices: (invoicesRes.data || []).map((inv: any) => this.mapRemoteInvoice(inv)),
         expenses: (expensesRes.data || []).map((e: any) => ({
           ...e,
           amount: Number(e.amount) || 0,
@@ -310,6 +328,152 @@ export const SupabaseSync = {
       };
     } catch (err) {
       console.warn("Supabase fetch error, falling back to local storage:", err);
+      return null;
+    }
+  },
+
+  // 1b. FETCH INCREMENTAL DELTA (LIGHTWEIGHT POLLING FOR 30S HEARTBEAT & REALTIME)
+  async loadIncrementalData(sinceTimestamp?: string) {
+    if (!isSupabaseConfigured() || !supabase) return null;
+    if (!sinceTimestamp) return this.loadAllData();
+
+    try {
+      const nowIso = new Date().toISOString();
+
+      // Query only new invoices since sinceTimestamp, plus latest 15 to catch any edits or voids
+      const [
+        newInvoicesRes,
+        recentInvoicesRes,
+        customersRes,
+        expensesRes,
+        wheelInventoryRes,
+      ] = await Promise.all([
+        supabase
+          .from("invoices")
+          .select("*, invoice_items(*)")
+          .gt("created_at", sinceTimestamp)
+          .order("created_at", { ascending: false })
+          .limit(100),
+        supabase
+          .from("invoices")
+          .select("*, invoice_items(*)")
+          .order("created_at", { ascending: false })
+          .limit(15),
+        supabase
+          .from("customers")
+          .select("*")
+          .gt("created_at", sinceTimestamp)
+          .order("created_at", { ascending: false })
+          .limit(100),
+        supabase
+          .from("expenses")
+          .select("*")
+          .gt("created_at", sinceTimestamp)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase
+          .from("wheel_inventory")
+          .select("*")
+          .order("created_at")
+          .limit(100),
+      ]);
+
+      const invoiceMap = new Map<string, Invoice>();
+      (newInvoicesRes.data || []).forEach((inv: any) => {
+        const mapped = this.mapRemoteInvoice(inv);
+        if (mapped.id) invoiceMap.set(mapped.id, mapped);
+      });
+      (recentInvoicesRes.data || []).forEach((inv: any) => {
+        const mapped = this.mapRemoteInvoice(inv);
+        if (mapped.id && !invoiceMap.has(mapped.id)) invoiceMap.set(mapped.id, mapped);
+      });
+
+      return {
+        syncTimestamp: nowIso,
+        invoices: Array.from(invoiceMap.values()),
+        customers: (customersRes.data || []).map((c: any) => this.mapRemoteCustomer(c)),
+        expenses: (expensesRes.data || []).map((e: any) => ({
+          ...e,
+          amount: Number(e.amount) || 0,
+        })),
+        wheelInventory: (wheelInventoryRes.data || []) as WheelInventoryItem[],
+      };
+    } catch (err) {
+      console.warn("Supabase incremental fetch warning:", err);
+      return null;
+    }
+  },
+
+  // 1c. ON-DEMAND HISTORICAL INVOICES QUERY (FOR ADMIN INVOICE MANAGEMENT & AUDITING)
+  async fetchHistoricalInvoices(params: {
+    startDate?: string;
+    endDate?: string;
+    searchQuery?: string;
+    customerId?: string;
+    customerPhone?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ invoices: Invoice[]; totalCount: number }> {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { invoices: [], totalCount: 0 };
+    }
+
+    try {
+      let query = supabase
+        .from("invoices")
+        .select("*, invoice_items(*)", { count: "exact" });
+
+      if (params.startDate) {
+        query = query.gte("created_at", params.startDate);
+      }
+      if (params.endDate) {
+        query = query.lte("created_at", params.endDate);
+      }
+      if (params.customerId) {
+        query = query.eq("customer_id", params.customerId);
+      }
+      if (params.customerPhone) {
+        const cleanP = normalizePhoneNumber(params.customerPhone);
+        if (cleanP) query = query.eq("customer_phone", cleanP);
+      }
+      if (params.searchQuery && params.searchQuery.trim()) {
+        const q = params.searchQuery.trim();
+        query = query.or(`invoice_number.ilike.%${q}%,customer_name.ilike.%${q}%,customer_phone.ilike.%${q}%`);
+      }
+
+      const limit = params.limit || 50;
+      const offset = params.offset || 0;
+
+      query = query
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      const { data, count, error } = await query;
+      if (error) {
+        console.error("Supabase fetchHistoricalInvoices error:", error);
+        return { invoices: [], totalCount: 0 };
+      }
+
+      const mapped = (data || []).map((inv: any) => this.mapRemoteInvoice(inv));
+      return { invoices: mapped, totalCount: count || mapped.length };
+    } catch (err) {
+      console.error("Supabase fetchHistoricalInvoices exception:", err);
+      return { invoices: [], totalCount: 0 };
+    }
+  },
+
+  async fetchInvoiceById(invoiceId: string): Promise<Invoice | null> {
+    if (!isSupabaseConfigured() || !supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("*, invoice_items(*)")
+        .or(`id.eq.${invoiceId},invoice_number.eq.${invoiceId}`)
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return this.mapRemoteInvoice(data);
+    } catch {
       return null;
     }
   },
@@ -1082,6 +1246,8 @@ export const SupabaseSync = {
       const notesPayload = JSON.stringify({
         text: rawNotes,
         updated_at: updatedAtIso,
+        last_reminder_sent_at: customer.last_reminder_sent_at || undefined,
+        reminder_history: customer.reminder_history || undefined,
       });
 
       const payload: any = {
@@ -1189,17 +1355,26 @@ export const SupabaseSync = {
       if (savedCust) {
         let userNotes = savedCust.notes || "";
         let finalUpdatedAt = updatedAtIso;
+        let lastReminderSentAt = customer.last_reminder_sent_at || savedCust.last_reminder_sent_at || undefined;
+        let reminderHistory = customer.reminder_history || savedCust.reminder_history || [];
+
         if (savedCust.notes && typeof savedCust.notes === "string" && savedCust.notes.trim().startsWith("{")) {
           try {
             const parsed = JSON.parse(savedCust.notes);
             if (parsed.updated_at) finalUpdatedAt = parsed.updated_at;
             if (parsed.text !== undefined) userNotes = parsed.text;
+            if (parsed.last_reminder_sent_at) lastReminderSentAt = parsed.last_reminder_sent_at;
+            if (parsed.reminder_history && Array.isArray(parsed.reminder_history)) {
+              reminderHistory = parsed.reminder_history;
+            }
           } catch {}
         }
         return {
           ...savedCust,
           notes: userNotes,
           updated_at: finalUpdatedAt,
+          last_reminder_sent_at: lastReminderSentAt || undefined,
+          reminder_history: reminderHistory,
         };
       }
 

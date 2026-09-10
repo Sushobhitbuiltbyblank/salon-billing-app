@@ -4,6 +4,7 @@ import {
   generateWhatsAppReminderUrl,
   isGroomingOrShaveService,
   wasReminderSentToday,
+  formatReminderTime,
 } from "@/lib/reminderUtils";
 import { Customer, Invoice } from "@/types";
 
@@ -153,5 +154,91 @@ describe("Customer Reminder Engine & WhatsApp Trigger", () => {
     expect(wasReminderSentToday(today)).toBe(true);
     expect(wasReminderSentToday(twoDaysAgo)).toBe(false);
     expect(wasReminderSentToday(undefined)).toBe(false);
+  });
+
+  it("formats reminder timestamps cleanly with formatReminderTime", () => {
+    const now = new Date();
+    const todayIso = now.toISOString();
+    const formattedToday = formatReminderTime(todayIso);
+    expect(formattedToday.length).toBeGreaterThan(0);
+    // When sent today, it should contain AM or PM
+    expect(formattedToday).toMatch(/am|pm/i);
+
+    const pastDateIso = new Date("2026-08-15T14:30:00Z").toISOString();
+    const formattedPast = formatReminderTime(pastDateIso);
+    expect(formattedPast.length).toBeGreaterThan(0);
+    expect(formatReminderTime(undefined)).toBe("");
+    expect(formatReminderTime(null)).toBe("");
+  });
+
+  it("sorts overdue pending customers before overdue sent-today customers", () => {
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const today = new Date().toISOString();
+
+    const pendingCustomer: Customer = {
+      id: "cust-pending",
+      name: "Rahul",
+      phone: "9876543210",
+      gender: "male",
+      total_visits: 1,
+      total_spent: 200,
+      last_visit: tenDaysAgo,
+    };
+
+    const sentTodayCustomer: Customer = {
+      id: "cust-sent",
+      name: "Vikas",
+      phone: "9876543219",
+      gender: "male",
+      total_visits: 1,
+      total_spent: 200,
+      last_visit: tenDaysAgo,
+      last_reminder_sent_at: today,
+    };
+
+    const invoices: Invoice[] = [
+      {
+        id: "inv-p",
+        invoice_number: "BZ-P",
+        customer_id: "cust-pending",
+        customer_phone: "9876543210",
+        subtotal: 200,
+        discount_amount: 0,
+        discount_type: "flat",
+        discount_value: 0,
+        tax_amount: 0,
+        tax_rate: 0,
+        grand_total: 200,
+        payment_mode: "cash",
+        status: "paid",
+        created_at: tenDaysAgo,
+        items: [{ id: "i1", item_name: "Beard Trim", item_type: "service", quantity: 1, unit_price: 200, discount: 0, total_price: 200 }],
+      },
+      {
+        id: "inv-s",
+        invoice_number: "BZ-S",
+        customer_id: "cust-sent",
+        customer_phone: "9876543219",
+        subtotal: 200,
+        discount_amount: 0,
+        discount_type: "flat",
+        discount_value: 0,
+        tax_amount: 0,
+        tax_rate: 0,
+        grand_total: 200,
+        payment_mode: "cash",
+        status: "paid",
+        created_at: tenDaysAgo,
+        items: [{ id: "i2", item_name: "Beard Trim", item_type: "service", quantity: 1, unit_price: 200, discount: 0, total_price: 200 }],
+      },
+    ];
+
+    const reminders = detectCustomerReminders([sentTodayCustomer, pendingCustomer], invoices);
+    expect(reminders.length).toBe(2);
+    // Pending customer must come first
+    expect(reminders[0].customer.id).toBe("cust-pending");
+    expect(reminders[0].reminderSentToday).toBe(false);
+    expect(reminders[1].customer.id).toBe("cust-sent");
+    expect(reminders[1].reminderSentToday).toBe(true);
   });
 });

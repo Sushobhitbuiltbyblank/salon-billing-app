@@ -27,6 +27,7 @@ import {
   detectCustomerReminders,
   generateWhatsAppReminderUrl,
   wasReminderSentToday,
+  formatReminderTime,
 } from "@/lib/reminderUtils";
 import {
   UserCheck,
@@ -63,6 +64,9 @@ import {
   Scissors,
   CheckCheck,
   Trash2,
+  Cloud,
+  Loader2,
+  RotateCcw,
 } from "lucide-react";
 
 export function CustomerDirectory() {
@@ -79,6 +83,7 @@ export function CustomerDirectory() {
     catalog,
     staff,
     refreshData,
+    fetchHistoricalInvoices,
   } = useApp();
 
   const [activeCrmTab, setActiveCrmTab] = useState<"all" | "reminders" | "vip">("all");
@@ -96,6 +101,11 @@ export function CustomerDirectory() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  // ON-DEMAND HISTORICAL CUSTOMER INVOICES STATE
+  const [cloudCustomerInvoices, setCloudCustomerInvoices] = useState<Invoice[]>([]);
+  const [isLoadingCustomerHistory, setIsLoadingCustomerHistory] = useState<boolean>(false);
+  const [hasFetchedCloudHistory, setHasFetchedCloudHistory] = useState<boolean>(false);
 
 
   // UNIFIED CUSTOMER LIST COMBINING REGISTERED PROFILES & INVOICE DATA
@@ -268,13 +278,54 @@ export function CustomerDirectory() {
     const url = generateWhatsAppReminderUrl(cust, info, settings.salon_name || "Belezia Salon");
     window.open(url, "_blank");
 
+    const nowIso = new Date().toISOString();
+    const newRecord = {
+      id: generateUUID(),
+      sent_at: nowIso,
+      channel: "whatsapp" as const,
+      service_name: info.serviceName,
+      notes: `Sent personalized WhatsApp reminder for ${info.serviceName}`,
+    };
+
+    const existingHistory = cust.reminder_history || [];
     const updatedCust: Customer = {
       ...cust,
-      last_reminder_sent_at: new Date().toISOString(),
+      last_reminder_sent_at: nowIso,
+      reminder_history: [newRecord, ...existingHistory],
     };
     saveCustomer(updatedCust);
 
-    setSyncMessage(`✓ WhatsApp reminder launched for ${cust.name}! Marked as sent today.`);
+    setSyncMessage(`✓ WhatsApp reminder launched for ${cust.name}! Status updated to Reminder Sent.`);
+    setTimeout(() => setSyncMessage(null), 4000);
+  };
+
+  // MANUALLY TOGGLE / UPDATE REMINDER STATUS (FOR TRACKING VIA CALL / SMS OR RESETTING)
+  const handleToggleReminderStatus = (cust: Customer, info: CustomerReminderInfo, markSent: boolean) => {
+    const nowIso = new Date().toISOString();
+    if (markSent) {
+      const newRecord = {
+        id: generateUUID(),
+        sent_at: nowIso,
+        channel: "manual" as const,
+        service_name: info.serviceName,
+        notes: "Manually marked as reminded (Phone call / SMS / Direct contact)",
+      };
+      const existingHistory = cust.reminder_history || [];
+      const updatedCust: Customer = {
+        ...cust,
+        last_reminder_sent_at: nowIso,
+        reminder_history: [newRecord, ...existingHistory],
+      };
+      saveCustomer(updatedCust);
+      setSyncMessage(`✓ Follow-up for ${cust.name} marked as Sent Today.`);
+    } else {
+      const updatedCust: Customer = {
+        ...cust,
+        last_reminder_sent_at: undefined,
+      };
+      saveCustomer(updatedCust);
+      setSyncMessage(`Follow-up status for ${cust.name} reset to Pending.`);
+    }
     setTimeout(() => setSyncMessage(null), 4000);
   };
 
@@ -286,23 +337,59 @@ export function CustomerDirectory() {
 
   const handleOpenHistory = (customer: Customer) => {
     setSelectedHistoryCustomer(customer);
+    setCloudCustomerInvoices([]);
+    setHasFetchedCloudHistory(false);
     setIsHistoryModalOpen(true);
   };
 
-  // GET INVOICES FOR SELECTED CUSTOMER
+  const handleFetchCustomerCloudHistory = async () => {
+    if (!selectedHistoryCustomer) return;
+    setIsLoadingCustomerHistory(true);
+    try {
+      const res = await fetchHistoricalInvoices({
+        customerPhone: selectedHistoryCustomer.phone || undefined,
+        customerId: selectedHistoryCustomer.id || undefined,
+        limit: 100,
+      });
+      setCloudCustomerInvoices(res.invoices);
+      setHasFetchedCloudHistory(true);
+    } catch (err) {
+      console.error("Failed to fetch customer cloud history:", err);
+    } finally {
+      setIsLoadingCustomerHistory(false);
+    }
+  };
+
+  // GET INVOICES FOR SELECTED CUSTOMER (COMBINING LOCAL ACTIVE CACHE + ON-DEMAND CLOUD ARCHIVE)
   const customerInvoices = useMemo(() => {
     if (!selectedHistoryCustomer) return [];
     const cleanPhone = normalizePhoneNumber(selectedHistoryCustomer.phone);
 
-    return invoices.filter((inv) => {
-      if (inv.status === "void" || (inv.status as string) === "cancelled") return false;
+    const invMap = new Map<string, Invoice>();
+    invoices.forEach((inv) => {
+      if (inv.status === "void" || (inv.status as string) === "cancelled") return;
       const invPhone = normalizePhoneNumber(inv.customer_phone);
 
-      if (cleanPhone.length >= 7 && invPhone.length >= 7) return cleanPhone === invPhone;
-      if (selectedHistoryCustomer.id && inv.customer_id) return selectedHistoryCustomer.id === inv.customer_id;
-      return false;
+      const phoneMatch = cleanPhone.length >= 7 && invPhone.length >= 7 && cleanPhone === invPhone;
+      const idMatch = Boolean(selectedHistoryCustomer.id && inv.customer_id && selectedHistoryCustomer.id === inv.customer_id);
+
+      if (phoneMatch || idMatch) {
+        invMap.set(inv.id || inv.invoice_number, inv);
+      }
     });
-  }, [selectedHistoryCustomer, invoices]);
+
+    cloudCustomerInvoices.forEach((inv) => {
+      if (inv.status === "void" || (inv.status as string) === "cancelled") return;
+      const key = inv.id || inv.invoice_number;
+      if (!invMap.has(key)) {
+        invMap.set(key, inv);
+      }
+    });
+
+    return Array.from(invMap.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [selectedHistoryCustomer, invoices, cloudCustomerInvoices]);
 
   return (
     <div className="space-y-5 pb-16 animate-in fade-in duration-300">
@@ -411,56 +498,104 @@ export function CustomerDirectory() {
       {/* KPI SUMMARY CARDS */}
       {activeCrmTab === "reminders" ? (
         /* REMINDERS KPI CARDS */
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Card className="p-3.5 bg-zinc-950/80 border-amber-500/30 relative overflow-hidden">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+          <Card
+            onClick={() => setReminderSubFilter("all_due")}
+            className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
+              reminderSubFilter === "all_due"
+                ? "border-amber-500 ring-1 ring-amber-500 bg-amber-950/20"
+                : "border-amber-500/30 hover:border-amber-400/70"
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">Total Due</span>
-              <div className="h-7 w-7 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                <BellRing className="h-4 w-4" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">All Due</span>
+              <div className="h-6 w-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <BellRing className="h-3.5 w-3.5" />
               </div>
             </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-amber-300">{reminderData.totalDueCount}</span>
-              <span className="text-[11px] text-zinc-500 font-medium">customers</span>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="text-xl sm:text-2xl font-black text-amber-300">{reminderData.totalDueCount}</span>
+              <span className="text-[10px] text-zinc-500 font-medium">clients</span>
             </div>
           </Card>
 
-          <Card className="p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
+          <Card
+            onClick={() => setReminderSubFilter("pending")}
+            className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
+              reminderSubFilter === "pending"
+                ? "border-orange-500 ring-1 ring-orange-500 bg-orange-950/20"
+                : "border-orange-500/30 hover:border-orange-400/70"
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-orange-400">🪒 Shave / Beard (7d+)</span>
-              <div className="h-7 w-7 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center font-mono text-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-orange-400">⏳ Pending</span>
+              <div className="h-6 w-6 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center">
+                <Clock className="h-3.5 w-3.5" />
+              </div>
+            </div>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="text-xl sm:text-2xl font-black text-orange-300">{reminderData.pendingDueCount}</span>
+              <span className="text-[10px] text-zinc-500 font-medium">to follow-up</span>
+            </div>
+          </Card>
+
+          <Card
+            onClick={() => setReminderSubFilter("sent_today")}
+            className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
+              reminderSubFilter === "sent_today"
+                ? "border-emerald-500 ring-1 ring-emerald-500 bg-emerald-950/20"
+                : "border-emerald-500/30 hover:border-emerald-400/70"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">✓ Sent Today</span>
+              <div className="h-6 w-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <CheckCheck className="h-3.5 w-3.5" />
+              </div>
+            </div>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="text-xl sm:text-2xl font-black text-emerald-300">{reminderData.sentTodayCount}</span>
+              <span className="text-[10px] text-zinc-500 font-medium">dispatched</span>
+            </div>
+          </Card>
+
+          <Card
+            onClick={() => setReminderSubFilter("shave_due")}
+            className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
+              reminderSubFilter === "shave_due"
+                ? "border-amber-500 ring-1 ring-amber-500 bg-amber-950/20"
+                : "border-zinc-800/90 hover:border-amber-400/70"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">🪒 Shave (7d+)</span>
+              <div className="h-6 w-6 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center font-mono text-[10px] font-bold">
                 7d
               </div>
             </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-orange-300">{reminderData.shaveDueCount}</span>
-              <span className="text-[11px] text-zinc-500 font-medium">due</span>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="text-xl sm:text-2xl font-black text-amber-300">{reminderData.shaveDueCount}</span>
+              <span className="text-[10px] text-zinc-500 font-medium">clients</span>
             </div>
           </Card>
 
-          <Card className="p-3.5 bg-zinc-950/80 border-zinc-800/90 relative overflow-hidden">
+          <Card
+            onClick={() => setReminderSubFilter("haircut_due")}
+            className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
+              reminderSubFilter === "haircut_due"
+                ? "border-purple-500 ring-1 ring-purple-500 bg-purple-950/20"
+                : "border-zinc-800/90 hover:border-purple-400/70"
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400">✂️ Haircut & Spa (30d+)</span>
-              <div className="h-7 w-7 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-mono text-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">✂️ Haircut (30d+)</span>
+              <div className="h-6 w-6 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center font-mono text-[10px] font-bold">
                 30d
               </div>
             </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-purple-300">{reminderData.haircutDueCount}</span>
-              <span className="text-[11px] text-zinc-500 font-medium">due</span>
-            </div>
-          </Card>
-
-          <Card className="p-3.5 bg-zinc-950/80 border-emerald-500/30 relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Sent Today</span>
-              <div className="h-7 w-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                <CheckCheck className="h-4 w-4" />
-              </div>
-            </div>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-black text-emerald-300">{reminderData.sentTodayCount}</span>
-              <span className="text-[11px] text-zinc-500 font-medium">dispatched</span>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="text-xl sm:text-2xl font-black text-purple-300">{reminderData.haircutDueCount}</span>
+              <span className="text-[10px] text-zinc-500 font-medium">clients</span>
             </div>
           </Card>
         </div>
@@ -596,10 +731,10 @@ export function CustomerDirectory() {
             <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 overflow-x-auto">
               {[
                 { id: "all_due", label: `All Due (${reminderData.totalDueCount})` },
+                { id: "pending", label: `⏳ Pending (${reminderData.pendingDueCount})` },
+                { id: "sent_today", label: `✓ Sent Today (${reminderData.sentTodayCount})` },
                 { id: "shave_due", label: `🪒 Shave 7d+ (${reminderData.shaveDueCount})` },
                 { id: "haircut_due", label: `✂️ Haircut 30d+ (${reminderData.haircutDueCount})` },
-                { id: "sent_today", label: `✓ Sent Today (${reminderData.sentTodayCount})` },
-                { id: "pending", label: `⏳ Pending (${reminderData.pendingDueCount})` },
               ].map((rf) => (
                 <button
                   key={rf.id}
@@ -710,24 +845,34 @@ export function CustomerDirectory() {
             return (
               <Card
                 key={cust.id}
-                className={`p-4 bg-zinc-950/80 transition-all flex flex-col justify-between group shadow-lg shadow-black/20 ${
-                  remInfo.isOverdue
-                    ? "border-amber-500/40 hover:border-amber-400/80"
-                    : "border-zinc-800/90 hover:border-purple-500/40"
+                className={`p-4 transition-all flex flex-col justify-between group shadow-lg shadow-black/20 ${
+                  remInfo.reminderSentToday
+                    ? "bg-emerald-950/20 border-emerald-500/50 hover:border-emerald-400/90"
+                    : remInfo.isOverdue
+                    ? "bg-zinc-950/80 border-amber-500/40 hover:border-amber-400/80"
+                    : "bg-zinc-950/80 border-zinc-800/90 hover:border-purple-500/40"
                 }`}
               >
                 <div className="space-y-3">
-                  {/* HEADER: AVATAR, NAME, GENDER, AND PHONE */}
+                  {/* HEADER: AVATAR, NAME, GENDER, PHONE & STATUS BADGE */}
                   <div className="flex items-start justify-between gap-2.5">
                     <div className="flex items-center gap-3">
                       <div
                         className={`h-11 w-11 rounded-2xl border text-base font-black flex items-center justify-center shrink-0 shadow-md ${
-                          remInfo.isOverdue
+                          remInfo.reminderSentToday
+                            ? "bg-emerald-950/50 border-emerald-500/50 text-emerald-300"
+                            : remInfo.isOverdue
                             ? "bg-amber-950/40 border-amber-500/40 text-amber-300"
                             : "bg-gradient-to-tr from-purple-600/30 to-pink-600/20 border-purple-500/30 text-purple-300"
                         }`}
                       >
-                        {cust.name ? cust.name.charAt(0).toUpperCase() : "G"}
+                        {remInfo.reminderSentToday ? (
+                          <CheckCheck className="h-5 w-5 text-emerald-400" />
+                        ) : cust.name ? (
+                          cust.name.charAt(0).toUpperCase()
+                        ) : (
+                          "G"
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -752,12 +897,33 @@ export function CustomerDirectory() {
                         </div>
                       </div>
                     </div>
+
+                    {/* TOP RIGHT STATUS BADGE */}
+                    <div className="shrink-0">
+                      {remInfo.reminderSentToday ? (
+                        <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 text-[10px] font-bold px-2 py-0.5 flex items-center gap-1 shadow-sm">
+                          <CheckCheck className="h-3 w-3 text-emerald-400" />
+                          <span>Reminder Sent</span>
+                        </Badge>
+                      ) : remInfo.isOverdue ? (
+                        <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold px-2 py-0.5 flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-amber-400" />
+                          <span>Follow-up Due</span>
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-zinc-800 text-zinc-400 border border-zinc-700 text-[10px] font-bold px-2 py-0.5">
+                          Up to Date
+                        </Badge>
+                      )}
+                    </div>
                   </div>
 
                   {/* REMINDER & LAST SERVICE STATUS BANNER */}
                   <div
                     className={`p-2.5 rounded-xl border text-xs space-y-1.5 ${
-                      remInfo.isOverdue
+                      remInfo.reminderSentToday
+                        ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-200"
+                        : remInfo.isOverdue
                         ? remInfo.serviceType === "grooming_shave"
                           ? "bg-amber-950/30 border-amber-500/40 text-amber-200"
                           : "bg-rose-950/30 border-rose-500/40 text-rose-200"
@@ -770,7 +936,13 @@ export function CustomerDirectory() {
                         <span className="truncate">{remInfo.serviceName}</span>
                       </span>
 
-                      {remInfo.isOverdue ? (
+                      {remInfo.reminderSentToday ? (
+                        <Badge className="text-[9px] font-bold px-2 py-0.5 shrink-0 bg-emerald-500/20 text-emerald-300 border border-emerald-500/50">
+                          {formatReminderTime(remInfo.lastReminderSentAt)
+                            ? `Sent Today • ${formatReminderTime(remInfo.lastReminderSentAt)}`
+                            : "Sent Today"}
+                        </Badge>
+                      ) : remInfo.isOverdue ? (
                         <Badge
                           className={`text-[9px] font-bold px-1.5 py-0 shrink-0 ${
                             remInfo.serviceType === "grooming_shave"
@@ -798,7 +970,7 @@ export function CustomerDirectory() {
                         </span>
                       ) : remInfo.lastReminderSentAt ? (
                         <span className="text-zinc-400">
-                          Sent: {formatDate(remInfo.lastReminderSentAt)}
+                          Last Reminded: {formatDate(remInfo.lastReminderSentAt)}
                         </span>
                       ) : (
                         <span className="text-zinc-500">No reminder sent</span>
@@ -866,24 +1038,52 @@ export function CustomerDirectory() {
                 {/* CARD FOOTER ACTIONS */}
                 <div className="flex flex-col gap-2 pt-3 mt-3 border-t border-zinc-800/80">
 
-                  {/* WHATSAPP TRIGGER BUTTON */}
-                  <Button
-                    size="sm"
-                    onClick={() => handleSendWhatsAppReminder(cust, remInfo)}
-                    className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl font-bold text-xs transition-all shadow-md cursor-pointer ${
-                      remInfo.reminderSentToday
-                        ? "bg-zinc-800 hover:bg-zinc-700 text-emerald-300 border border-emerald-500/40"
-                        : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
-                    }`}
-                    title="Send customized WhatsApp follow-up reminder in a new tab"
-                  >
-                    <MessageSquare className="h-3.5 w-3.5 text-emerald-200" />
-                    <span>
-                      {remInfo.reminderSentToday
-                        ? "Resend WhatsApp Reminder"
-                        : "Send WhatsApp Reminder"}
-                    </span>
-                  </Button>
+                  {/* WHATSAPP TRIGGER & STATUS TRACKING BUTTONS */}
+                  {remInfo.reminderSentToday ? (
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        onClick={() => handleSendWhatsAppReminder(cust, remInfo)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 shadow-sm transition-all cursor-pointer"
+                        title="Reminder already launched today. Click to resend via WhatsApp."
+                      >
+                        <CheckCheck className="h-3.5 w-3.5 text-emerald-400" />
+                        <span className="truncate">✓ Reminder Sent (Resend)</span>
+                      </Button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleReminderStatus(cust, remInfo, false)}
+                        className="px-2.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-amber-300 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer shrink-0 flex items-center gap-1"
+                        title="Revert status to Pending if message was not actually sent"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        <span>Reset</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        onClick={() => handleSendWhatsAppReminder(cust, remInfo)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30 transition-all cursor-pointer"
+                        title="Send personalized WhatsApp follow-up reminder in a new tab"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5 text-emerald-100" />
+                        <span className="truncate">Send WhatsApp Reminder</span>
+                      </Button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleReminderStatus(cust, remInfo, true)}
+                        className="px-2.5 py-2 rounded-xl text-xs font-semibold text-zinc-300 hover:text-emerald-300 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer shrink-0 flex items-center gap-1"
+                        title="Mark as sent (e.g. if followed up via phone call or manual SMS)"
+                      >
+                        <Check className="h-3 w-3 text-emerald-400" />
+                        <span>Mark Sent</span>
+                      </button>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
@@ -944,28 +1144,130 @@ export function CustomerDirectory() {
       {selectedHistoryCustomer && (
         <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen} maxWidth="2xl">
           <DialogHeader>
-            <div className="flex items-center gap-2.5">
-              <div className="h-10 w-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center font-bold">
-                <Receipt className="h-5 w-5" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center font-bold">
+                  <Receipt className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-base flex items-center gap-2">
+                    <span>{selectedHistoryCustomer.name}</span>
+                    <Badge variant="purple" className="text-[10px] font-mono">
+                      {customerInvoices.length} Invoices
+                    </Badge>
+                    {hasFetchedCloudHistory && (
+                      <Badge variant="success" className="text-[9px] font-mono">
+                        Cloud Synced
+                      </Badge>
+                    )}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-zinc-400">
+                    {selectedHistoryCustomer.phone || "No phone"} • Total Lifetime Spend:{" "}
+                    <span className="text-emerald-400 font-bold font-mono">
+                      {formatCurrency(selectedHistoryCustomer.total_spent || 0, settings.currency_symbol)}
+                    </span>
+                  </DialogDescription>
+                </div>
               </div>
-              <div>
-                <DialogTitle className="text-base flex items-center gap-2">
-                  <span>{selectedHistoryCustomer.name}</span>
-                  <Badge variant="purple" className="text-[10px] font-mono">
-                    {customerInvoices.length} Invoices
-                  </Badge>
-                </DialogTitle>
-                <DialogDescription className="text-xs text-zinc-400">
-                  {selectedHistoryCustomer.phone || "No phone"} • Total Lifetime Spend:{" "}
-                  <span className="text-emerald-400 font-bold font-mono">
-                    {formatCurrency(selectedHistoryCustomer.total_spent || 0, settings.currency_symbol)}
-                  </span>
-                </DialogDescription>
-              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleFetchCustomerCloudHistory}
+                disabled={isLoadingCustomerHistory || hasFetchedCloudHistory}
+                className="h-8 px-2.5 text-xs gap-1.5 border-purple-800/60 bg-purple-950/30 hover:bg-purple-900/40 text-purple-200 cursor-pointer self-start sm:self-auto"
+                title="Query complete historical visits archive from Supabase Cloud"
+              >
+                {isLoadingCustomerHistory ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Cloud className="h-3 w-3 text-purple-400" />
+                )}
+                <span>{hasFetchedCloudHistory ? "All History Synced" : "Load All Past Visits from Cloud"}</span>
+              </Button>
             </div>
           </DialogHeader>
 
           <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 py-2">
+            {/* FOLLOW-UP REMINDER TRACKING INFO */}
+            <div className="p-3 bg-zinc-900/90 border border-zinc-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <BellRing className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
+                    <span>Follow-up & Reminder Status:</span>
+                    {wasReminderSentToday(selectedHistoryCustomer.last_reminder_sent_at) ? (
+                      <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 text-[9px] py-0 px-1.5 font-bold">
+                        ✓ Sent Today
+                      </Badge>
+                    ) : selectedHistoryCustomer.last_reminder_sent_at ? (
+                      <Badge className="bg-zinc-800 text-zinc-300 border border-zinc-700 text-[9px] py-0 px-1.5">
+                        Last Sent: {formatDate(selectedHistoryCustomer.last_reminder_sent_at)}
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-zinc-800 text-zinc-500 border border-zinc-700 text-[9px] py-0 px-1.5">
+                        No reminders sent
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-zinc-400 mt-0.5">
+                    {selectedHistoryCustomer.last_reminder_sent_at
+                      ? `Last contacted on ${formatDate(selectedHistoryCustomer.last_reminder_sent_at)}`
+                      : "No follow-up reminder has been logged for this client yet."}
+                    {selectedHistoryCustomer.reminder_history && selectedHistoryCustomer.reminder_history.length > 0 && (
+                      <span> • Total {selectedHistoryCustomer.reminder_history.length} logged record(s)</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {reminderData.reminderMap.get(selectedHistoryCustomer.id) && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const remInfo = reminderData.reminderMap.get(selectedHistoryCustomer.id)!;
+                    handleSendWhatsAppReminder(selectedHistoryCustomer, remInfo);
+                  }}
+                  className={`h-8 px-3 text-xs font-bold flex items-center gap-1.5 rounded-xl cursor-pointer self-start sm:self-auto shrink-0 ${
+                    wasReminderSentToday(selectedHistoryCustomer.last_reminder_sent_at)
+                      ? "bg-zinc-800 hover:bg-zinc-700 text-emerald-300 border border-emerald-500/40"
+                      : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
+                  }`}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  <span>
+                    {wasReminderSentToday(selectedHistoryCustomer.last_reminder_sent_at)
+                      ? "Resend WhatsApp"
+                      : "Send WhatsApp"}
+                  </span>
+                </Button>
+              )}
+            </div>
+
+            {selectedHistoryCustomer.reminder_history && selectedHistoryCustomer.reminder_history.length > 0 && (
+              <div className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800/80 text-xs space-y-1.5">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  Follow-up Reminder Audit Log ({selectedHistoryCustomer.reminder_history.length})
+                </span>
+                <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                  {selectedHistoryCustomer.reminder_history.map((rh, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-[11px] text-zinc-300 bg-zinc-900/60 p-1.5 rounded-lg border border-zinc-850">
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-mono font-semibold text-emerald-400">
+                          {rh.channel === "whatsapp" ? "💬 WhatsApp" : "📞 Direct Contact"}
+                        </span>
+                        {rh.service_name && <span className="text-zinc-400">• {rh.service_name}</span>}
+                      </span>
+                      <span className="text-zinc-500 font-mono text-[10px]">{formatDate(rh.sent_at)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {customerInvoices.length === 0 ? (
               <div className="p-8 text-center text-zinc-500 text-xs">
                 No past invoices recorded for this customer yet.

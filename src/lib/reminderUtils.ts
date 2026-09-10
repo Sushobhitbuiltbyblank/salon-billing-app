@@ -20,6 +20,36 @@ export function isGroomingOrShaveService(serviceName?: string | null): boolean {
 }
 
 /**
+ * Formats a clean, readable timestamp for reminder logs (e.g. "12:30 PM" if today, or "28 Aug, 12:30 PM").
+ */
+export function formatReminderTime(timestamp?: string | null): string {
+  if (!timestamp) return "";
+  try {
+    const d = new Date(timestamp);
+    if (isNaN(d.getTime())) return "";
+
+    const isToday = wasReminderSentToday(timestamp);
+    if (isToday) {
+      return new Intl.DateTimeFormat("en-IN", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }).format(d);
+    }
+
+    return new Intl.DateTimeFormat("en-IN", {
+      day: "2-digit",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Detects whether a reminder was sent today based on local calendar date.
  */
 export function wasReminderSentToday(timestamp?: string | null): boolean {
@@ -137,13 +167,23 @@ export function detectCustomerReminders(
       overdueDays,
       lastReminderSentAt: cust.last_reminder_sent_at,
       reminderSentToday,
+      reminderHistory: cust.reminder_history || [],
     });
   });
 
-  // Sort: Overdue first (highest overdue days), then by most days elapsed
+  // Sort:
+  // 1. Overdue and Pending (not sent today) first, sorted by highest overdue days
+  // 2. Overdue and Sent today, sorted by highest overdue days
+  // 3. Not overdue, sorted by days elapsed
   return reminderList.sort((a, b) => {
+    const aPending = a.isOverdue && !a.reminderSentToday;
+    const bPending = b.isOverdue && !b.reminderSentToday;
+    if (aPending && !bPending) return -1;
+    if (!aPending && bPending) return 1;
+
     if (a.isOverdue && !b.isOverdue) return -1;
     if (!a.isOverdue && b.isOverdue) return 1;
+
     return b.daysElapsed - a.daysElapsed;
   });
 }

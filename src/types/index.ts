@@ -86,9 +86,18 @@ export interface Customer {
   total_spent: number;
   last_visit?: string;
   last_reminder_sent_at?: string;
+  reminder_history?: CustomerReminderRecord[];
   notes?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface CustomerReminderRecord {
+  id?: string;
+  sent_at: string;
+  channel: 'whatsapp' | 'call' | 'sms' | 'manual';
+  service_name?: string;
+  notes?: string;
 }
 
 export interface CustomerReminderInfo {
@@ -102,6 +111,7 @@ export interface CustomerReminderInfo {
   overdueDays: number;
   lastReminderSentAt?: string;
   reminderSentToday: boolean;
+  reminderHistory?: CustomerReminderRecord[];
 }
 
 export type ReminderFilterType = 'all_due' | 'shave_due' | 'haircut_due' | 'sent_today' | 'pending';

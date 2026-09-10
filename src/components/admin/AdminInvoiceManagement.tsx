@@ -29,6 +29,7 @@ import {
   Cloud,
   CloudOff,
   ShoppingBag,
+  Loader2,
 } from "lucide-react";
 
 export function AdminInvoiceManagement() {
@@ -44,6 +45,7 @@ export function AdminInvoiceManagement() {
     staff,
     isInvoicePendingSync,
     syncPendingInvoices,
+    fetchHistoricalInvoices,
   } = useApp();
 
   const isAdmin = currentUser?.role === "admin";
@@ -56,14 +58,39 @@ export function AdminInvoiceManagement() {
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
 
+  // ON-DEMAND HISTORICAL INVOICES STATE
+  const [historicalInvoices, setHistoricalInvoices] = useState<Invoice[]>([]);
+  const [isLoadingHistorical, setIsLoadingHistorical] = useState(false);
+  const [historicalSearched, setHistoricalSearched] = useState(false);
+  const [historicalTotalCount, setHistoricalTotalCount] = useState<number | null>(null);
+
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // COMBINE LOCAL ACTIVE INVOICES WITH ANY ON-DEMAND FETCHED HISTORICAL INVOICES
+  const allAvailableInvoices = useMemo(() => {
+    if (historicalInvoices.length === 0) return invoices;
+    const invMap = new Map<string, Invoice>();
+    invoices.forEach((inv) => {
+      const key = inv.id || inv.invoice_number;
+      invMap.set(key, inv);
+    });
+    historicalInvoices.forEach((inv) => {
+      const key = inv.id || inv.invoice_number;
+      if (!invMap.has(key)) {
+        invMap.set(key, inv);
+      }
+    });
+    return Array.from(invMap.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [invoices, historicalInvoices]);
 
   // FILTERED INVOICES BASED ON DATE, PAYMENT MODE, STATUS, SALE TYPE & SEARCH
   const filteredInvoices = useMemo(() => {
     const now = new Date();
 
-    return invoices.filter((inv) => {
+    return allAvailableInvoices.filter((inv) => {
       try {
         const invDate = new Date(inv.created_at);
 
@@ -140,7 +167,65 @@ export function AdminInvoiceManagement() {
         return false;
       }
     });
-  }, [invoices, datePreset, customStartDate, customEndDate, selectedSaleType, selectedMode, selectedStatus, searchQuery]);
+  }, [allAvailableInvoices, datePreset, customStartDate, customEndDate, selectedSaleType, selectedMode, selectedStatus, searchQuery]);
+
+  // ON-DEMAND CLOUD FETCH HANDLER
+  const handleFetchHistorical = async (loadMore = false) => {
+    setIsLoadingHistorical(true);
+    setHistoricalSearched(true);
+    try {
+      let startIso: string | undefined;
+      let endIso: string | undefined;
+
+      const now = new Date();
+      if (datePreset === "today") {
+        const s = new Date(now);
+        s.setHours(0, 0, 0, 0);
+        startIso = s.toISOString();
+      } else if (datePreset === "yesterday") {
+        const s = new Date(now);
+        s.setDate(now.getDate() - 1);
+        s.setHours(0, 0, 0, 0);
+        startIso = s.toISOString();
+        const e = new Date(s);
+        e.setHours(23, 59, 59, 999);
+        endIso = e.toISOString();
+      } else if (datePreset === "week") {
+        const s = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        startIso = s.toISOString();
+      } else if (datePreset === "month") {
+        const s = new Date(now.getFullYear(), now.getMonth(), 1);
+        startIso = s.toISOString();
+      } else if (datePreset === "custom") {
+        if (customStartDate) startIso = new Date(customStartDate).toISOString();
+        if (customEndDate) {
+          const e = new Date(customEndDate);
+          e.setHours(23, 59, 59, 999);
+          endIso = e.toISOString();
+        }
+      }
+
+      const offset = loadMore ? historicalInvoices.length : 0;
+      const res = await fetchHistoricalInvoices({
+        startDate: startIso,
+        endDate: endIso,
+        searchQuery: searchQuery.trim() || undefined,
+        offset,
+        limit: 50,
+      });
+
+      if (loadMore) {
+        setHistoricalInvoices((prev) => [...prev, ...res.invoices]);
+      } else {
+        setHistoricalInvoices(res.invoices);
+      }
+      setHistoricalTotalCount(res.totalCount);
+    } catch (err) {
+      console.error("Failed to fetch historical invoices from cloud:", err);
+    } finally {
+      setIsLoadingHistorical(false);
+    }
+  };
 
   // DYNAMIC KPIS ACCORDING TO CURRENT FILTER
   const settledInvoices = filteredInvoices.filter((i) => i.status !== "void");
@@ -162,6 +247,9 @@ export function AdminInvoiceManagement() {
     setSelectedStatus("all");
     setSelectedSaleType("all");
     setSearchQuery("");
+    setHistoricalInvoices([]);
+    setHistoricalSearched(false);
+    setHistoricalTotalCount(null);
   };
 
   // HANDLE PERMANENT DELETE
@@ -460,6 +548,23 @@ export function AdminInvoiceManagement() {
             <option value="pending">Pending</option>
             <option value="void">Void</option>
           </select>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => handleFetchHistorical(false)}
+            disabled={isLoadingHistorical}
+            className="h-9 px-3 text-xs gap-1.5 border-purple-800/80 bg-purple-950/30 hover:bg-purple-900/40 text-purple-200 cursor-pointer shrink-0"
+            title="Search older historical records from Supabase Cloud"
+          >
+            {isLoadingHistorical ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Cloud className="h-3.5 w-3.5 text-purple-400" />
+            )}
+            <span>{isLoadingHistorical ? "Querying..." : "Search Cloud Archive"}</span>
+          </Button>
         </div>
       </div>
 
@@ -784,6 +889,45 @@ export function AdminInvoiceManagement() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* CLOUD HISTORICAL ARCHIVE FOOTER */}
+        <div className="p-3 bg-zinc-900/60 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-zinc-400">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-400"></span>
+            <span>Local Active Cache: up to 500 recent invoices (safeguards browser storage quota)</span>
+            {historicalInvoices.length > 0 && (
+              <Badge variant="purple" className="text-[10px] font-mono py-0 px-2 font-bold">
+                +{historicalInvoices.length} loaded from Cloud Archive
+              </Badge>
+            )}
+            {historicalTotalCount !== null && (
+              <span className="text-[11px] text-zinc-500 font-mono">
+                ({filteredInvoices.length} of {historicalTotalCount} matching)
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleFetchHistorical(historicalInvoices.length > 0)}
+              disabled={isLoadingHistorical}
+              className="h-8 px-3 text-xs gap-1.5 border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 cursor-pointer"
+            >
+              {isLoadingHistorical ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Cloud className="h-3 w-3 text-purple-400" />
+              )}
+              <span>
+                {historicalInvoices.length > 0
+                  ? "Load More Older Invoices from Supabase"
+                  : "Load Older Historical Invoices from Supabase"}
+              </span>
+            </Button>
+          </div>
         </div>
       </div>
 

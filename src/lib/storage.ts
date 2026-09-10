@@ -39,8 +39,12 @@ const KEYS = {
   DELETED_INVOICES: `${STORAGE_PREFIX}deleted_invoices`,
   STAFF_STATUS_DATE: `${STORAGE_PREFIX}staff_status_date`,
   WHEEL_INVENTORY: `${STORAGE_PREFIX}wheel_inventory`,
+  LAST_SYNC: `${STORAGE_PREFIX}last_sync_timestamp`,
   INITIALIZED: `${STORAGE_PREFIX}full_catalog_v5`,
 };
+
+export const MAX_LOCAL_INVOICES = 500;
+export const MAX_LOCAL_DAYS = 60;
 
 // PRODUCTION USERS: 2 ADMINS (SUSHOBHIT & PRABHAT) + 1 RECEPTIONIST (AMIT) (@belezia.com)
 export const DEFAULT_USERS: AppUser[] = [
@@ -854,9 +858,15 @@ export const Storage = {
       anniversary: customer.anniversary !== undefined ? (customer.anniversary.trim() || undefined) : existing?.anniversary,
       notes: customer.notes !== undefined ? (customer.notes.trim() || undefined) : existing?.notes,
       total_visits: customer.total_visits !== undefined ? customer.total_visits : (existing?.total_visits || 0),
-      total_spent: customer.total_spent !== undefined ? customer.total_spent : (existing?.total_spent || 0),
       last_visit: customer.last_visit || existing?.last_visit,
-      last_reminder_sent_at: customer.last_reminder_sent_at || existing?.last_reminder_sent_at,
+      last_reminder_sent_at:
+        customer.last_reminder_sent_at !== undefined
+          ? (customer.last_reminder_sent_at || undefined)
+          : existing?.last_reminder_sent_at,
+      reminder_history:
+        customer.reminder_history !== undefined
+          ? customer.reminder_history
+          : (existing?.reminder_history || []),
       created_at: existing?.created_at || customer.created_at || new Date().toISOString(),
       updated_at: customer.updated_at || new Date().toISOString(),
     };
@@ -916,9 +926,35 @@ export const Storage = {
   saveInvoices(invoices: Invoice[]): void {
     if (typeof window === "undefined") return;
     try {
-      localStorage.setItem(KEYS.INVOICES, JSON.stringify(invoices));
+      const pendingQueue = new Set(this.getPendingInvoiceSyncQueue());
+      const now = Date.now();
+      const cutoffTime = now - MAX_LOCAL_DAYS * 24 * 60 * 60 * 1000;
+
+      // Always preserve all pending sync invoices (never evict unsynced bills!)
+      const pendingInvoices: Invoice[] = [];
+      const syncedInvoices: Invoice[] = [];
+
+      (invoices || []).forEach((inv) => {
+        if (!inv) return;
+        if (inv.id && pendingQueue.has(inv.id)) {
+          pendingInvoices.push(inv);
+        } else {
+          syncedInvoices.push(inv);
+        }
+      });
+
+      // Sort synced invoices descending by created_at
+      syncedInvoices.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+      // Cap total active invoices strictly to MAX_LOCAL_INVOICES (500)
+      // Pending invoices take top priority so they are never evicted before sync
+      const allowedSynced = Math.max(0, MAX_LOCAL_INVOICES - pendingInvoices.length);
+      const recentSynced = syncedInvoices.slice(0, allowedSynced);
+
+      const windowed = [...pendingInvoices, ...recentSynced];
+      localStorage.setItem(KEYS.INVOICES, JSON.stringify(windowed));
     } catch (e) {
-      console.error(e);
+      console.error("Storage saveInvoices error:", e);
     }
   },
   createInvoice(invoice: Invoice): Invoice {
@@ -1076,9 +1112,27 @@ export const Storage = {
       } else {
         archive.unshift(invoice);
       }
-      localStorage.setItem(KEYS.INVOICES_ARCHIVE, JSON.stringify(archive.slice(0, 1000)));
+      localStorage.setItem(KEYS.INVOICES_ARCHIVE, JSON.stringify(archive.slice(0, MAX_LOCAL_INVOICES)));
     } catch (e) {
       console.warn("Failed to update local invoice archive:", e);
+    }
+  },
+
+  getLastSyncTimestamp(): string | null {
+    if (typeof window === "undefined") return null;
+    try {
+      return localStorage.getItem(KEYS.LAST_SYNC);
+    } catch {
+      return null;
+    }
+  },
+
+  saveLastSyncTimestamp(timestamp: string): void {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(KEYS.LAST_SYNC, timestamp);
+    } catch (e) {
+      console.error(e);
     }
   },
 
