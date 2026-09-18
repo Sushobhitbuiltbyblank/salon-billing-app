@@ -480,11 +480,15 @@ export function RecentInvoices() {
                                             <span>
                                               • <span className="font-semibold text-white">{item.item_name}</span>{" "}
                                               {item.quantity > 1 ? `(x${item.quantity})` : ""}
-                                              {primaryStaffName && (
+                                              {item.staff_splits && item.staff_splits.length > 1 ? (
+                                                <span className="text-purple-300 text-[10.5px] ml-1 font-medium">
+                                                  ({item.staff_splits.map((sp) => `${sp.staff_name || staff.find((s) => s.id === sp.staff_id)?.name || "Staff"}: ₹${sp.amount}`).join(" • ")})
+                                                </span>
+                                              ) : primaryStaffName ? (
                                                 <span className="text-purple-400 text-[10.5px] ml-1">
                                                   ({primaryStaffName})
                                                 </span>
-                                              )}
+                                              ) : null}
                                             </span>
                                             {item.total_price !== undefined && (
                                               <span className="text-[11px] font-mono text-zinc-400 ml-2">
@@ -524,11 +528,15 @@ export function RecentInvoices() {
                                             ) : (
                                               ""
                                             )}
-                                            {primaryStaffName && (
+                                            {item.staff_splits && item.staff_splits.length > 1 ? (
+                                              <span className="text-pink-300 text-[10.5px] ml-1 font-medium">
+                                                ({item.staff_splits.map((sp) => `${sp.staff_name || staff.find((s) => s.id === sp.staff_id)?.name || "Staff"}: ₹${sp.amount}`).join(" • ")})
+                                              </span>
+                                            ) : primaryStaffName ? (
                                               <span className="text-purple-400 text-[10.5px] ml-1">
                                                 ({primaryStaffName})
                                               </span>
-                                            )}
+                                            ) : null}
                                           </span>
                                           {item.total_price !== undefined && (
                                             <span className="text-[11px] font-mono text-pink-300 ml-2">
