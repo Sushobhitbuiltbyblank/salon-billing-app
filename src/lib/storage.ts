@@ -37,6 +37,7 @@ const KEYS = {
   EXPENSES: `${STORAGE_PREFIX}expenses`,
   DELETED_CATALOG_IDS: `${STORAGE_PREFIX}deleted_catalog_ids`,
   DELETED_INVOICES: `${STORAGE_PREFIX}deleted_invoices`,
+  DELETED_CUSTOMERS: `${STORAGE_PREFIX}deleted_customers`,
   STAFF_STATUS_DATE: `${STORAGE_PREFIX}staff_status_date`,
   WHEEL_INVENTORY: `${STORAGE_PREFIX}wheel_inventory`,
   LAST_SYNC: `${STORAGE_PREFIX}last_sync_timestamp`,
@@ -388,6 +389,9 @@ export function initStorage() {
       Storage.deleteInvoice("BZ-20260901-4311");
       Storage.deleteInvoice("463fceae-a7b5-4d57-98bf-6bbb47933198");
 
+      // Explicitly purge deleted customer 9250755655 requested by admin
+      Storage.deleteCustomer("", "9250755655");
+
       // Reconcile 8802809679 customer spend and visits
       const custs = Storage.getCustomers();
       const sushobhit = custs.find((c) => normalizePhoneNumber(c.phone) === "8802809679");
@@ -425,6 +429,7 @@ export function initStorage() {
           c.id !== "2d99bb9a-15f7-4ff2-aaa3-4920df80d820" &&
           normalizePhoneNumber(c.phone) !== "8178298469" &&
           normalizePhoneNumber(c.phone) !== "9250755665" &&
+          normalizePhoneNumber(c.phone) !== "9250755655" &&
           normalizePhoneNumber(c.phone) !== "6092153532"
       );
 
@@ -800,7 +805,16 @@ export const Storage = {
       const raw = localStorage.getItem(KEYS.CUSTOMERS);
       if (!raw) return DEFAULT_CUSTOMERS;
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? deduplicateCustomerArray(parsed) : DEFAULT_CUSTOMERS;
+      if (!Array.isArray(parsed)) return DEFAULT_CUSTOMERS;
+      const deletedSet = new Set(this.getDeletedCustomers());
+      const active = parsed.filter((c) => {
+        if (!c) return false;
+        if (c.id && deletedSet.has(c.id)) return false;
+        const cleanPhone = normalizePhoneNumber(c.phone);
+        if (cleanPhone && deletedSet.has(cleanPhone)) return false;
+        return true;
+      });
+      return deduplicateCustomerArray(active);
     } catch {
       return DEFAULT_CUSTOMERS;
     }
@@ -808,7 +822,15 @@ export const Storage = {
   saveCustomers(customers: Customer[]): void {
     if (typeof window === "undefined") return;
     try {
-      const deduped = deduplicateCustomerArray(customers);
+      const deletedSet = new Set(this.getDeletedCustomers());
+      const active = (Array.isArray(customers) ? customers : []).filter((c) => {
+        if (!c) return false;
+        if (c.id && deletedSet.has(c.id)) return false;
+        const cleanPhone = normalizePhoneNumber(c.phone);
+        if (cleanPhone && deletedSet.has(cleanPhone)) return false;
+        return true;
+      });
+      const deduped = deduplicateCustomerArray(active);
       localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(deduped));
     } catch (e) {
       console.error(e);
@@ -822,19 +844,22 @@ export const Storage = {
       return customer;
     }
 
-    const isSpecialMulti = cleanPhone === "9250755655";
+    // Clear any tombstone if user intentionally creates or saves this customer
+    if (customer.id) this.removeDeletedCustomer(customer.id);
+    if (cleanPhone) this.removeDeletedCustomer(cleanPhone);
+
     const list = this.getCustomers();
 
     const existing = list.find((c) => {
       if (customer.id && c.id && c.id === customer.id) return true;
-      if (!isSpecialMulti && cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone) return true;
+      if (cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone) return true;
       return false;
     });
 
     const otherCustomers = list.filter((c) => {
       if (customer.id && c.id && c.id === customer.id) return false;
       if (existing?.id && c.id && c.id === existing.id) return false;
-      if (!isSpecialMulti && cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone) return false;
+      if (cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone) return false;
       return true;
     });
 
@@ -907,10 +932,40 @@ export const Storage = {
 
     return merged;
   },
-  deleteCustomer(id: string): void {
+  deleteCustomer(id: string, phone?: string): void {
     const list = this.getCustomers();
-    const filtered = list.filter((c) => c.id !== id);
+    const target = list.find((c) => (id && c.id === id) || (phone && normalizePhoneNumber(c.phone) === normalizePhoneNumber(phone)));
+    const targetPhone = phone || target?.phone;
+    const cleanPhone = normalizePhoneNumber(targetPhone);
+
+    // 1. Add tombstones to prevent resurrection from Supabase or cloud sync
+    if (id) this.addDeletedCustomer(id);
+    if (target?.id && target.id !== id) this.addDeletedCustomer(target.id);
+    if (cleanPhone && cleanPhone.length >= 7) {
+      this.addDeletedCustomer(cleanPhone);
+    }
+
+    // 2. Filter local customers (both by ID and by normalized phone)
+    const filtered = list.filter((c) => {
+      if (id && c.id === id) return false;
+      if (target?.id && c.id === target.id) return false;
+      if (cleanPhone && cleanPhone.length >= 7 && normalizePhoneNumber(c.phone) === cleanPhone) return false;
+      return true;
+    });
     this.saveCustomers(filtered);
+
+    // 3. Unlink customer_id from any local invoices referencing this customer
+    const localInvoices = this.getInvoices();
+    let invModified = false;
+    localInvoices.forEach((inv) => {
+      if ((id && inv.customer_id === id) || (target?.id && inv.customer_id === target.id)) {
+        inv.customer_id = undefined;
+        invModified = true;
+      }
+    });
+    if (invModified) {
+      this.saveInvoices(localInvoices);
+    }
   },
 
   // INVOICES
@@ -1244,6 +1299,63 @@ export const Storage = {
     } catch (e) {
       console.error("Failed to record deleted invoice tombstone:", e);
     }
+  },
+
+  // TOMBSTONES FOR PERMANENTLY DELETED CUSTOMERS (PREVENTS ACCIDENTAL RESURRECTION)
+  getDeletedCustomers(): string[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(KEYS.DELETED_CUSTOMERS);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  },
+
+  addDeletedCustomer(idOrPhone: string): void {
+    if (typeof window === "undefined" || !idOrPhone) return;
+    try {
+      const list = this.getDeletedCustomers();
+      const normalized = normalizePhoneNumber(idOrPhone) || idOrPhone;
+      let modified = false;
+      if (!list.includes(idOrPhone)) {
+        list.push(idOrPhone);
+        modified = true;
+      }
+      if (normalized && normalized !== idOrPhone && !list.includes(normalized)) {
+        list.push(normalized);
+        modified = true;
+      }
+      if (modified) {
+        localStorage.setItem(KEYS.DELETED_CUSTOMERS, JSON.stringify(list.slice(-500)));
+      }
+    } catch (e) {
+      console.error("Failed to record deleted customer tombstone:", e);
+    }
+  },
+
+  removeDeletedCustomer(idOrPhone: string): void {
+    if (typeof window === "undefined" || !idOrPhone) return;
+    try {
+      const list = this.getDeletedCustomers();
+      const normalized = normalizePhoneNumber(idOrPhone) || idOrPhone;
+      const filtered = list.filter((item) => item !== idOrPhone && item !== normalized);
+      if (filtered.length !== list.length) {
+        localStorage.setItem(KEYS.DELETED_CUSTOMERS, JSON.stringify(filtered));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  isCustomerDeleted(id?: string, phone?: string): boolean {
+    const deletedSet = new Set(this.getDeletedCustomers());
+    if (id && deletedSet.has(id)) return true;
+    const cleanPhone = normalizePhoneNumber(phone);
+    if (cleanPhone && deletedSet.has(cleanPhone)) return true;
+    return false;
   },
 
   // OFFLINE INVOICE SYNC QUEUE

@@ -466,7 +466,7 @@ export function EditInvoiceModal() {
                   (inv.customer_phone || "").replace(/\D/g, "").slice(-10) === oldCleanPhone)
             );
             if (otherInvoices.length === 0) {
-              deleteCustomer(existingCustomer.id);
+              deleteCustomer(existingCustomer.id, existingCustomer.phone);
             }
           }
         } else if (existingCustomer) {

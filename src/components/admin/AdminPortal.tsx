@@ -1337,7 +1337,7 @@ export function AdminPortal() {
                             type="button"
                             onClick={() => {
                               if (confirm(`Are you sure you want to delete customer "${cust.name}"?`)) {
-                                deleteCustomer(cust.id);
+                                deleteCustomer(cust.id, cust.phone);
                               }
                             }}
                             className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"

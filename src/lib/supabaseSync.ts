@@ -1392,11 +1392,46 @@ export const SupabaseSync = {
     }
   },
 
-  async deleteCustomer(id: string) {
+  async deleteCustomer(id: string, phone?: string) {
     if (!isSupabaseConfigured() || !supabase) return;
     try {
-      const { error } = await supabase.from("customers").delete().eq("id", id);
-      if (error) console.error("Supabase deleteCustomer error:", error);
+      const cleanPhone = phone ? normalizePhoneNumber(phone) : "";
+
+      // 1. Unlink any invoices in Supabase to avoid foreign key constraint violations
+      if (id) {
+        try {
+          await supabase.from("invoices").update({ customer_id: null }).eq("customer_id", id);
+        } catch (fkErr) {
+          console.warn("Supabase unlink invoice customer_id note:", fkErr);
+        }
+      }
+
+      // 2. Delete customer from Supabase by ID
+      if (id) {
+        const { error } = await supabase.from("customers").delete().eq("id", id);
+        if (error) console.error("Supabase deleteCustomer error:", error);
+      }
+
+      // 3. If phone is available, purge all matching customer records by phone (handles any duplicate or legacy profiles)
+      if (cleanPhone && cleanPhone.length >= 7) {
+        try {
+          const { data: dupes } = await supabase
+            .from("customers")
+            .select("id")
+            .or(`phone.eq.${cleanPhone},phone.eq.+91${cleanPhone},phone.eq.+91 ${cleanPhone}`);
+          if (dupes && dupes.length > 0) {
+            for (const d of dupes) {
+              await supabase.from("invoices").update({ customer_id: null }).eq("customer_id", d.id);
+            }
+          }
+        } catch {}
+
+        const { error: phoneErr } = await supabase
+          .from("customers")
+          .delete()
+          .or(`phone.eq.${cleanPhone},phone.eq.+91${cleanPhone},phone.eq.+91 ${cleanPhone}`);
+        if (phoneErr) console.error("Supabase deleteCustomer by phone error:", phoneErr);
+      }
     } catch (err) {
       console.error("Supabase deleteCustomer error:", err);
     }

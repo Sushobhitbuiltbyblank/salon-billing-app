@@ -59,15 +59,12 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
     // STRICT CRM RULE: Only save/keep customers with a valid mobile number (>= 7 digits)
     if (!cleanPhone || cleanPhone.length < 7) return;
 
-    // Explicitly allow multiple profiles for 9250755655
-    const isSpecialMulti = cleanPhone === "9250755655";
-
-    // Match strictly by ID if present, or by Phone (unless special multi-profile number)
+    // Match strictly by ID if present, or by Phone
     let matched: Customer | undefined;
 
     if (cust.id && idMap.has(cust.id)) {
       matched = idMap.get(cust.id);
-    } else if (!isSpecialMulti && cleanPhone.length >= 7 && phoneMap.has(cleanPhone)) {
+    } else if (cleanPhone.length >= 7 && phoneMap.has(cleanPhone)) {
       matched = phoneMap.get(cleanPhone);
     } else if (!cust.id) {
       const normName = normalizeCustomerName(cust.name);
@@ -196,9 +193,21 @@ export function deduplicateCustomerArray(customers: Customer[]): Customer[] {
  * Combines registered customer records and invoices into a single unified list
  * with recalculated visit totals and revenue figures strictly based on Customer ID and Mobile Number.
  */
-export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): Customer[] {
+export function unifyCustomerList(
+  customers: Customer[],
+  invoices: Invoice[],
+  deletedSet?: Set<string>
+): Customer[] {
   // 1. First deduplicate all registered customer records (only with valid mobile numbers)
-  const registered = deduplicateCustomerArray(customers || []);
+  const registered = deduplicateCustomerArray(customers || []).filter((c) => {
+    if (!c) return false;
+    if (deletedSet) {
+      if (c.id && deletedSet.has(c.id)) return false;
+      const cleanPhone = normalizePhoneNumber(c.phone);
+      if (cleanPhone && deletedSet.has(cleanPhone)) return false;
+    }
+    return true;
+  });
 
   const idMap = new Map<string, Customer>();
   const unifiedList: Customer[] = [...registered];
@@ -218,8 +227,9 @@ export function unifyCustomerList(customers: Customer[], invoices: Invoice[]): C
     const cleanPhone = normalizePhoneNumber(inv.customer_phone);
     const isAnon = isAnonymousCustomerName(rawName);
 
-    // STRICT CRM RULE: Skip invoices with no valid mobile number
+    // STRICT CRM RULE: Skip invoices with no valid mobile number or belonging to deleted customers
     if (!cleanPhone || cleanPhone.length < 7) return;
+    if (deletedSet && deletedSet.has(cleanPhone)) return;
 
     // Check if we already have this customer by Customer ID first
     let matched: Customer | undefined;

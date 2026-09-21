@@ -6,6 +6,7 @@ import { Customer, Invoice, CustomerReminderInfo, CustomerReminderRecord, Remind
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Storage } from "@/lib/storage";
 import { CustomerModal } from "@/components/customer/CustomerModal";
 import {
   Dialog,
@@ -114,7 +115,7 @@ export function CustomerDirectory() {
 
   // UNIFIED CUSTOMER LIST COMBINING REGISTERED PROFILES & INVOICE DATA
   const unifiedCustomers = useMemo(() => {
-    return unifyCustomerList(customers, invoices);
+    return unifyCustomerList(customers, invoices, new Set(Storage.getDeletedCustomers()));
   }, [customers, invoices]);
 
   // DETECT REMINDER INFORMATION FOR ALL UNIFIED CUSTOMERS
@@ -1171,7 +1172,7 @@ export function CustomerDirectory() {
                           type="button"
                           onClick={() => {
                             if (window.confirm(`Permanently delete client ${cust.name} (${cust.phone})?`)) {
-                              deleteCustomer(cust.id);
+                              deleteCustomer(cust.id, cust.phone);
                             }
                           }}
                           className="p-2 rounded-xl text-zinc-500 hover:text-rose-400 bg-zinc-900 hover:bg-rose-950/40 border border-zinc-800 hover:border-rose-800/50 transition-colors cursor-pointer"

@@ -66,7 +66,7 @@ interface AppContextType {
   // CUSTOMERS
   customers: Customer[];
   saveCustomer: (customer: Customer) => Promise<Customer>;
-  deleteCustomer: (customerId: string) => void;
+  deleteCustomer: (customerId: string, customerPhone?: string) => Promise<void> | void;
   
   // INVOICES
   invoices: Invoice[];
@@ -280,8 +280,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.saveCatalog(cloudData.catalog);
         }
         if (cloudData.customers) {
-          const cloudList = deduplicateCustomerArray(cloudData.customers);
-          const localList = Storage.getCustomers();
+          const deletedSet = new Set(Storage.getDeletedCustomers());
+          const cloudList = deduplicateCustomerArray(cloudData.customers).filter(
+            (c) => !(c.id && deletedSet.has(c.id)) && !(c.phone && deletedSet.has(normalizePhoneNumber(c.phone)))
+          );
+          const localList = Storage.getCustomers().filter(
+            (c) => !(c.id && deletedSet.has(c.id)) && !(c.phone && deletedSet.has(normalizePhoneNumber(c.phone)))
+          );
 
           // Merge cloud customers with local customers using versioned deduplicateCustomerArray
           const deduplicatedCloud = deduplicateCustomerArray([...cloudList, ...localList]);
@@ -391,8 +396,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // Merge incremental customers
       if (delta.customers && delta.customers.length > 0) {
-        const localCustomers = Storage.getCustomers();
-        const mergedCusts = deduplicateCustomerArray([...delta.customers, ...localCustomers]);
+        const deletedSet = new Set(Storage.getDeletedCustomers());
+        const validDelta = delta.customers.filter(
+          (c) => !(c.id && deletedSet.has(c.id)) && !(c.phone && deletedSet.has(normalizePhoneNumber(c.phone)))
+        );
+        const localCustomers = Storage.getCustomers().filter(
+          (c) => !(c.id && deletedSet.has(c.id)) && !(c.phone && deletedSet.has(normalizePhoneNumber(c.phone)))
+        );
+        const mergedCusts = deduplicateCustomerArray([...validDelta, ...localCustomers]);
         setCustomers((prev) =>
           JSON.stringify(prev) !== JSON.stringify(mergedCusts) ? mergedCusts : prev
         );
@@ -873,11 +884,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return saved;
   };
 
-  const deleteCustomer = (customerId: string) => {
-    Storage.deleteCustomer(customerId);
+  const deleteCustomer = async (customerId: string, customerPhone?: string) => {
+    const target = Storage.getCustomers().find((c) => c.id === customerId);
+    const phone = customerPhone || target?.phone;
+
+    Storage.deleteCustomer(customerId, phone);
     setCustomers(Storage.getCustomers());
+
     if (isSupabaseConfigured()) {
-      SupabaseSync.deleteCustomer(customerId);
+      try {
+        await SupabaseSync.deleteCustomer(customerId, phone);
+      } catch (err) {
+        console.error("Supabase deleteCustomer error:", err);
+      }
     }
   };
 
