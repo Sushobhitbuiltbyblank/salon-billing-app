@@ -74,8 +74,9 @@ export function RecentInvoices() {
         const hasTodayNumber = Boolean(inv.invoice_number?.includes(todayPrefix));
 
         const isPending = isInvoicePendingSync(inv.id);
-        // Ensure all today invoices AND any pending sync invoices remain visible
-        if (!isToday && !isPending && !hasTodayNumber) return false;
+        // Ensure all today invoices AND any recent pending sync invoices (within 48h) remain visible
+        const isRecentPending = isPending && Math.abs(now.getTime() - invDate.getTime()) < 48 * 60 * 60 * 1000;
+        if (!isToday && !isRecentPending && !hasTodayNumber) return false;
 
         // Sale Type filter (Product Sale vs Service Sale)
         if (selectedSaleType !== "all") {

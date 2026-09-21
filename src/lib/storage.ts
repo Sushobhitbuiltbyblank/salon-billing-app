@@ -1291,8 +1291,13 @@ export const Storage = {
    * exists locally (e.g. created offline, in-flight, or pending sync), while strictly
    * respecting tombstones for intentionally deleted invoices.
    */
-  mergeInvoices(localInvoices: Invoice[], cloudInvoices: Invoice[]): Invoice[] {
+  mergeInvoices(
+    localInvoices: Invoice[],
+    cloudInvoices: Invoice[],
+    options?: { isIncremental?: boolean }
+  ): Invoice[] {
     const deletedSet = new Set(this.getDeletedInvoices());
+    const pendingQueue = new Set(this.getPendingInvoiceSyncQueue());
 
     // Filter out any intentionally deleted invoices from BOTH local and cloud
     const activeLocal = (Array.isArray(localInvoices) ? localInvoices : []).filter(
@@ -1302,33 +1307,41 @@ export const Storage = {
       (inv) => !(inv.id && deletedSet.has(inv.id)) && !(inv.invoice_number && deletedSet.has(inv.invoice_number))
     );
 
-    // 1. Recover any locally created invoices from append-only archive missing from active local list (excluding deleted)
-    const archive = this.getInvoicesArchive().filter(
-      (inv) => !(inv.id && deletedSet.has(inv.id)) && !(inv.invoice_number && deletedSet.has(inv.invoice_number))
-    );
-    const existingLocalMap = new Map<string, Invoice>();
-    activeLocal.forEach((inv) => {
-      if (inv.id) existingLocalMap.set(inv.id, inv);
-      if (inv.invoice_number) existingLocalMap.set(inv.invoice_number, inv);
-    });
-    const cloudIds = new Set(validCloud.map((c) => c.id).filter(Boolean));
-    const cloudNumbers = new Set(validCloud.map((c) => c.invoice_number).filter(Boolean));
+    // 1. Recover locally created invoices from append-only archive ONLY if:
+    //    a) activeLocal was completely wiped (e.g. storage reset or crash), OR
+    //    b) an invoice in archive is genuinely pending sync (in pendingQueue) and missing from activeLocal.
+    // NEVER do archive recovery during incremental sync (delta update) to avoid reviving pruned historical bills!
+    if (!options?.isIncremental) {
+      const archive = this.getInvoicesArchive().filter(
+        (inv) => !(inv.id && deletedSet.has(inv.id)) && !(inv.invoice_number && deletedSet.has(inv.invoice_number))
+      );
+      const existingLocalMap = new Map<string, Invoice>();
+      activeLocal.forEach((inv) => {
+        if (inv.id) existingLocalMap.set(inv.id, inv);
+        if (inv.invoice_number) existingLocalMap.set(inv.invoice_number, inv);
+      });
 
-    archive.forEach((archivedInv) => {
-      const existsInLocal =
-        (archivedInv.id && existingLocalMap.has(archivedInv.id)) ||
-        (archivedInv.invoice_number && existingLocalMap.has(archivedInv.invoice_number));
-      const existsInCloud =
-        (archivedInv.id && cloudIds.has(archivedInv.id)) ||
-        (archivedInv.invoice_number && cloudNumbers.has(archivedInv.invoice_number));
+      if (activeLocal.length === 0) {
+        // Complete wipe recovery
+        archive.forEach((archivedInv) => {
+          activeLocal.push(archivedInv);
+        });
+      } else {
+        // Selective recovery: ONLY restore genuine offline pending bills that got lost from activeLocal
+        archive.forEach((archivedInv) => {
+          const isPending =
+            (archivedInv.id && pendingQueue.has(archivedInv.id)) ||
+            (archivedInv.invoice_number && pendingQueue.has(archivedInv.invoice_number));
+          const existsInLocal =
+            (archivedInv.id && existingLocalMap.has(archivedInv.id)) ||
+            (archivedInv.invoice_number && existingLocalMap.has(archivedInv.invoice_number));
 
-      if (!existsInLocal) {
-        activeLocal.push(archivedInv);
+          if (isPending && !existsInLocal) {
+            activeLocal.push(archivedInv);
+          }
+        });
       }
-      if (!existsInCloud) {
-        this.addToInvoiceSyncQueue(archivedInv.id);
-      }
-    });
+    }
 
     if (validCloud.length === 0) {
       return activeLocal;
@@ -1344,7 +1357,6 @@ export const Storage = {
       if (inv.invoice_number) cloudNumberMap.set(inv.invoice_number, inv);
     });
 
-    const pendingQueue = new Set(this.getPendingInvoiceSyncQueue());
     const mergedList: Invoice[] = [...validCloud];
 
     activeLocal.forEach((localInv) => {

@@ -181,11 +181,38 @@ describe("Incremental Sync & 5MB LocalStorage Quota Protection", () => {
       const deltaCloud = [generateMockInvoice(2, 0.5)];
       const merged = Storage.mergeInvoices(Storage.getInvoices(), deltaCloud);
       Storage.saveInvoices(merged);
-
       const result = Storage.getInvoices();
       expect(result.some((i) => i.id === "offline-pending-id")).toBe(true);
       expect(result.some((i) => i.id === "inv-1")).toBe(true);
       expect(result.some((i) => i.id === "inv-2")).toBe(true);
+    });
+
+    it("incremental delta sync does NOT resurrect archived historical invoices or add them to pending queue", () => {
+      // Simulate an old invoice stored in archive
+      const oldArchivedInvoice = {
+        ...generateMockInvoice(888, 60), // 60 days ago
+        id: "historical-old-id",
+        invoice_number: "BZ-HISTORICAL-888",
+      };
+      Storage.archiveInvoice(oldArchivedInvoice);
+
+      // Active local only has recent invoices, and queue is clean
+      const recentInvoice = generateMockInvoice(1, 1);
+      Storage.saveInvoices([recentInvoice]);
+      Storage.savePendingInvoiceSyncQueue([]);
+
+      // Cloud sends a small incremental delta containing a new bill from another tablet
+      const deltaCloud = [generateMockInvoice(2, 0.1)];
+
+      const merged = Storage.mergeInvoices(Storage.getInvoices(), deltaCloud, { isIncremental: true });
+      Storage.saveInvoices(merged);
+
+      // Verify the old archived invoice was NOT added to pending sync queue
+      expect(Storage.isInvoicePendingSync(oldArchivedInvoice.id)).toBe(false);
+      expect(Storage.getPendingInvoiceSyncQueue()).toHaveLength(0);
+
+      // Verify old invoice was NOT revived into active local invoices
+      expect(Storage.getInvoices().some((i) => i.id === oldArchivedInvoice.id)).toBe(false);
     });
   });
 });

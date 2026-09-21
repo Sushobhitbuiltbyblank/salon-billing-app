@@ -311,20 +311,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Storage.saveInvoices(mergedInvoices);
 
           // Authoritative Cloud Truth Check:
+          // Reconcile ONLY the genuinely pending queue against the cloud.
+          // Never promote all missing historical invoices into the pending sync queue!
           const cloudIds = new Set(cloudData.invoices.map((c) => c.id).filter(Boolean));
           const cloudNumbers = new Set(cloudData.invoices.map((c) => c.invoice_number).filter(Boolean));
 
-          // Find invoices that genuinely do not exist in the cloud yet
-          const genuinelyUnsynced = mergedInvoices.filter((m) => {
-            const inCloud =
-              (m.id && cloudIds.has(m.id)) || (m.invoice_number && cloudNumbers.has(m.invoice_number));
-            return !inCloud;
-          });
-
-          // Sync queue contains strictly and only genuinely unsynced invoices (purging any orphans)
-          const validQueue = genuinelyUnsynced.map((u) => u.id);
-          Storage.savePendingInvoiceSyncQueue(validQueue);
-          setPendingSyncCount(validQueue.length);
+          const currentQueue = Storage.getPendingInvoiceSyncQueue();
+          const remainingQueue = currentQueue.filter((id) => !cloudIds.has(id) && !cloudNumbers.has(id));
+          Storage.savePendingInvoiceSyncQueue(remainingQueue);
+          setPendingSyncCount(remainingQueue.length);
         }
         if (cloudData.expenses) {
           setExpenses((prev) => (JSON.stringify(prev) !== JSON.stringify(cloudData.expenses) ? cloudData.expenses : prev));
@@ -366,7 +361,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Merge incremental invoices
       if (delta.invoices && delta.invoices.length > 0) {
         const localInvoices = Storage.getInvoices();
-        const mergedInvoices = Storage.mergeInvoices(localInvoices, delta.invoices);
+        const mergedInvoices = Storage.mergeInvoices(localInvoices, delta.invoices, { isIncremental: true });
         setInvoices((prev) => {
           if (
             prev.length === mergedInvoices.length &&
