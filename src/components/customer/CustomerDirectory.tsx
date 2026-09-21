@@ -170,8 +170,6 @@ export function CustomerDirectory() {
     list.forEach((r) => map.set(r.customer.id, r));
 
     const overdueList = list.filter((r) => r.isOverdue);
-    const shaveDueList = overdueList.filter((r) => r.serviceType === "grooming_shave");
-    const haircutDueList = overdueList.filter((r) => r.serviceType === "haircut_spa");
     const sentTodayList = list.filter((r) => r.reminderSentToday);
     const pendingDueList = overdueList.filter((r) => !r.reminderSentToday);
 
@@ -180,8 +178,6 @@ export function CustomerDirectory() {
       reminderMap: map,
       overdueList,
       totalDueCount: overdueList.length,
-      shaveDueCount: shaveDueList.length,
-      haircutDueCount: haircutDueList.length,
       sentTodayCount: sentTodayList.length,
       pendingDueCount: pendingDueList.length,
     };
@@ -230,10 +226,6 @@ export function CustomerDirectory() {
         let matchSubFilter = true;
         if (reminderSubFilter === "all_due") {
           matchSubFilter = rem.isOverdue;
-        } else if (reminderSubFilter === "shave_due") {
-          matchSubFilter = rem.isOverdue && rem.serviceType === "grooming_shave";
-        } else if (reminderSubFilter === "haircut_due") {
-          matchSubFilter = rem.isOverdue && rem.serviceType === "haircut_spa";
         } else if (reminderSubFilter === "sent_today") {
           matchSubFilter = rem.reminderSentToday;
         } else if (reminderSubFilter === "pending") {
@@ -275,11 +267,12 @@ export function CustomerDirectory() {
         return reminderData.reminderMap.get(cust.id) || {
           customer: cust,
           lastVisitDate: cust.last_visit || cust.created_at || new Date().toISOString(),
+          dueDate: new Date().toISOString(),
           daysElapsed: cust.last_visit
             ? Math.floor((Date.now() - new Date(cust.last_visit).getTime()) / (1000 * 60 * 60 * 24))
             : 0,
           serviceName: "Salon Service",
-          serviceType: "haircut_spa" as const,
+          serviceType: "monthly",
           intervalDays: 30,
           isOverdue: false,
           overdueDays: 0,
@@ -602,7 +595,7 @@ export function CustomerDirectory() {
       {/* KPI SUMMARY CARDS */}
       {activeCrmTab === "reminders" ? (
         /* REMINDERS KPI CARDS */
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Card
             onClick={() => setReminderSubFilter("all_due")}
             className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
@@ -660,46 +653,6 @@ export function CustomerDirectory() {
             <div className="mt-1.5 flex items-baseline gap-1.5">
               <span className="text-xl sm:text-2xl font-black text-emerald-300">{reminderData.sentTodayCount}</span>
               <span className="text-[10px] text-zinc-500 font-medium">dispatched</span>
-            </div>
-          </Card>
-
-          <Card
-            onClick={() => setReminderSubFilter("shave_due")}
-            className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
-              reminderSubFilter === "shave_due"
-                ? "border-amber-500 ring-1 ring-amber-500 bg-amber-950/20"
-                : "border-zinc-800/90 hover:border-amber-400/70"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">🪒 Shave (7d+)</span>
-              <div className="h-6 w-6 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center font-mono text-[10px] font-bold">
-                7d
-              </div>
-            </div>
-            <div className="mt-1.5 flex items-baseline gap-1.5">
-              <span className="text-xl sm:text-2xl font-black text-amber-300">{reminderData.shaveDueCount}</span>
-              <span className="text-[10px] text-zinc-500 font-medium">clients</span>
-            </div>
-          </Card>
-
-          <Card
-            onClick={() => setReminderSubFilter("haircut_due")}
-            className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
-              reminderSubFilter === "haircut_due"
-                ? "border-purple-500 ring-1 ring-purple-500 bg-purple-950/20"
-                : "border-zinc-800/90 hover:border-purple-400/70"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">✂️ Haircut (30d+)</span>
-              <div className="h-6 w-6 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center font-mono text-[10px] font-bold">
-                30d
-              </div>
-            </div>
-            <div className="mt-1.5 flex items-baseline gap-1.5">
-              <span className="text-xl sm:text-2xl font-black text-purple-300">{reminderData.haircutDueCount}</span>
-              <span className="text-[10px] text-zinc-500 font-medium">clients</span>
             </div>
           </Card>
         </div>
@@ -837,14 +790,12 @@ export function CustomerDirectory() {
                 { id: "all_due", label: `All Due (${reminderData.totalDueCount})` },
                 { id: "pending", label: `⏳ Pending (${reminderData.pendingDueCount})` },
                 { id: "sent_today", label: `✓ Sent Today (${reminderData.sentTodayCount})` },
-                { id: "shave_due", label: `🪒 Shave 7d+ (${reminderData.shaveDueCount})` },
-                { id: "haircut_due", label: `✂️ Haircut 30d+ (${reminderData.haircutDueCount})` },
               ].map((rf) => (
                 <button
                   key={rf.id}
                   type="button"
                   onClick={() => setReminderSubFilter(rf.id as ReminderFilterType)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                     reminderSubFilter === rf.id
                       ? "bg-emerald-600 text-white shadow-sm font-black"
                       : "text-zinc-400 hover:text-white"
@@ -1028,15 +979,13 @@ export function CustomerDirectory() {
                       remInfo.reminderSentToday
                         ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-200"
                         : remInfo.isOverdue
-                        ? remInfo.serviceType === "grooming_shave"
-                          ? "bg-amber-950/30 border-amber-500/40 text-amber-200"
-                          : "bg-rose-950/30 border-rose-500/40 text-rose-200"
+                        ? "bg-amber-950/30 border-amber-500/40 text-amber-200"
                         : "bg-zinc-900/90 border-zinc-800/80 text-zinc-300"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="font-bold flex items-center gap-1 text-[11px] truncate">
-                        <span>{remInfo.serviceType === "grooming_shave" ? "🪒" : "✂️"}</span>
+                      <span className="font-bold flex items-center gap-1.5 text-[11px] truncate">
+                        <span>✨</span>
                         <span className="truncate">{remInfo.serviceName}</span>
                       </span>
 
@@ -1048,15 +997,11 @@ export function CustomerDirectory() {
                         </Badge>
                       ) : remInfo.isOverdue ? (
                         <Badge
-                          className={`text-[9px] font-bold px-1.5 py-0 shrink-0 ${
-                            remInfo.serviceType === "grooming_shave"
-                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/50"
-                              : "bg-rose-500/20 text-rose-300 border border-rose-500/50"
-                          }`}
+                          className="bg-amber-500/20 text-amber-300 border border-amber-500/50 text-[9px] font-bold px-1.5 py-0 shrink-0"
                         >
                           {remInfo.overdueDays === 0
-                            ? `Due today (${remInfo.intervalDays}d cycle)`
-                            : `${remInfo.overdueDays}d overdue (${remInfo.intervalDays}d cycle)`}
+                            ? "Due today (1 month cycle)"
+                            : `${remInfo.overdueDays}d overdue (1 month cycle)`}
                         </Badge>
                       ) : (
                         <span className="text-[10px] text-zinc-400">

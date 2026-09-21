@@ -103,10 +103,11 @@ export interface CustomerReminderRecord {
 export interface CustomerReminderInfo {
   customer: Customer;
   lastVisitDate: string;
+  dueDate: string;
   daysElapsed: number;
   serviceName: string;
-  serviceType: 'grooming_shave' | 'haircut_spa';
-  intervalDays: number;
+  serviceType?: string;
+  intervalDays?: number;
   isOverdue: boolean;
   overdueDays: number;
   lastReminderSentAt?: string;
@@ -114,7 +115,7 @@ export interface CustomerReminderInfo {
   reminderHistory?: CustomerReminderRecord[];
 }
 
-export type ReminderFilterType = 'all_due' | 'shave_due' | 'haircut_due' | 'sent_today' | 'pending';
+export type ReminderFilterType = 'all_due' | 'sent_today' | 'pending';
 
 export interface StaffSplitAssignment {
   staff_id: string;

@@ -3,6 +3,7 @@ import { normalizePhoneNumber } from "./customerUtils";
 
 /**
  * Checks if a service name represents shaving, beard styling, or short-cycle grooming.
+ * Kept for reference or backward-compatibility.
  */
 export function isGroomingOrShaveService(serviceName?: string | null): boolean {
   if (!serviceName) return false;
@@ -16,6 +17,36 @@ export function isGroomingOrShaveService(serviceName?: string | null): boolean {
     s.includes("threading") ||
     s.includes("blade") ||
     s.includes("grooming")
+  );
+}
+
+/**
+ * Calculates the next monthly reminder due date (1 calendar month later).
+ * If the visit was on the 31st and the next month has fewer days (e.g. 30 days for Sep,
+ * or 28/29 for Feb), it clamps to the last day of that month (e.g. 31 Aug -> 30 Sep, 31 Jan -> 28/29 Feb).
+ */
+export function getNextMonthlyDueDate(lastVisitDate: Date | string): Date {
+  const d = new Date(lastVisitDate);
+  const day = d.getDate();
+  const year = d.getFullYear();
+  const month = d.getMonth(); // 0 - 11
+
+  const targetYear = month === 11 ? year + 1 : year;
+  const targetMonth = (month + 1) % 12;
+
+  // Day 0 of targetMonth + 1 gives the last day of targetMonth
+  const maxDaysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const targetDay = Math.min(day, maxDaysInTargetMonth);
+
+  // Construct new Date directly to avoid intermediate month-rollover quirks in JS Date
+  return new Date(
+    targetYear,
+    targetMonth,
+    targetDay,
+    d.getHours(),
+    d.getMinutes(),
+    d.getSeconds(),
+    d.getMilliseconds()
   );
 }
 
@@ -64,9 +95,9 @@ export function wasReminderSentToday(timestamp?: string | null): boolean {
 }
 
 /**
- * Analyzes customers and invoices to compute due follow-up reminders.
- * - Grooming / Shave: Overdue if last visit was >= 7 days ago.
- * - Haircut / Spa / Other: Overdue if last visit was >= 30 days ago.
+ * Analyzes customers and invoices to compute due follow-up reminders on a uniform monthly schedule.
+ * - Reminder becomes due exactly 1 calendar month after the customer's last visit date.
+ * - Month-end visits clamp to the end of the subsequent month (e.g. 31 Aug -> 30 Sep).
  * - Excludes customers who have visited more recently for any subsequent service.
  */
 export function detectCustomerReminders(
@@ -74,7 +105,8 @@ export function detectCustomerReminders(
   invoices: Invoice[]
 ): CustomerReminderInfo[] {
   const reminderList: CustomerReminderInfo[] = [];
-  const now = new Date().getTime();
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
   customers.forEach((cust) => {
     const custPhone = normalizePhoneNumber(cust.phone);
@@ -109,33 +141,34 @@ export function detectCustomerReminders(
     }
 
     const lastVisitDate = new Date(lastVisitDateStr);
-    const timeDiff = Math.max(0, now - lastVisitDate.getTime());
+    const timeDiff = Math.max(0, now.getTime() - lastVisitDate.getTime());
     const daysElapsed = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
 
-    // Determine service name and type from latest invoice items
-    let hasShaveService = false;
-    let serviceNames: string[] = [];
+    // Calculate next monthly due date
+    const dueDate = getNextMonthlyDueDate(lastVisitDate);
+    const dueStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate()).getTime();
+
+    // Overdue when current date is on or after the monthly due date
+    const isOverdue = todayStart >= dueStart;
+    const overdueDays = isOverdue ? Math.floor((todayStart - dueStart) / (1000 * 60 * 60 * 24)) : 0;
+    const reminderSentToday = wasReminderSentToday(cust.last_reminder_sent_at);
+
+    // Extract primary service name from latest invoice items for personalized display
+    const serviceNames: string[] = [];
 
     if (latestInvoice && latestInvoice.items && latestInvoice.items.length > 0) {
       latestInvoice.items.forEach((it) => {
         if (it.item_type === "package" && it.package_services) {
           it.package_services.forEach((ps) => {
-            if (isGroomingOrShaveService(ps.service_name)) {
-              hasShaveService = true;
-            }
             serviceNames.push(ps.service_name);
           });
         } else {
-          if (isGroomingOrShaveService(it.item_name)) {
-            hasShaveService = true;
-          }
           serviceNames.push(it.item_name);
         }
       });
     }
 
-    // Default primary service name
-    let primaryServiceName = "Hair & Grooming Service";
+    let primaryServiceName = "Salon Service";
     if (serviceNames.length > 0) {
       if (serviceNames.length === 1) {
         primaryServiceName = serviceNames[0];
@@ -144,25 +177,16 @@ export function detectCustomerReminders(
       } else {
         primaryServiceName = `${serviceNames[0]} (+${serviceNames.length - 1} services)`;
       }
-    } else if (hasShaveService) {
-      primaryServiceName = "Shaving & Grooming";
-    } else {
-      primaryServiceName = "Haircut & Styling";
     }
-
-    const serviceType = hasShaveService ? "grooming_shave" : "haircut_spa";
-    const intervalDays = hasShaveService ? 7 : 30;
-    const isOverdue = daysElapsed >= intervalDays;
-    const overdueDays = Math.max(0, daysElapsed - intervalDays);
-    const reminderSentToday = wasReminderSentToday(cust.last_reminder_sent_at);
 
     reminderList.push({
       customer: cust,
       lastVisitDate: lastVisitDateStr,
+      dueDate: dueDate.toISOString(),
       daysElapsed,
       serviceName: primaryServiceName,
-      serviceType,
-      intervalDays,
+      serviceType: "monthly",
+      intervalDays: 30,
       isOverdue,
       overdueDays,
       lastReminderSentAt: cust.last_reminder_sent_at,
@@ -189,19 +213,34 @@ export function detectCustomerReminders(
 }
 
 /**
- * Formats a clean WhatsApp click-to-chat URL with a dynamic, personalized message.
+ * Formats a clean WhatsApp click-to-chat URL with the Free Face De-Tan promotional offer.
  */
 export function generateWhatsAppReminderUrl(
   customer: Customer,
-  info: CustomerReminderInfo,
-  salonName: string = "Belezia Salon"
+  info?: CustomerReminderInfo,
+  salonName: string = "belezia Salon, Laxmi Nagar"
 ): string {
   const cleanPhone = normalizePhoneNumber(customer.phone);
-  const daysText = info.daysElapsed === 1 ? "1 day" : `${info.daysElapsed} days`;
-  const serviceName = info.serviceName || "service";
-  const customerName = customer.name || "there";
+  const customerName = customer.name?.trim() || "there";
 
-  const message = `Hi ${customerName}, it's been ${daysText} since your last ${serviceName} at ${salonName}! Time for a fresh look. Reply to this message to book your slot.`;
+  const expiry = new Date();
+  expiry.setDate(expiry.getDate() + 7);
+  const expiryDateStr = new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(expiry);
+
+  const salonDisplay = salonName.toLowerCase().includes("laxmi nagar")
+    ? salonName
+    : `${salonName}, Laxmi Nagar`;
+
+  const message = `GET FACE DE-TAN ABSOLUTELY FREE
+Free DeTan Offer valid till ${expiryDateStr} on showing this message;
+
+Hi ${customerName}, Its been long since you took any services at ${salonDisplay}.
+
+Time for a fresh service and get a face detan absolutely free.`;
 
   return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`;
 }

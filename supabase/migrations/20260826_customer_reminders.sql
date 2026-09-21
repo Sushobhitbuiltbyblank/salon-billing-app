@@ -9,9 +9,8 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMPTZ
 CREATE INDEX IF NOT EXISTS idx_customers_last_visit ON customers(last_visit);
 CREATE INDEX IF NOT EXISTS idx_customers_last_reminder ON customers(last_reminder_sent_at);
 
--- 2. CREATE VIEW TO IDENTIFY OVERDUE CUSTOMERS BASED ON SERVICE INTERVALS
---    - Shave / Beard grooming: Overdue if >= 7 days
---    - Haircut / Spa / Other services: Overdue if >= 30 days
+-- 2. CREATE VIEW TO IDENTIFY OVERDUE CUSTOMERS BASED ON MONTHLY CYCLE
+--    - Reminder is due 1 calendar month after last visit (e.g. 24 Aug -> 24 Sep)
 --    - Excludes customers who have visited more recently for any subsequent service
 CREATE OR REPLACE VIEW customer_due_reminders AS
 WITH latest_customer_invoices AS (
@@ -25,18 +24,6 @@ WITH latest_customer_invoices AS (
         c.last_reminder_sent_at,
         inv.id AS latest_invoice_id,
         inv.created_at AS last_visit_date,
-        -- Check if latest invoice contained grooming/shave services
-        EXISTS (
-            SELECT 1 FROM invoice_items ii 
-            WHERE ii.invoice_id = inv.id 
-              AND (
-                  LOWER(ii.item_name) LIKE '%shave%' OR 
-                  LOWER(ii.item_name) LIKE '%beard%' OR 
-                  LOWER(ii.item_name) LIKE '%trim%' OR 
-                  LOWER(ii.item_name) LIKE '%mustache%' OR 
-                  LOWER(ii.item_name) LIKE '%threading%'
-              )
-        ) AS has_shave_service,
         -- Get the primary service name
         (
             SELECT ii.item_name 
@@ -65,21 +52,11 @@ SELECT
     latest_invoice_id,
     last_visit_date,
     last_service_name,
-    CASE 
-        WHEN has_shave_service THEN 'grooming_shave'
-        ELSE 'haircut_spa'
-    END AS service_type,
-    CASE 
-        WHEN has_shave_service THEN 7
-        ELSE 30
-    END AS reminder_interval_days,
+    'monthly' AS service_type,
+    30 AS reminder_interval_days,
     DATE_PART('day', NOW() - last_visit_date)::INTEGER AS days_elapsed,
-    -- Overdue flag
-    CASE 
-        WHEN has_shave_service AND DATE_PART('day', NOW() - last_visit_date) >= 7 THEN true
-        WHEN NOT has_shave_service AND DATE_PART('day', NOW() - last_visit_date) >= 30 THEN true
-        ELSE false
-    END AS is_overdue,
+    -- Overdue flag: current timestamp is on or after 1 calendar month past last visit
+    (NOW() >= (last_visit_date + INTERVAL '1 month')) AS is_overdue,
     -- Reminder sent today flag
     CASE 
         WHEN last_reminder_sent_at IS NOT NULL AND DATE(last_reminder_sent_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE THEN true
