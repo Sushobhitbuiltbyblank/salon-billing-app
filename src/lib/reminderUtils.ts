@@ -218,7 +218,7 @@ export function detectCustomerReminders(
 export function generateWhatsAppReminderUrl(
   customer: Customer,
   info?: CustomerReminderInfo,
-  salonName: string = "belezia Salon, Laxmi Nagar"
+  salonName: string = "Belezia Salon, Laxmi Nagar"
 ): string {
   const cleanPhone = normalizePhoneNumber(customer.phone);
   const customerName = customer.name?.trim() || "there";
@@ -235,12 +235,12 @@ export function generateWhatsAppReminderUrl(
     ? salonName
     : `${salonName}, Laxmi Nagar`;
 
-  const message = `GET FACE DE-TAN ABSOLUTELY FREE
-Free DeTan Offer valid till ${expiryDateStr} on showing this message;
+  const message = `✨ *GET FACE DE-TAN ABSOLUTELY FREE* 🎁
+⏳ Free DeTan Offer valid till ${expiryDateStr} on showing this message; *No other T&Cs*
 
-Hi ${customerName}, Its been long since you took any services at ${salonDisplay}.
+👋 Hi ${customerName}, Its been long since you took any services at ${salonDisplay}.
 
-Time for a fresh service and get a face detan absolutely free.`;
+💆 Time for a fresh service and get a face detan absolutely free. ✨`;
 
   return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`;
 }

@@ -325,11 +325,12 @@ describe("Customer Reminder Engine - Monthly Follow-ups", () => {
         reminderSentToday: false,
       };
 
-      const url = generateWhatsAppReminderUrl(customer, reminderInfo, "belezia Salon, Laxmi Nagar");
+      const url = generateWhatsAppReminderUrl(customer, reminderInfo, "Belezia Salon, Laxmi Nagar");
       expect(url).toContain("https://wa.me/918168584831?text=");
-      expect(url).toContain(encodeURIComponent("GET FACE DE-TAN ABSOLUTELY FREE"));
+      expect(url).toContain(encodeURIComponent("*GET FACE DE-TAN ABSOLUTELY FREE*"));
       expect(url).toContain(encodeURIComponent("Free DeTan Offer valid till"));
-      expect(url).toContain(encodeURIComponent("Hi Mohit, Its been long since you took any services at belezia Salon, Laxmi Nagar."));
+      expect(url).toContain(encodeURIComponent("on showing this message; *No other T&Cs*"));
+      expect(url).toContain(encodeURIComponent("Hi Mohit, Its been long since you took any services at Belezia Salon, Laxmi Nagar."));
       expect(url).toContain(encodeURIComponent("Time for a fresh service and get a face detan absolutely free."));
     });
 
