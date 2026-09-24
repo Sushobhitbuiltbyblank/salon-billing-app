@@ -621,9 +621,9 @@ export function CustomerDirectory() {
         >
           <BellRing className="h-3.5 w-3.5 text-emerald-400" />
           <span>Follow-up Reminders</span>
-          {reminderData.totalDueCount > 0 && (
+          {reminderData.pendingDueCount > 0 && (
             <Badge className="bg-amber-500 text-black font-black text-[10px] px-1.5 py-0 rounded-md animate-pulse">
-              {reminderData.totalDueCount} Due
+              {reminderData.pendingDueCount} Due
             </Badge>
           )}
         </button>
@@ -645,7 +645,7 @@ export function CustomerDirectory() {
       {/* KPI SUMMARY CARDS */}
       {activeCrmTab === "reminders" ? (
         /* REMINDERS KPI CARDS */
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Card
             onClick={() => setReminderSubFilter("today")}
             className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
@@ -703,26 +703,6 @@ export function CustomerDirectory() {
             <div className="mt-1.5 flex items-baseline gap-1.5">
               <span className="text-xl sm:text-2xl font-black text-emerald-300">{reminderData.sentCount}</span>
               <span className="text-[10px] text-zinc-500 font-medium">in cooldown</span>
-            </div>
-          </Card>
-
-          <Card
-            onClick={() => setReminderSubFilter("all_due")}
-            className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
-              reminderSubFilter === "all_due"
-                ? "border-amber-500 ring-1 ring-amber-500 bg-amber-950/20"
-                : "border-amber-500/30 hover:border-amber-400/70"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">All Due</span>
-              <div className="h-6 w-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                <BellRing className="h-3.5 w-3.5" />
-              </div>
-            </div>
-            <div className="mt-1.5 flex items-baseline gap-1.5">
-              <span className="text-xl sm:text-2xl font-black text-amber-300">{reminderData.totalDueCount}</span>
-              <span className="text-[10px] text-zinc-500 font-medium">clients</span>
             </div>
           </Card>
         </div>
@@ -858,9 +838,8 @@ export function CustomerDirectory() {
             <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 overflow-x-auto">
               {[
                 { id: "today", label: `⭐ Today's Due (${reminderData.dueTodayCount})` },
-                { id: "pending", label: `⏳ Pending (${reminderData.pendingDueCount})` },
+                { id: "pending", label: `⏳ All Pending (${reminderData.pendingDueCount})` },
                 { id: "sent", label: `✓ Sent (${reminderData.sentCount})` },
-                { id: "all_due", label: `All Due (${reminderData.totalDueCount})` },
               ].map((rf) => (
                 <button
                   key={rf.id}
