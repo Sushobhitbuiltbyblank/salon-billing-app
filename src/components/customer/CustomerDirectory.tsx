@@ -29,6 +29,10 @@ import {
   generateWhatsAppReminderUrl,
   wasReminderSentToday,
   formatReminderTime,
+  isReminderInCooldown,
+  getDaysRemainingInCooldown,
+  formatReminderCooldownStatus,
+  REMINDER_COOLDOWN_DAYS,
 } from "@/lib/reminderUtils";
 import {
   UserCheck,
@@ -74,6 +78,7 @@ export function CustomerDirectory() {
   const {
     customers,
     saveCustomer,
+    saveCustomerDirect,
     deleteCustomer,
     currentUser,
     invoices,
@@ -89,7 +94,7 @@ export function CustomerDirectory() {
 
   const [activeCrmTab, setActiveCrmTab] = useState<"all" | "reminders" | "vip">("all");
   const [timeframeFilter, setTimeframeFilter] = useState<CustomerTimeframeFilter>("all");
-  const [reminderSubFilter, setReminderSubFilter] = useState<ReminderFilterType>("all_due");
+  const [reminderSubFilter, setReminderSubFilter] = useState<ReminderFilterType>("pending");
   const [searchQuery, setSearchQuery] = useState("");
   const [genderFilter, setGenderFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"spent" | "visits" | "name" | "recent">("recent");
@@ -108,81 +113,41 @@ export function CustomerDirectory() {
   const [isLoadingCustomerHistory, setIsLoadingCustomerHistory] = useState<boolean>(false);
   const [hasFetchedCloudHistory, setHasFetchedCloudHistory] = useState<boolean>(false);
 
-  // OPTIMISTIC LOCAL STATUS OVERRIDES FOR INSTANT 0MS UI FEEDBACK
-  const [reminderStatusOverrides, setReminderStatusOverrides] = useState<
-    Record<string, { sentToday: boolean; timestamp?: string; record?: CustomerReminderRecord }>
-  >({});
+  // DIRECT DATABASE REMINDER LOADING STATE & NETWORK ERROR ALERT DIALOG
+  const [loadingReminderKey, setLoadingReminderKey] = useState<string | null>(null);
+  const [apiErrorDialog, setApiErrorDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    customerName?: string;
+    retryAction?: () => Promise<void>;
+  } | null>(null);
 
   // UNIFIED CUSTOMER LIST COMBINING REGISTERED PROFILES & INVOICE DATA
   const unifiedCustomers = useMemo(() => {
     return unifyCustomerList(customers, invoices, new Set(Storage.getDeletedCustomers()));
   }, [customers, invoices]);
 
-  // DETECT REMINDER INFORMATION FOR ALL UNIFIED CUSTOMERS
+  // DETECT REMINDER INFORMATION FOR ALL UNIFIED CUSTOMERS (PURE DB TRUTH - NO OPTIMISTIC CACHE)
   const reminderData = useMemo(() => {
-    let list = detectCustomerReminders(unifiedCustomers, invoices);
-
-    // Apply any local optimistic overrides
-    if (Object.keys(reminderStatusOverrides).length > 0) {
-      list = list.map((rem) => {
-        const keyId = rem.customer.id;
-        const keyPhone = normalizePhoneNumber(rem.customer.phone);
-        const override =
-          (keyId && reminderStatusOverrides[keyId]) ||
-          (keyPhone && reminderStatusOverrides[keyPhone]);
-
-        if (!override) return rem;
-
-        const isSent = override.sentToday;
-        const lastSent = isSent ? (override.timestamp || new Date().toISOString()) : undefined;
-        const hist = override.record
-          ? [override.record, ...(rem.reminderHistory || [])]
-          : rem.reminderHistory;
-
-        return {
-          ...rem,
-          reminderSentToday: isSent,
-          lastReminderSentAt: lastSent,
-          reminderHistory: hist,
-          customer: {
-            ...rem.customer,
-            last_reminder_sent_at: lastSent,
-            reminder_history: hist,
-          },
-        };
-      });
-
-      // Maintain proper sorting:
-      // 1. Overdue and Pending (not sent today) first, sorted by highest overdue days
-      // 2. Overdue and Sent today, sorted by highest overdue days
-      // 3. Not overdue, sorted by days elapsed
-      list.sort((a, b) => {
-        const aPending = a.isOverdue && !a.reminderSentToday;
-        const bPending = b.isOverdue && !b.reminderSentToday;
-        if (aPending && !bPending) return -1;
-        if (!aPending && bPending) return 1;
-        if (a.isOverdue && !b.isOverdue) return -1;
-        if (!a.isOverdue && b.isOverdue) return 1;
-        return b.daysElapsed - a.daysElapsed;
-      });
-    }
-
+    const list = detectCustomerReminders(unifiedCustomers, invoices);
     const map = new Map<string, CustomerReminderInfo>();
     list.forEach((r) => map.set(r.customer.id, r));
 
     const overdueList = list.filter((r) => r.isOverdue);
-    const sentTodayList = list.filter((r) => r.reminderSentToday);
-    const pendingDueList = overdueList.filter((r) => !r.reminderSentToday);
+    const sentList = list.filter((r) => r.inCooldown);
+    const pendingDueList = overdueList.filter((r) => !r.inCooldown);
 
     return {
       allReminders: list,
       reminderMap: map,
       overdueList,
+      sentList,
       totalDueCount: overdueList.length,
-      sentTodayCount: sentTodayList.length,
+      sentCount: sentList.length,
       pendingDueCount: pendingDueList.length,
     };
-  }, [unifiedCustomers, invoices, reminderStatusOverrides]);
+  }, [unifiedCustomers, invoices]);
 
   // COMPUTED STATS ACROSS UNIFIED CUSTOMERS
   const stats = useMemo(() => {
@@ -223,14 +188,14 @@ export function CustomerDirectory() {
 
         const matchGender = genderFilter === "all" || c.gender === genderFilter;
 
-        // Sub-filter inside Reminders tab
+        // Sub-filter inside Reminders tab with 30-day cooldown logic
         let matchSubFilter = true;
         if (reminderSubFilter === "all_due") {
           matchSubFilter = rem.isOverdue;
-        } else if (reminderSubFilter === "sent_today") {
-          matchSubFilter = rem.reminderSentToday;
+        } else if (reminderSubFilter === "sent" || (reminderSubFilter as string) === "sent_today") {
+          matchSubFilter = rem.inCooldown;
         } else if (reminderSubFilter === "pending") {
-          matchSubFilter = rem.isOverdue && !rem.reminderSentToday;
+          matchSubFilter = rem.isOverdue && !rem.inCooldown;
         }
 
         return matchSearch && matchGender && matchSubFilter;
@@ -279,6 +244,8 @@ export function CustomerDirectory() {
           overdueDays: 0,
           lastReminderSentAt: cust.last_reminder_sent_at,
           reminderSentToday: wasReminderSentToday(cust.last_reminder_sent_at),
+          inCooldown: isReminderInCooldown(cust.last_reminder_sent_at),
+          cooldownRemainingDays: getDaysRemainingInCooldown(cust.last_reminder_sent_at),
         };
       });
   }, [
@@ -317,10 +284,22 @@ export function CustomerDirectory() {
     setActiveTab("pos");
   };
 
-  // SEND WHATSAPP REMINDER ACTION TRIGGER
+  // SEND WHATSAPP REMINDER ACTION TRIGGER (Direct API call, with loader and no optimistic cache)
   const handleSendWhatsAppReminder = async (cust: Customer, info: CustomerReminderInfo) => {
-    const url = generateWhatsAppReminderUrl(cust, info, settings.salon_name || "Belezia Salon");
-    window.open(url, "_blank");
+    const key = cust.id || cust.phone;
+    setLoadingReminderKey(key);
+
+    // 1. Check internet connectivity
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setLoadingReminderKey(null);
+      setApiErrorDialog({
+        isOpen: true,
+        title: "No Internet Connection",
+        message: "Cannot send reminder or update the database because your device is offline. Please check your network connection.",
+        customerName: cust.name,
+      });
+      return;
+    }
 
     const nowIso = new Date().toISOString();
     const newRecord: CustomerReminderRecord = {
@@ -328,16 +307,8 @@ export function CustomerDirectory() {
       sent_at: nowIso,
       channel: "whatsapp",
       service_name: info.serviceName,
-      notes: `Sent personalized WhatsApp reminder for ${info.serviceName}`,
+      notes: `Sent personalized WhatsApp reminder with Free De-Tan offer for ${info.serviceName}`,
     };
-
-    // 1. Instant optimistic state update for 0ms UI response
-    const phoneKey = normalizePhoneNumber(cust.phone);
-    setReminderStatusOverrides((prev) => ({
-      ...prev,
-      ...(cust.id ? { [cust.id]: { sentToday: true, timestamp: nowIso, record: newRecord } } : {}),
-      ...(phoneKey ? { [phoneKey]: { sentToday: true, timestamp: nowIso, record: newRecord } } : {}),
-    }));
 
     const existingHistory = cust.reminder_history || [];
     const updatedCust: Customer = {
@@ -347,83 +318,140 @@ export function CustomerDirectory() {
       updated_at: nowIso,
     };
 
-    setSyncMessage(
-      reminderSubFilter === "pending"
-        ? `✓ WhatsApp reminder launched for ${cust.name}! Status updated to Reminder Sent (Moved to Sent Today tab).`
-        : `✓ WhatsApp reminder launched for ${cust.name}! Status updated to Reminder Sent.`
-    );
-    setTimeout(() => setSyncMessage(null), 4500);
+    // Synchronously acquire window reference to prevent browser popup blockers after async API request
+    const waWindow = typeof window !== "undefined" ? window.open("", "_blank") : null;
 
     try {
-      await saveCustomer(updatedCust);
-    } catch (err) {
-      console.error("Failed to save WhatsApp reminder status:", err);
-    }
-  };
+      // Direct database update via API (bypasses cache; requires remote confirmation)
+      await saveCustomerDirect(updatedCust);
 
-  // MANUALLY TOGGLE / UPDATE REMINDER STATUS (FOR TRACKING VIA CALL / SMS OR RESETTING)
-  const handleToggleReminderStatus = async (cust: Customer, info: CustomerReminderInfo, markSent: boolean) => {
-    const nowIso = new Date().toISOString();
-    const phoneKey = normalizePhoneNumber(cust.phone);
-
-    if (markSent) {
-      const newRecord: CustomerReminderRecord = {
-        id: generateUUID(),
-        sent_at: nowIso,
-        channel: "manual",
-        service_name: info.serviceName,
-        notes: "Manually marked as reminded (Phone call / SMS / Direct contact)",
-      };
-
-      // 1. Instant optimistic state update for 0ms UI response
-      setReminderStatusOverrides((prev) => ({
-        ...prev,
-        ...(cust.id ? { [cust.id]: { sentToday: true, timestamp: nowIso, record: newRecord } } : {}),
-        ...(phoneKey ? { [phoneKey]: { sentToday: true, timestamp: nowIso, record: newRecord } } : {}),
-      }));
-
-      const existingHistory = cust.reminder_history || [];
-      const updatedCust: Customer = {
-        ...cust,
-        last_reminder_sent_at: nowIso,
-        reminder_history: [newRecord, ...existingHistory],
-        updated_at: nowIso,
-      };
+      // Open WhatsApp after database confirms update
+      const url = generateWhatsAppReminderUrl(cust, info, settings);
+      if (waWindow) {
+        waWindow.location.href = url;
+      } else {
+        window.open(url, "_blank");
+      }
 
       setSyncMessage(
         reminderSubFilter === "pending"
-          ? `✓ Follow-up for ${cust.name} marked as Sent Today! (Moved to Sent Today tab)`
-          : `✓ Follow-up for ${cust.name} marked as Sent Today.`
+          ? `✓ WhatsApp reminder saved to database and launched for ${cust.name}! (30-day cooldown active)`
+          : `✓ WhatsApp reminder saved to database for ${cust.name}! (30-day cooldown active)`
       );
-      setTimeout(() => setSyncMessage(null), 4500);
+      setTimeout(() => setSyncMessage(null), 5000);
+    } catch (err: any) {
+      if (waWindow) waWindow.close();
+      console.error("Failed to save WhatsApp reminder status in database:", err);
+      setApiErrorDialog({
+        isOpen: true,
+        title: "Database Update Failed",
+        message: err?.message || "Failed to update reminder status in the database. Please check your connection and try again.",
+        customerName: cust.name,
+        retryAction: () => handleSendWhatsAppReminder(cust, info),
+      });
+    } finally {
+      setLoadingReminderKey(null);
+    }
+  };
 
-      try {
-        await saveCustomer(updatedCust);
-      } catch (err) {
-        console.error("Failed to mark reminder as sent:", err);
-      }
-    } else {
-      // 1. Instant optimistic reset back to pending
-      setReminderStatusOverrides((prev) => ({
-        ...prev,
-        ...(cust.id ? { [cust.id]: { sentToday: false, timestamp: undefined } } : {}),
-        ...(phoneKey ? { [phoneKey]: { sentToday: false, timestamp: undefined } } : {}),
-      }));
+  // MANUALLY MARK AS DONE (WHEN USER HAS ALREADY CONTACTED/SENT OUTSIDE APP)
+  const handleMarkReminderDone = async (cust: Customer, info: CustomerReminderInfo) => {
+    const key = cust.id || cust.phone;
+    setLoadingReminderKey(key);
 
-      const updatedCust: Customer = {
-        ...cust,
-        last_reminder_sent_at: null as any,
-        updated_at: nowIso,
-      };
+    // 1. Check internet connectivity
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setLoadingReminderKey(null);
+      setApiErrorDialog({
+        isOpen: true,
+        title: "No Internet Connection",
+        message: "Cannot mark reminder as done because your device is offline. Please check your network connection.",
+        customerName: cust.name,
+      });
+      return;
+    }
 
-      setSyncMessage(`Follow-up status for ${cust.name} reset to Pending.`);
+    const nowIso = new Date().toISOString();
+    const newRecord: CustomerReminderRecord = {
+      id: generateUUID(),
+      sent_at: nowIso,
+      channel: "manual",
+      service_name: info.serviceName,
+      notes: "Manually marked as done (Customer already reminded)",
+    };
+
+    const existingHistory = cust.reminder_history || [];
+    const updatedCust: Customer = {
+      ...cust,
+      last_reminder_sent_at: nowIso,
+      reminder_history: [newRecord, ...existingHistory],
+      updated_at: nowIso,
+    };
+
+    try {
+      await saveCustomerDirect(updatedCust);
+      setSyncMessage(`✓ Follow-up for ${cust.name} marked as Done in database! (30-day cooldown active)`);
+      setTimeout(() => setSyncMessage(null), 5000);
+    } catch (err: any) {
+      console.error("Failed to mark reminder as done in database:", err);
+      setApiErrorDialog({
+        isOpen: true,
+        title: "Database Update Failed",
+        message: err?.message || "Failed to mark reminder as done in the database. Please check your connection and try again.",
+        customerName: cust.name,
+        retryAction: () => handleMarkReminderDone(cust, info),
+      });
+    } finally {
+      setLoadingReminderKey(null);
+    }
+  };
+
+  // RESET REMINDER STATUS BACK TO PENDING
+  const handleResetReminderStatus = async (cust: Customer, info: CustomerReminderInfo) => {
+    const key = cust.id || cust.phone;
+    setLoadingReminderKey(key);
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setLoadingReminderKey(null);
+      setApiErrorDialog({
+        isOpen: true,
+        title: "No Internet Connection",
+        message: "Cannot reset reminder in database because your device is offline. Please check your network connection.",
+        customerName: cust.name,
+      });
+      return;
+    }
+
+    const updatedCust: Customer = {
+      ...cust,
+      last_reminder_sent_at: null as any,
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      await saveCustomerDirect(updatedCust);
+      setSyncMessage(`Follow-up status for ${cust.name} reset to Pending in database.`);
       setTimeout(() => setSyncMessage(null), 4000);
+    } catch (err: any) {
+      console.error("Failed to reset reminder in database:", err);
+      setApiErrorDialog({
+        isOpen: true,
+        title: "Database Reset Failed",
+        message: err?.message || "Failed to reset reminder status in the database. Please check your connection and try again.",
+        customerName: cust.name,
+        retryAction: () => handleResetReminderStatus(cust, info),
+      });
+    } finally {
+      setLoadingReminderKey(null);
+    }
+  };
 
-      try {
-        await saveCustomer(updatedCust);
-      } catch (err) {
-        console.error("Failed to reset reminder status:", err);
-      }
+  // Backwards-compatible wrapper
+  const handleToggleReminderStatus = (cust: Customer, info: CustomerReminderInfo, markSent: boolean) => {
+    if (markSent) {
+      return handleMarkReminderDone(cust, info);
+    } else {
+      return handleResetReminderStatus(cust, info);
     }
   };
 
@@ -638,22 +666,22 @@ export function CustomerDirectory() {
           </Card>
 
           <Card
-            onClick={() => setReminderSubFilter("sent_today")}
+            onClick={() => setReminderSubFilter("sent")}
             className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
-              reminderSubFilter === "sent_today"
+              reminderSubFilter === "sent" || (reminderSubFilter as string) === "sent_today"
                 ? "border-emerald-500 ring-1 ring-emerald-500 bg-emerald-950/20"
                 : "border-emerald-500/30 hover:border-emerald-400/70"
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">✓ Sent Today</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">✓ Sent (30d Cooldown)</span>
               <div className="h-6 w-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
                 <CheckCheck className="h-3.5 w-3.5" />
               </div>
             </div>
             <div className="mt-1.5 flex items-baseline gap-1.5">
-              <span className="text-xl sm:text-2xl font-black text-emerald-300">{reminderData.sentTodayCount}</span>
-              <span className="text-[10px] text-zinc-500 font-medium">dispatched</span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-300">{reminderData.sentCount}</span>
+              <span className="text-[10px] text-zinc-500 font-medium">in cooldown</span>
             </div>
           </Card>
         </div>
@@ -788,16 +816,16 @@ export function CustomerDirectory() {
           {activeCrmTab === "reminders" && (
             <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 overflow-x-auto">
               {[
-                { id: "all_due", label: `All Due (${reminderData.totalDueCount})` },
                 { id: "pending", label: `⏳ Pending (${reminderData.pendingDueCount})` },
-                { id: "sent_today", label: `✓ Sent Today (${reminderData.sentTodayCount})` },
+                { id: "sent", label: `✓ Sent / Cooldown (${reminderData.sentCount})` },
+                { id: "all_due", label: `All Due (${reminderData.totalDueCount})` },
               ].map((rf) => (
                 <button
                   key={rf.id}
                   type="button"
                   onClick={() => setReminderSubFilter(rf.id as ReminderFilterType)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    reminderSubFilter === rf.id
+                    reminderSubFilter === rf.id || (rf.id === "sent" && (reminderSubFilter as string) === "sent_today")
                       ? "bg-emerald-600 text-white shadow-sm font-black"
                       : "text-zinc-400 hover:text-white"
                   }`}
@@ -902,7 +930,7 @@ export function CustomerDirectory() {
               <Card
                 key={cust.id}
                 className={`p-4 transition-all flex flex-col justify-between group shadow-lg shadow-black/20 ${
-                  remInfo.reminderSentToday
+                  remInfo.inCooldown
                     ? "bg-emerald-950/20 border-emerald-500/50 hover:border-emerald-400/90"
                     : remInfo.isOverdue
                     ? "bg-zinc-950/80 border-amber-500/40 hover:border-amber-400/80"
@@ -915,14 +943,14 @@ export function CustomerDirectory() {
                     <div className="flex items-center gap-3">
                       <div
                         className={`h-11 w-11 rounded-2xl border text-base font-black flex items-center justify-center shrink-0 shadow-md ${
-                          remInfo.reminderSentToday
+                          remInfo.inCooldown
                             ? "bg-emerald-950/50 border-emerald-500/50 text-emerald-300"
                             : remInfo.isOverdue
                             ? "bg-amber-950/40 border-amber-500/40 text-amber-300"
                             : "bg-gradient-to-tr from-purple-600/30 to-pink-600/20 border-purple-500/30 text-purple-300"
                         }`}
                       >
-                        {remInfo.reminderSentToday ? (
+                        {remInfo.inCooldown ? (
                           <CheckCheck className="h-5 w-5 text-emerald-400" />
                         ) : cust.name ? (
                           cust.name.charAt(0).toUpperCase()
@@ -956,10 +984,10 @@ export function CustomerDirectory() {
 
                     {/* TOP RIGHT STATUS BADGE */}
                     <div className="shrink-0">
-                      {remInfo.reminderSentToday ? (
+                      {remInfo.inCooldown ? (
                         <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 text-[10px] font-bold px-2 py-0.5 flex items-center gap-1 shadow-sm">
                           <CheckCheck className="h-3 w-3 text-emerald-400" />
-                          <span>Reminder Sent</span>
+                          <span>{formatReminderCooldownStatus(cust.last_reminder_sent_at)}</span>
                         </Badge>
                       ) : remInfo.isOverdue ? (
                         <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold px-2 py-0.5 flex items-center gap-1">
@@ -977,7 +1005,7 @@ export function CustomerDirectory() {
                   {/* REMINDER & LAST SERVICE STATUS BANNER */}
                   <div
                     className={`p-2.5 rounded-xl border text-xs space-y-1.5 ${
-                      remInfo.reminderSentToday
+                      remInfo.inCooldown
                         ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-200"
                         : remInfo.isOverdue
                         ? "bg-amber-950/30 border-amber-500/40 text-amber-200"
@@ -990,11 +1018,9 @@ export function CustomerDirectory() {
                         <span className="truncate">{remInfo.serviceName}</span>
                       </span>
 
-                      {remInfo.reminderSentToday ? (
+                      {remInfo.inCooldown ? (
                         <Badge className="text-[9px] font-bold px-2 py-0.5 shrink-0 bg-emerald-500/20 text-emerald-300 border border-emerald-500/50">
-                          {formatReminderTime(remInfo.lastReminderSentAt)
-                            ? `Sent Today • ${formatReminderTime(remInfo.lastReminderSentAt)}`
-                            : "Sent Today"}
+                          {formatReminderCooldownStatus(remInfo.lastReminderSentAt)}
                         </Badge>
                       ) : remInfo.isOverdue ? (
                         <Badge
@@ -1013,10 +1039,10 @@ export function CustomerDirectory() {
 
                     <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-800/60">
                       <span>Last Visit: {formatDate(remInfo.lastVisitDate)} ({remInfo.daysElapsed}d ago)</span>
-                      {remInfo.reminderSentToday ? (
+                      {remInfo.inCooldown ? (
                         <span className="text-emerald-400 font-bold flex items-center gap-0.5">
                           <CheckCheck className="h-3 w-3" />
-                          <span>Sent Today</span>
+                          <span>{remInfo.cooldownRemainingDays}d cooldown remaining</span>
                         </span>
                       ) : remInfo.lastReminderSentAt ? (
                         <span className="text-zinc-400">
@@ -1089,23 +1115,34 @@ export function CustomerDirectory() {
                 <div className="flex flex-col gap-2 pt-3 mt-3 border-t border-zinc-800/80">
 
                   {/* WHATSAPP TRIGGER & STATUS TRACKING BUTTONS */}
-                  {remInfo.reminderSentToday ? (
+                  {remInfo.inCooldown ? (
                     <div className="flex items-center gap-1.5">
                       <Button
                         size="sm"
+                        disabled={loadingReminderKey === (cust.id || cust.phone)}
                         onClick={() => handleSendWhatsAppReminder(cust, remInfo)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 shadow-sm transition-all cursor-pointer"
-                        title="Reminder already launched today. Click to resend via WhatsApp."
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                        title="Reminder sent recently within 30-day cooldown. Click to resend via WhatsApp."
                       >
-                        <CheckCheck className="h-3.5 w-3.5 text-emerald-400" />
-                        <span className="truncate">✓ Reminder Sent (Resend)</span>
+                        {loadingReminderKey === (cust.id || cust.phone) ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                            <span className="truncate">Saving to DB...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCheck className="h-3.5 w-3.5 text-emerald-400" />
+                            <span className="truncate">✓ Sent (Resend WhatsApp)</span>
+                          </>
+                        )}
                       </Button>
 
                       <button
                         type="button"
-                        onClick={() => handleToggleReminderStatus(cust, remInfo, false)}
-                        className="px-2.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-amber-300 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer shrink-0 flex items-center gap-1"
-                        title="Revert status to Pending if message was not actually sent"
+                        disabled={loadingReminderKey === (cust.id || cust.phone)}
+                        onClick={() => handleResetReminderStatus(cust, remInfo)}
+                        className="px-2.5 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-amber-300 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer shrink-0 flex items-center gap-1 disabled:opacity-50"
+                        title="Revert status to Pending in database if marked by mistake"
                       >
                         <RotateCcw className="h-3 w-3" />
                         <span>Reset</span>
@@ -1115,22 +1152,37 @@ export function CustomerDirectory() {
                     <div className="flex items-center gap-1.5">
                       <Button
                         size="sm"
+                        disabled={loadingReminderKey === (cust.id || cust.phone)}
                         onClick={() => handleSendWhatsAppReminder(cust, remInfo)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30 transition-all cursor-pointer"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30 transition-all cursor-pointer disabled:opacity-50"
                         title="Send personalized WhatsApp follow-up reminder in a new tab"
                       >
-                        <MessageSquare className="h-3.5 w-3.5 text-emerald-100" />
-                        <span className="truncate">Send WhatsApp Reminder</span>
+                        {loadingReminderKey === (cust.id || cust.phone) ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                            <span className="truncate">Saving to DB...</span>
+                          </>
+                        ) : (
+                          <>
+                            <MessageSquare className="h-3.5 w-3.5 text-emerald-100" />
+                            <span className="truncate">Send WhatsApp</span>
+                          </>
+                        )}
                       </Button>
 
                       <button
                         type="button"
-                        onClick={() => handleToggleReminderStatus(cust, remInfo, true)}
-                        className="px-2.5 py-2 rounded-xl text-xs font-semibold text-zinc-300 hover:text-emerald-300 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer shrink-0 flex items-center gap-1"
-                        title="Mark as sent (e.g. if followed up via phone call or manual SMS)"
+                        disabled={loadingReminderKey === (cust.id || cust.phone)}
+                        onClick={() => handleMarkReminderDone(cust, remInfo)}
+                        className="px-3 py-2 rounded-xl text-xs font-bold text-emerald-300 hover:text-emerald-200 bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-500/40 transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 disabled:opacity-50"
+                        title="Mark as done directly in the database (in case customer was already reminded)"
                       >
-                        <Check className="h-3 w-3 text-emerald-400" />
-                        <span>Mark Sent</span>
+                        {loadingReminderKey === (cust.id || cust.phone) ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-emerald-400" />
+                        ) : (
+                          <Check className="h-3.5 w-3.5 text-emerald-400" />
+                        )}
+                        <span>Mark Done</span>
                       </button>
                     </div>
                   )}
@@ -1249,9 +1301,9 @@ export function CustomerDirectory() {
                 <div>
                   <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
                     <span>Follow-up & Reminder Status:</span>
-                    {wasReminderSentToday(selectedHistoryCustomer.last_reminder_sent_at) ? (
+                    {isReminderInCooldown(selectedHistoryCustomer.last_reminder_sent_at) ? (
                       <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 text-[9px] py-0 px-1.5 font-bold">
-                        ✓ Sent Today
+                        ✓ {formatReminderCooldownStatus(selectedHistoryCustomer.last_reminder_sent_at)}
                       </Badge>
                     ) : selectedHistoryCustomer.last_reminder_sent_at ? (
                       <Badge className="bg-zinc-800 text-zinc-300 border border-zinc-700 text-[9px] py-0 px-1.5">
@@ -1277,22 +1329,32 @@ export function CustomerDirectory() {
               {reminderData.reminderMap.get(selectedHistoryCustomer.id) && (
                 <Button
                   size="sm"
+                  disabled={loadingReminderKey === (selectedHistoryCustomer.id || selectedHistoryCustomer.phone)}
                   onClick={() => {
                     const remInfo = reminderData.reminderMap.get(selectedHistoryCustomer.id)!;
                     handleSendWhatsAppReminder(selectedHistoryCustomer, remInfo);
                   }}
-                  className={`h-8 px-3 text-xs font-bold flex items-center gap-1.5 rounded-xl cursor-pointer self-start sm:self-auto shrink-0 ${
-                    wasReminderSentToday(selectedHistoryCustomer.last_reminder_sent_at)
+                  className={`h-8 px-3 text-xs font-bold flex items-center gap-1.5 rounded-xl cursor-pointer self-start sm:self-auto shrink-0 disabled:opacity-50 ${
+                    isReminderInCooldown(selectedHistoryCustomer.last_reminder_sent_at)
                       ? "bg-zinc-800 hover:bg-zinc-700 text-emerald-300 border border-emerald-500/40"
                       : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
                   }`}
                 >
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  <span>
-                    {wasReminderSentToday(selectedHistoryCustomer.last_reminder_sent_at)
-                      ? "Resend WhatsApp"
-                      : "Send WhatsApp"}
-                  </span>
+                  {loadingReminderKey === (selectedHistoryCustomer.id || selectedHistoryCustomer.phone) ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Saving to DB...</span>
+                    </>
+                  ) : (
+                    <>
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span>
+                        {isReminderInCooldown(selectedHistoryCustomer.last_reminder_sent_at)
+                          ? "Resend WhatsApp"
+                          : "Send WhatsApp"}
+                      </span>
+                    </>
+                  )}
                 </Button>
               )}
             </div>
@@ -1478,6 +1540,60 @@ export function CustomerDirectory() {
           refreshData?.();
         }}
       />
+
+      {/* DATABASE / NETWORK ERROR ALERT MODAL WITH CANCEL */}
+      {apiErrorDialog && (
+        <Dialog open={apiErrorDialog.isOpen} onOpenChange={(open) => !open && setApiErrorDialog(null)} maxWidth="md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base text-red-300 font-bold">
+                  {apiErrorDialog.title}
+                </DialogTitle>
+                {apiErrorDialog.customerName && (
+                  <DialogDescription className="text-xs text-zinc-400">
+                    Client: <span className="text-zinc-200 font-semibold">{apiErrorDialog.customerName}</span>
+                  </DialogDescription>
+                )}
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-2.5 my-3 text-xs">
+            <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-red-200 leading-relaxed font-medium">
+              {apiErrorDialog.message}
+            </div>
+            <p className="text-[11px] text-zinc-400">
+              The reminder was <strong className="text-zinc-200 font-bold">not marked as sent</strong> in the database because the action could not be completed.
+            </p>
+          </div>
+
+          <DialogFooter className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setApiErrorDialog(null)}
+              className="text-xs border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 cursor-pointer"
+            >
+              Cancel
+            </Button>
+            {apiErrorDialog.retryAction && (
+              <Button
+                onClick={async () => {
+                  const retry = apiErrorDialog.retryAction;
+                  setApiErrorDialog(null);
+                  if (retry) await retry();
+                }}
+                className="text-xs font-bold bg-red-600 hover:bg-red-500 text-white cursor-pointer"
+              >
+                Try Again
+              </Button>
+            )}
+          </DialogFooter>
+        </Dialog>
+      )}
 
     </div>
   );

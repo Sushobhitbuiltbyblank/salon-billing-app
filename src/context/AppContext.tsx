@@ -66,6 +66,7 @@ interface AppContextType {
   // CUSTOMERS
   customers: Customer[];
   saveCustomer: (customer: Customer) => Promise<Customer>;
+  saveCustomerDirect: (customer: Customer) => Promise<Customer>;
   deleteCustomer: (customerId: string, customerPhone?: string) => Promise<void> | void;
   
   // INVOICES
@@ -884,6 +885,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return saved;
   };
 
+  // DIRECT CUSTOMER SAVE (Requires database confirmation via API; does not update local cache if offline or API fails)
+  const saveCustomerDirect = async (cust: Customer): Promise<Customer> => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      throw new Error("No internet connection. Please connect to the internet to update the database.");
+    }
+
+    if (isSupabaseConfigured()) {
+      const remoteCust = await SupabaseSync.saveCustomer(cust);
+      if (!remoteCust) {
+        throw new Error("Database request failed. The server could not save the customer record.");
+      }
+
+      // Persist confirmed cloud record to storage and app context
+      const saved = Storage.saveCustomer(remoteCust);
+      const fresh = Storage.getCustomers();
+      setCustomers(fresh);
+      setInvoices(Storage.getInvoices());
+      return saved;
+    } else {
+      // Standalone/dev environment without Supabase
+      const saved = Storage.saveCustomer(cust);
+      setCustomers(Storage.getCustomers());
+      setInvoices(Storage.getInvoices());
+      return saved;
+    }
+  };
+
   const deleteCustomer = async (customerId: string, customerPhone?: string) => {
     const target = Storage.getCustomers().find((c) => c.id === customerId);
     const phone = customerPhone || target?.phone;
@@ -1197,6 +1225,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         deleteCatalogItem,
         customers,
         saveCustomer,
+        saveCustomerDirect,
         deleteCustomer,
         invoices,
         createInvoice,

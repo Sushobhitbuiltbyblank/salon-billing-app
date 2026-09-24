@@ -112,10 +112,13 @@ export interface CustomerReminderInfo {
   overdueDays: number;
   lastReminderSentAt?: string;
   reminderSentToday: boolean;
+  inCooldown: boolean;
+  cooldownRemainingDays: number;
+  hasVisitedSinceReminder?: boolean;
   reminderHistory?: CustomerReminderRecord[];
 }
 
-export type ReminderFilterType = 'all_due' | 'sent_today' | 'pending';
+export type ReminderFilterType = 'all_due' | 'sent_today' | 'sent' | 'pending';
 
 export interface StaffSplitAssignment {
   staff_id: string;

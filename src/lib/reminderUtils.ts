@@ -80,6 +80,99 @@ export function formatReminderTime(timestamp?: string | null): string {
   }
 }
 
+export const REMINDER_COOLDOWN_DAYS = 30;
+
+/**
+ * Checks if a reminder was sent within the 30-day cooldown period.
+ * When in cooldown, the customer is suppressed from the "Pending" reminder list.
+ */
+export function isReminderInCooldown(
+  timestamp?: string | null,
+  cooldownDays: number = REMINDER_COOLDOWN_DAYS
+): boolean {
+  if (!timestamp) return false;
+  const reminderDate = new Date(timestamp);
+  if (isNaN(reminderDate.getTime())) return false;
+
+  const now = new Date();
+  const diffMs = now.getTime() - reminderDate.getTime();
+  if (diffMs < 0) return true; // Sent today / clock discrepancy
+
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  return diffDays < cooldownDays;
+}
+
+/**
+ * Returns the number of remaining days in the cooldown period (0 to cooldownDays).
+ */
+export function getDaysRemainingInCooldown(
+  timestamp?: string | null,
+  cooldownDays: number = REMINDER_COOLDOWN_DAYS
+): number {
+  if (!timestamp) return 0;
+  const reminderDate = new Date(timestamp);
+  if (isNaN(reminderDate.getTime())) return 0;
+
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - reminderDate.getTime()) / (1000 * 60 * 60 * 24));
+  const remaining = cooldownDays - diffDays;
+  return remaining > 0 ? remaining : 0;
+}
+
+/**
+ * Detects whether a customer has visited the salon after the last reminder was sent.
+ * When true, the previous reminder follow-up cycle is completed, and the cooldown is cleared
+ * for their new upcoming cycle.
+ */
+export function hasCustomerVisitedSinceReminder(
+  lastVisitDate?: string | Date | null,
+  lastReminderSentAt?: string | null
+): boolean {
+  if (!lastVisitDate || !lastReminderSentAt) return false;
+  const visitTime = new Date(lastVisitDate).getTime();
+  const reminderTime = new Date(lastReminderSentAt).getTime();
+  if (isNaN(visitTime) || isNaN(reminderTime)) return false;
+
+  // Visit occurred after the reminder was sent
+  if (visitTime > reminderTime) return true;
+
+  const visitDate = new Date(lastVisitDate);
+  const reminderDate = new Date(lastReminderSentAt);
+  const visitDay = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate()).getTime();
+  const reminderDay = new Date(reminderDate.getFullYear(), reminderDate.getMonth(), reminderDate.getDate()).getTime();
+
+  return visitDay > reminderDay;
+}
+
+/**
+ * Formats a clean, user-friendly label for reminder cooldown status.
+ * e.g., "Sent Today" or "Sent Yesterday • 29d cooldown" or "Sent 4d ago • 26d cooldown"
+ */
+export function formatReminderCooldownStatus(
+  timestamp?: string | null,
+  cooldownDays: number = REMINDER_COOLDOWN_DAYS
+): string {
+  if (!timestamp) return "";
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return "";
+
+  if (wasReminderSentToday(timestamp)) {
+    return "Sent Today";
+  }
+
+  const now = new Date();
+  const daysAgo = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+  const remaining = Math.max(0, cooldownDays - daysAgo);
+
+  if (daysAgo === 1) {
+    return remaining > 0 ? `Sent Yesterday • ${remaining}d cooldown` : "Sent Yesterday";
+  }
+  if (daysAgo > 1) {
+    return remaining > 0 ? `Sent ${daysAgo}d ago • ${remaining}d cooldown` : `Sent ${daysAgo}d ago`;
+  }
+  return `Sent on ${formatReminderTime(timestamp)}`;
+}
+
 /**
  * Detects whether a reminder was sent today based on local calendar date.
  */
@@ -95,10 +188,13 @@ export function wasReminderSentToday(timestamp?: string | null): boolean {
 }
 
 /**
- * Analyzes customers and invoices to compute due follow-up reminders on a uniform monthly schedule.
+ * Analyzes customers and invoices to compute due follow-up reminders on a uniform monthly schedule
+ * with a 30-day cooldown after any reminder is sent.
  * - Reminder becomes due exactly 1 calendar month after the customer's last visit date.
  * - Month-end visits clamp to the end of the subsequent month (e.g. 31 Aug -> 30 Sep).
  * - Excludes customers who have visited more recently for any subsequent service.
+ * - Suppresses customers who have received a reminder within the 30-day cooldown window.
+ * - Automatically resets cooldown and starts fresh 1-month cycle when customer visits salon.
  */
 export function detectCustomerReminders(
   customers: Customer[],
@@ -151,7 +247,19 @@ export function detectCustomerReminders(
     // Overdue when current date is on or after the monthly due date
     const isOverdue = todayStart >= dueStart;
     const overdueDays = isOverdue ? Math.floor((todayStart - dueStart) / (1000 * 60 * 60 * 24)) : 0;
-    const reminderSentToday = wasReminderSentToday(cust.last_reminder_sent_at);
+    
+    // Check if customer visited AFTER the last reminder was sent
+    const hasVisitedSinceReminder = hasCustomerVisitedSinceReminder(
+      lastVisitDateStr,
+      cust.last_reminder_sent_at
+    );
+
+    // If customer has visited since reminder, cooldown is completed/cleared for the new cycle
+    const inCooldown = !hasVisitedSinceReminder && isReminderInCooldown(cust.last_reminder_sent_at, REMINDER_COOLDOWN_DAYS);
+    const cooldownRemainingDays = hasVisitedSinceReminder
+      ? 0
+      : getDaysRemainingInCooldown(cust.last_reminder_sent_at, REMINDER_COOLDOWN_DAYS);
+    const reminderSentToday = !hasVisitedSinceReminder && wasReminderSentToday(cust.last_reminder_sent_at);
 
     // Extract primary service name from latest invoice items for personalized display
     const serviceNames: string[] = [];
@@ -191,17 +299,20 @@ export function detectCustomerReminders(
       overdueDays,
       lastReminderSentAt: cust.last_reminder_sent_at,
       reminderSentToday,
+      inCooldown,
+      cooldownRemainingDays,
+      hasVisitedSinceReminder,
       reminderHistory: cust.reminder_history || [],
     });
   });
 
   // Sort:
-  // 1. Overdue and Pending (not sent today) first, sorted by highest overdue days
-  // 2. Overdue and Sent today, sorted by highest overdue days
+  // 1. Overdue and Pending (action needed: not in cooldown) first, sorted by highest overdue days
+  // 2. Overdue and in Cooldown (already sent within 30 days), sorted by highest overdue days
   // 3. Not overdue, sorted by days elapsed
   return reminderList.sort((a, b) => {
-    const aPending = a.isOverdue && !a.reminderSentToday;
-    const bPending = b.isOverdue && !b.reminderSentToday;
+    const aPending = a.isOverdue && !a.inCooldown;
+    const bPending = b.isOverdue && !b.inCooldown;
     if (aPending && !bPending) return -1;
     if (!aPending && bPending) return 1;
 
@@ -213,12 +324,14 @@ export function detectCustomerReminders(
 }
 
 /**
- * Formats a clean WhatsApp click-to-chat URL with the Free Face De-Tan promotional offer.
+ * Formats a clean WhatsApp click-to-chat URL with the Free Face De-Tan promotional offer,
+ * with Google Review and Instagram profile links.
  */
 export function generateWhatsAppReminderUrl(
   customer: Customer,
   info?: CustomerReminderInfo,
-  salonName: string = "Belezia Salon, Laxmi Nagar"
+  salonOrSettings?: string | SalonSettings,
+  optionalSettings?: SalonSettings | null
 ): string {
   const cleanPhone = normalizePhoneNumber(customer.phone);
   const customerName = customer.name?.trim() || "there";
@@ -231,16 +344,38 @@ export function generateWhatsAppReminderUrl(
     year: "numeric",
   }).format(expiry);
 
+  let salonName = "Belezia Salon, Laxmi Nagar";
+  let reviewLink = "https://g.page/r/CbGd_cwnL9zrEBM/review";
+  let instaLink = "https://www.instagram.com/beleziasalonlaxminagar?igsi=MTI0ZG85dGRvdTl6aQ%3D%3D&utm_source=qr";
+
+  if (typeof salonOrSettings === "object" && salonOrSettings !== null) {
+    if (salonOrSettings.salon_name) salonName = salonOrSettings.salon_name;
+    if (salonOrSettings.google_review_url) reviewLink = salonOrSettings.google_review_url;
+    if (salonOrSettings.instagram_url) instaLink = salonOrSettings.instagram_url;
+  } else if (typeof salonOrSettings === "string" && salonOrSettings.trim()) {
+    salonName = salonOrSettings.trim();
+    if (optionalSettings?.google_review_url) reviewLink = optionalSettings.google_review_url;
+    if (optionalSettings?.instagram_url) instaLink = optionalSettings.instagram_url;
+  }
+
   const salonDisplay = salonName.toLowerCase().includes("laxmi nagar")
     ? salonName
     : `${salonName}, Laxmi Nagar`;
 
+  let linksBlock = "";
+  if (reviewLink) {
+    linksBlock += `\n\n🌟 *Google Review (Rate us 5-Stars):*\n${reviewLink}`;
+  }
+  if (instaLink) {
+    linksBlock += `\n\n📸 *Follow us on Instagram:*\n${instaLink}`;
+  }
+
   const message = `✨ *GET FACE DE-TAN ABSOLUTELY FREE* 🎁
-⏳ Free DeTan Offer valid till ${expiryDateStr} on showing this message; *No other T&Cs*
+⏳ Free DeTan Offer valid till ${expiryDateStr} on showing this message
 
 👋 Hi ${customerName}, Its been long since you took any services at ${salonDisplay}.
 
-💆 Time for a fresh service and get a face detan absolutely free. ✨`;
+💆 Time for a fresh service and get a face detan absolutely free. ✨${linksBlock}`;
 
   return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`;
 }
