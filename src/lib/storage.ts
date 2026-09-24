@@ -896,12 +896,6 @@ export const Storage = {
           : existing?.notes,
       total_visits: customer.total_visits !== undefined ? customer.total_visits : (existing?.total_visits || 0),
       last_visit: customer.last_visit || existing?.last_visit,
-      last_reminder_sent_at:
-        customer.last_reminder_sent_at === null || customer.last_reminder_sent_at === ""
-          ? undefined
-          : customer.last_reminder_sent_at !== undefined
-          ? customer.last_reminder_sent_at
-          : existing?.last_reminder_sent_at,
       reminder_history:
         customer.reminder_history !== undefined
           ? customer.reminder_history
@@ -909,6 +903,14 @@ export const Storage = {
       created_at: existing?.created_at || customer.created_at || new Date().toISOString(),
       updated_at: customer.updated_at || new Date().toISOString(),
     };
+
+    if (customer.last_reminder_sent_at === null || customer.last_reminder_sent_at === "") {
+      delete merged.last_reminder_sent_at;
+    } else if (customer.last_reminder_sent_at !== undefined) {
+      merged.last_reminder_sent_at = customer.last_reminder_sent_at;
+    } else if (existing?.last_reminder_sent_at) {
+      merged.last_reminder_sent_at = existing.last_reminder_sent_at;
+    }
 
     otherCustomers.unshift(merged);
     this.saveCustomers(otherCustomers);

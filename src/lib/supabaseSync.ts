@@ -99,7 +99,9 @@ export const SupabaseSync = {
         } else if (parsed.user_notes !== undefined) {
           userNotes = parsed.user_notes;
         }
-        if (parsed.last_reminder_sent_at) {
+        if (parsed.last_reminder_sent_at === null || parsed.last_reminder_sent_at === "") {
+          lastReminderSentAt = undefined;
+        } else if (parsed.last_reminder_sent_at) {
           lastReminderSentAt = parsed.last_reminder_sent_at;
         }
         if (parsed.reminder_history && Array.isArray(parsed.reminder_history)) {
@@ -108,12 +110,17 @@ export const SupabaseSync = {
       } catch {}
     }
 
+    const isExplicitlyCleared =
+      cust.notes &&
+      typeof cust.notes === "string" &&
+      cust.notes.includes('"last_reminder_sent_at":null');
+
     return {
       ...cust,
       notes: userNotes,
       updated_at: updatedAt,
       total_spent: Number(cust.total_spent) || 0,
-      last_reminder_sent_at: lastReminderSentAt || cust.last_reminder_sent_at || undefined,
+      last_reminder_sent_at: isExplicitlyCleared ? undefined : (lastReminderSentAt || cust.last_reminder_sent_at || undefined),
       reminder_history: reminderHistory,
     };
   },
@@ -1376,13 +1383,18 @@ export const SupabaseSync = {
             }
           } catch {}
         }
-        return {
+        const returnedCust: Customer = {
           ...savedCust,
           notes: userNotes,
           updated_at: finalUpdatedAt,
-          last_reminder_sent_at: lastReminderSentAt || undefined,
           reminder_history: reminderHistory,
         };
+        if (isClearingReminder) {
+          delete (returnedCust as any).last_reminder_sent_at;
+        } else if (lastReminderSentAt) {
+          returnedCust.last_reminder_sent_at = lastReminderSentAt;
+        }
+        return returnedCust;
       }
 
       return null;

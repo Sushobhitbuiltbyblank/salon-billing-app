@@ -433,15 +433,25 @@ export function CustomerDirectory() {
       return;
     }
 
+    const history = Array.isArray(cust.reminder_history) ? [...cust.reminder_history] : [];
+    // If the latest record was created today, pop it to clean history on undo
+    if (history.length > 0 && wasReminderSentToday(history[0]?.sent_at)) {
+      history.shift();
+    }
+
     const updatedCust: Customer = {
       ...cust,
       last_reminder_sent_at: null as any,
+      reminder_history: history,
       updated_at: new Date().toISOString(),
     };
 
     try {
       await saveCustomerDirect(updatedCust);
-      setSyncMessage(`Follow-up status for ${cust.name} reset to Pending in database.`);
+      if (refreshData) {
+        await refreshData();
+      }
+      setSyncMessage(`✓ Follow-up status for ${cust.name} reset back to Pending!`);
       setTimeout(() => setSyncMessage(null), 4000);
     } catch (err: any) {
       console.error("Failed to reset reminder in database:", err);

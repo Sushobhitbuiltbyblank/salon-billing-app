@@ -216,5 +216,16 @@ describe("Storage Layer & Local Data Operations", () => {
     expect(saved?.name).toBe("Deepak");
     expect(saved?.email).toBeUndefined();
     expect(saved?.notes).toBeUndefined();
+    expect(saved?.last_reminder_sent_at).toBeDefined();
+
+    // Reset reminder by passing null
+    Storage.saveCustomer({
+      ...saved!,
+      last_reminder_sent_at: null as any,
+      updated_at: new Date().toISOString(),
+    });
+
+    const afterReset = Storage.getCustomers().find((c) => c.phone === "9810012345");
+    expect(afterReset?.last_reminder_sent_at).toBeUndefined();
   });
 });

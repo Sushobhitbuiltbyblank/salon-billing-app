@@ -897,6 +897,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Database request failed. The server could not save the customer record.");
       }
 
+      // If caller explicitly cleared last_reminder_sent_at (e.g. reset/undo), ensure it stays cleared
+      if (cust.last_reminder_sent_at === null || cust.last_reminder_sent_at === "") {
+        remoteCust.last_reminder_sent_at = null as any;
+      }
+
       // Persist confirmed cloud record to storage and app context
       const saved = Storage.saveCustomer(remoteCust);
       const fresh = Storage.getCustomers();
