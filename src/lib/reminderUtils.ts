@@ -1,4 +1,4 @@
-import { Customer, Invoice, CustomerReminderInfo } from "@/types";
+import { Customer, Invoice, CustomerReminderInfo, SalonSettings } from "@/types";
 import { normalizePhoneNumber } from "./customerUtils";
 
 /**
