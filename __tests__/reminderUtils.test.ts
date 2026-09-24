@@ -239,6 +239,113 @@ describe("Customer Reminder Engine - Monthly Follow-ups", () => {
       expect(reminders[1].reminderSentToday).toBe(true);
     });
 
+    it("places today's due reminders strictly on top of older overdue pending reminders", () => {
+      const now = new Date();
+      // Exactly 1 month ago today -> due today!
+      const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString();
+      // 60 days ago -> overdue by ~30 days
+      const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+
+      const olderOverdueCustomer: Customer = {
+        id: "cust-older-overdue",
+        name: "Old Overdue Customer",
+        phone: "9876543201",
+        last_visit: sixtyDaysAgo,
+        total_visits: 1,
+        total_spent: 300,
+      };
+
+      const dueTodayCustomer: Customer = {
+        id: "cust-due-today",
+        name: "Due Today Customer",
+        phone: "9876543202",
+        last_visit: oneMonthAgo,
+        total_visits: 1,
+        total_spent: 300,
+      };
+
+      const invoices: Invoice[] = [
+        {
+          id: "inv-old",
+          invoice_number: "INV-OLD",
+          customer_id: "cust-older-overdue",
+          customer_phone: "9876543201",
+          subtotal: 300,
+          discount_amount: 0,
+          discount_type: "flat",
+          discount_value: 0,
+          tax_amount: 0,
+          tax_rate: 0,
+          grand_total: 300,
+          payment_mode: "cash",
+          status: "paid",
+          created_at: sixtyDaysAgo,
+          items: [{ id: "it-old", item_name: "Haircut", item_type: "service", quantity: 1, unit_price: 300, discount: 0, total_price: 300 }],
+        },
+        {
+          id: "inv-today",
+          invoice_number: "INV-TODAY",
+          customer_id: "cust-due-today",
+          customer_phone: "9876543202",
+          subtotal: 300,
+          discount_amount: 0,
+          discount_type: "flat",
+          discount_value: 0,
+          tax_amount: 0,
+          tax_rate: 0,
+          grand_total: 300,
+          payment_mode: "cash",
+          status: "paid",
+          created_at: oneMonthAgo,
+          items: [{ id: "it-today", item_name: "Haircut", item_type: "service", quantity: 1, unit_price: 300, discount: 0, total_price: 300 }],
+        },
+      ];
+
+      // Pass older customer first in array to verify sorting reorders properly
+      const reminders = detectCustomerReminders([olderOverdueCustomer, dueTodayCustomer], invoices);
+      expect(reminders.length).toBe(2);
+      expect(reminders[0].customer.id).toBe("cust-due-today");
+      expect(reminders[0].isDueToday).toBe(true);
+      expect(reminders[1].customer.id).toBe("cust-older-overdue");
+      expect(reminders[1].isDueToday).toBe(false);
+    });
+
+    it("places today's sent reminders strictly on top of older sent reminders", () => {
+      const now = new Date();
+      const todayIso = now.toISOString();
+      const fiveDaysAgoIso = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+      const fortyDaysAgo = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+
+      const sentEarlierCustomer: Customer = {
+        id: "cust-sent-5d-ago",
+        name: "Sent Earlier",
+        phone: "9876543211",
+        last_visit: fortyDaysAgo,
+        last_reminder_sent_at: fiveDaysAgoIso,
+        total_visits: 1,
+        total_spent: 300,
+      };
+
+      const sentTodayCustomer: Customer = {
+        id: "cust-sent-today",
+        name: "Sent Today",
+        phone: "9876543212",
+        last_visit: fortyDaysAgo,
+        last_reminder_sent_at: todayIso,
+        total_visits: 1,
+        total_spent: 300,
+      };
+
+      const invoices: Invoice[] = [];
+      const reminders = detectCustomerReminders([sentEarlierCustomer, sentTodayCustomer], invoices);
+
+      expect(reminders.length).toBe(2);
+      expect(reminders[0].customer.id).toBe("cust-sent-today");
+      expect(reminders[0].reminderSentToday).toBe(true);
+      expect(reminders[1].customer.id).toBe("cust-sent-5d-ago");
+      expect(reminders[1].reminderSentToday).toBe(false);
+    });
+
     it("handles status transitions: marking reminder as sent and resetting back to pending", () => {
       const fortyDaysAgo = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
       const customer: Customer = {

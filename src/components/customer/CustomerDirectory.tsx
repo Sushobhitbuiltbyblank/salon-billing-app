@@ -137,15 +137,23 @@ export function CustomerDirectory() {
     const overdueList = list.filter((r) => r.isOverdue);
     const sentList = list.filter((r) => r.inCooldown);
     const pendingDueList = overdueList.filter((r) => !r.inCooldown);
+    const dueTodayList = pendingDueList.filter((r) => r.isDueToday);
+    const sentTodayList = sentList.filter((r) => r.reminderSentToday);
+    const todayTotalCount = dueTodayList.length + sentTodayList.length;
 
     return {
       allReminders: list,
       reminderMap: map,
       overdueList,
       sentList,
+      dueTodayList,
+      sentTodayList,
       totalDueCount: overdueList.length,
       sentCount: sentList.length,
       pendingDueCount: pendingDueList.length,
+      dueTodayCount: dueTodayList.length,
+      sentTodayCount: sentTodayList.length,
+      todayTotalCount,
     };
   }, [unifiedCustomers, invoices]);
 
@@ -190,7 +198,9 @@ export function CustomerDirectory() {
 
         // Sub-filter inside Reminders tab with 30-day cooldown logic
         let matchSubFilter = true;
-        if (reminderSubFilter === "all_due") {
+        if (reminderSubFilter === "today") {
+          matchSubFilter = (rem.isOverdue && rem.isDueToday && !rem.inCooldown) || rem.reminderSentToday;
+        } else if (reminderSubFilter === "all_due") {
           matchSubFilter = rem.isOverdue;
         } else if (reminderSubFilter === "sent" || (reminderSubFilter as string) === "sent_today") {
           matchSubFilter = rem.inCooldown;
@@ -242,6 +252,7 @@ export function CustomerDirectory() {
           intervalDays: 30,
           isOverdue: false,
           overdueDays: 0,
+          isDueToday: false,
           lastReminderSentAt: cust.last_reminder_sent_at,
           reminderSentToday: wasReminderSentToday(cust.last_reminder_sent_at),
           inCooldown: isReminderInCooldown(cust.last_reminder_sent_at),
@@ -624,24 +635,24 @@ export function CustomerDirectory() {
       {/* KPI SUMMARY CARDS */}
       {activeCrmTab === "reminders" ? (
         /* REMINDERS KPI CARDS */
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Card
-            onClick={() => setReminderSubFilter("all_due")}
+            onClick={() => setReminderSubFilter("today")}
             className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
-              reminderSubFilter === "all_due"
-                ? "border-amber-500 ring-1 ring-amber-500 bg-amber-950/20"
-                : "border-amber-500/30 hover:border-amber-400/70"
+              reminderSubFilter === "today"
+                ? "border-amber-400 ring-1 ring-amber-400 bg-amber-950/30"
+                : "border-amber-500/40 hover:border-amber-400/70"
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">All Due</span>
-              <div className="h-6 w-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                <BellRing className="h-3.5 w-3.5" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300">⭐ Today's Due</span>
+              <div className="h-6 w-6 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center">
+                <Sparkles className="h-3.5 w-3.5" />
               </div>
             </div>
             <div className="mt-1.5 flex items-baseline gap-1.5">
-              <span className="text-xl sm:text-2xl font-black text-amber-300">{reminderData.totalDueCount}</span>
-              <span className="text-[10px] text-zinc-500 font-medium">clients</span>
+              <span className="text-xl sm:text-2xl font-black text-amber-300">{reminderData.dueTodayCount}</span>
+              <span className="text-[10px] text-zinc-500 font-medium">({reminderData.sentTodayCount} sent today)</span>
             </div>
           </Card>
 
@@ -654,7 +665,7 @@ export function CustomerDirectory() {
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-orange-400">⏳ Pending</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-orange-400">⏳ All Pending</span>
               <div className="h-6 w-6 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center">
                 <Clock className="h-3.5 w-3.5" />
               </div>
@@ -674,7 +685,7 @@ export function CustomerDirectory() {
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">✓ Sent (30d Cooldown)</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">✓ Sent (Cooldown)</span>
               <div className="h-6 w-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
                 <CheckCheck className="h-3.5 w-3.5" />
               </div>
@@ -682,6 +693,26 @@ export function CustomerDirectory() {
             <div className="mt-1.5 flex items-baseline gap-1.5">
               <span className="text-xl sm:text-2xl font-black text-emerald-300">{reminderData.sentCount}</span>
               <span className="text-[10px] text-zinc-500 font-medium">in cooldown</span>
+            </div>
+          </Card>
+
+          <Card
+            onClick={() => setReminderSubFilter("all_due")}
+            className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
+              reminderSubFilter === "all_due"
+                ? "border-amber-500 ring-1 ring-amber-500 bg-amber-950/20"
+                : "border-amber-500/30 hover:border-amber-400/70"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">All Due</span>
+              <div className="h-6 w-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <BellRing className="h-3.5 w-3.5" />
+              </div>
+            </div>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="text-xl sm:text-2xl font-black text-amber-300">{reminderData.totalDueCount}</span>
+              <span className="text-[10px] text-zinc-500 font-medium">clients</span>
             </div>
           </Card>
         </div>
@@ -816,8 +847,9 @@ export function CustomerDirectory() {
           {activeCrmTab === "reminders" && (
             <div className="flex items-center bg-zinc-950 p-0.5 rounded-xl border border-zinc-800 overflow-x-auto">
               {[
+                { id: "today", label: `⭐ Today's Due (${reminderData.dueTodayCount})` },
                 { id: "pending", label: `⏳ Pending (${reminderData.pendingDueCount})` },
-                { id: "sent", label: `✓ Sent / Cooldown (${reminderData.sentCount})` },
+                { id: "sent", label: `✓ Sent (${reminderData.sentCount})` },
                 { id: "all_due", label: `All Due (${reminderData.totalDueCount})` },
               ].map((rf) => (
                 <button
@@ -1005,7 +1037,11 @@ export function CustomerDirectory() {
                   {/* REMINDER & LAST SERVICE STATUS BANNER */}
                   <div
                     className={`p-2.5 rounded-xl border text-xs space-y-1.5 ${
-                      remInfo.inCooldown
+                      remInfo.isDueToday && !remInfo.inCooldown
+                        ? "bg-amber-950/40 border-amber-400/80 ring-1 ring-amber-400/40 text-amber-100"
+                        : remInfo.reminderSentToday
+                        ? "bg-emerald-950/40 border-emerald-500/70 ring-1 ring-emerald-500/40 text-emerald-100"
+                        : remInfo.inCooldown
                         ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-200"
                         : remInfo.isOverdue
                         ? "bg-amber-950/30 border-amber-500/40 text-amber-200"
@@ -1018,16 +1054,24 @@ export function CustomerDirectory() {
                         <span className="truncate">{remInfo.serviceName}</span>
                       </span>
 
-                      {remInfo.inCooldown ? (
+                      {remInfo.reminderSentToday ? (
+                        <Badge className="text-[9px] font-black px-2 py-0.5 shrink-0 bg-emerald-500 text-black border border-emerald-400 shadow-sm animate-pulse">
+                          ✓ Sent Today
+                        </Badge>
+                      ) : remInfo.inCooldown ? (
                         <Badge className="text-[9px] font-bold px-2 py-0.5 shrink-0 bg-emerald-500/20 text-emerald-300 border border-emerald-500/50">
                           {formatReminderCooldownStatus(remInfo.lastReminderSentAt)}
                         </Badge>
                       ) : remInfo.isOverdue ? (
                         <Badge
-                          className="bg-amber-500/20 text-amber-300 border border-amber-500/50 text-[9px] font-bold px-1.5 py-0 shrink-0"
+                          className={`text-[9px] font-bold px-2 py-0.5 shrink-0 ${
+                            remInfo.isDueToday
+                              ? "bg-amber-400 text-black border border-amber-300 font-black shadow-sm animate-pulse"
+                              : "bg-amber-500/20 text-amber-300 border border-amber-500/50"
+                          }`}
                         >
-                          {remInfo.overdueDays === 0
-                            ? "Due today (1 month cycle)"
+                          {remInfo.isDueToday
+                            ? "⭐ Due Today (1 month cycle)"
                             : `${remInfo.overdueDays}d overdue (1 month cycle)`}
                         </Badge>
                       ) : (

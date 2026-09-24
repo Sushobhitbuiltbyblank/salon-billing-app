@@ -247,6 +247,7 @@ export function detectCustomerReminders(
     // Overdue when current date is on or after the monthly due date
     const isOverdue = todayStart >= dueStart;
     const overdueDays = isOverdue ? Math.floor((todayStart - dueStart) / (1000 * 60 * 60 * 24)) : 0;
+    const isDueToday = isOverdue && overdueDays === 0;
     
     // Check if customer visited AFTER the last reminder was sent
     const hasVisitedSinceReminder = hasCustomerVisitedSinceReminder(
@@ -297,6 +298,7 @@ export function detectCustomerReminders(
       intervalDays: 30,
       isOverdue,
       overdueDays,
+      isDueToday,
       lastReminderSentAt: cust.last_reminder_sent_at,
       reminderSentToday,
       inCooldown,
@@ -306,15 +308,48 @@ export function detectCustomerReminders(
     });
   });
 
-  // Sort:
-  // 1. Overdue and Pending (action needed: not in cooldown) first, sorted by highest overdue days
-  // 2. Overdue and in Cooldown (already sent within 30 days), sorted by highest overdue days
+  // Sort priority:
+  // 1. Pending (action needed: not in cooldown) first:
+  //    - Due Today (1-month cycle hit today) strictly on top!
+  //    - Older pending reminders ordered by most recent due date (ascending overdueDays: 1d, 2d, 3d...)
+  // 2. In Cooldown / Sent (already contacted within 30 days):
+  //    - Sent Today strictly on top!
+  //    - Older sent reminders ordered by latest lastReminderSentAt descending
   // 3. Not overdue, sorted by days elapsed
   return reminderList.sort((a, b) => {
     const aPending = a.isOverdue && !a.inCooldown;
     const bPending = b.isOverdue && !b.inCooldown;
+
+    // Both are pending (Action needed)
+    if (aPending && bPending) {
+      // Due Today comes strictly first on top!
+      if (a.isDueToday && !b.isDueToday) return -1;
+      if (!a.isDueToday && b.isDueToday) return 1;
+
+      // For older pending: recent overdue first (1d, 2d, 3d...)
+      if (a.overdueDays !== b.overdueDays) {
+        return a.overdueDays - b.overdueDays;
+      }
+      return b.daysElapsed - a.daysElapsed;
+    }
+
+    // Pending always comes before Cooldown/Sent
     if (aPending && !bPending) return -1;
     if (!aPending && bPending) return 1;
+
+    // Both are in cooldown / sent
+    if (a.inCooldown && b.inCooldown) {
+      // Sent Today comes strictly first on top!
+      if (a.reminderSentToday && !b.reminderSentToday) return -1;
+      if (!a.reminderSentToday && b.reminderSentToday) return 1;
+
+      // Most recently sent timestamp first
+      const timeA = a.lastReminderSentAt ? new Date(a.lastReminderSentAt).getTime() : 0;
+      const timeB = b.lastReminderSentAt ? new Date(b.lastReminderSentAt).getTime() : 0;
+      if (timeA !== timeB) return timeB - timeA;
+
+      return b.daysElapsed - a.daysElapsed;
+    }
 
     if (a.isOverdue && !b.isOverdue) return -1;
     if (!a.isOverdue && b.isOverdue) return 1;
