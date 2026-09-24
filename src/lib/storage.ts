@@ -878,10 +878,22 @@ export const Storage = {
           : existing?.gender && existing.gender !== "unspecified"
           ? existing.gender
           : "female",
-      email: customer.email !== undefined ? (customer.email.trim() || undefined) : existing?.email,
-      birthday: customer.birthday !== undefined ? (customer.birthday.trim() || undefined) : existing?.birthday,
-      anniversary: customer.anniversary !== undefined ? (customer.anniversary.trim() || undefined) : existing?.anniversary,
-      notes: customer.notes !== undefined ? (customer.notes.trim() || undefined) : existing?.notes,
+      email:
+        customer.email !== undefined
+          ? (typeof customer.email === "string" ? customer.email.trim() || undefined : undefined)
+          : existing?.email,
+      birthday:
+        customer.birthday !== undefined
+          ? (typeof customer.birthday === "string" ? customer.birthday.trim() || undefined : undefined)
+          : existing?.birthday,
+      anniversary:
+        customer.anniversary !== undefined
+          ? (typeof customer.anniversary === "string" ? customer.anniversary.trim() || undefined : undefined)
+          : existing?.anniversary,
+      notes:
+        customer.notes !== undefined
+          ? (typeof customer.notes === "string" ? customer.notes.trim() || undefined : undefined)
+          : existing?.notes,
       total_visits: customer.total_visits !== undefined ? customer.total_visits : (existing?.total_visits || 0),
       last_visit: customer.last_visit || existing?.last_visit,
       last_reminder_sent_at:
@@ -1053,7 +1065,7 @@ export const Storage = {
         if ((!existing.phone || existing.phone.length < 10) && cleanPhone.length === 10) {
           existing.phone = cleanPhone;
         }
-        if (invoice.customer_name && !isAnon && invoice.customer_name.trim() !== existing.name.trim()) {
+        if (invoice.customer_name && !isAnon && invoice.customer_name.trim() !== (existing.name?.trim() || "")) {
           existing.name = invoice.customer_name.trim();
         }
         if (invoice.customer_email && !existing.email) {

@@ -1481,7 +1481,7 @@ export function CustomerDirectory() {
                           const catItem = catalog.find(
                             (c) =>
                               c.id === it.item_id ||
-                              c.name.toLowerCase().trim() === it.item_name.toLowerCase().trim()
+                              (c.name || "").toLowerCase().trim() === (it.item_name || "").toLowerCase().trim()
                           );
                           if (catItem && catItem.package_service_ids && catItem.package_service_ids.length > 0) {
                             services = catItem.package_service_ids

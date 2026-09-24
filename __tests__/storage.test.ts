@@ -191,4 +191,30 @@ describe("Storage Layer & Local Data Operations", () => {
     expect(savedAfterDeletion?.total_visits).toBe(0);
     expect(savedAfterDeletion?.total_spent).toBe(0);
   });
+
+  it("safely handles customer with null email, birthday, anniversary, or notes without throw", () => {
+    const custWithNulls: any = {
+      id: "cust-null-fields",
+      name: "Deepak",
+      phone: "9810012345",
+      gender: "male",
+      email: null,
+      birthday: null,
+      anniversary: null,
+      notes: null,
+      total_visits: 1,
+      total_spent: 450,
+      last_reminder_sent_at: new Date().toISOString(),
+    };
+
+    expect(() => {
+      Storage.saveCustomer(custWithNulls);
+    }).not.toThrow();
+
+    const saved = Storage.getCustomers().find((c) => c.phone === "9810012345");
+    expect(saved).toBeDefined();
+    expect(saved?.name).toBe("Deepak");
+    expect(saved?.email).toBeUndefined();
+    expect(saved?.notes).toBeUndefined();
+  });
 });
