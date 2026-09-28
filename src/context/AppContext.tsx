@@ -24,6 +24,7 @@ import { SupabaseSync } from "@/lib/supabaseSync";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { calculateItemTotal } from "@/lib/calculations";
 import { normalizePhoneNumber, deduplicateCustomerArray } from "@/lib/customerUtils";
+import { ServerDailySalesRow } from "@/lib/salesAnalytics";
 
 interface AppContextType {
   users: AppUser[];
@@ -137,6 +138,8 @@ interface AppContextType {
     offset?: number;
   }) => Promise<{ invoices: Invoice[]; totalCount: number }>;
   fetchInvoiceById: (invoiceId: string) => Promise<Invoice | null>;
+  fetchDailySalesSummary: (startDate: string, endDate: string) => Promise<ServerDailySalesRow[] | null>;
+  loadInvoicesForDateRange: (startDate: string, endDate: string) => Promise<Invoice[]>;
   syncIncremental: () => Promise<void>;
 }
 
@@ -433,6 +436,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.warn("Incremental delta sync error:", err);
     }
   }, [loadAllData]);
+
+  // DATE-BOUNDED HISTORICAL INVOICES LOADER: Guarantees complete data for any selected timeframe (e.g. Month, Year, Custom)
+  const loadInvoicesForDateRange = useCallback(async (startDate: string, endDate: string): Promise<Invoice[]> => {
+    if (typeof window === "undefined" || !isSupabaseConfigured()) return [];
+    try {
+      const remoteInvoices = await SupabaseSync.fetchInvoicesByDateRange(startDate, endDate, 2000);
+      if (remoteInvoices && remoteInvoices.length > 0) {
+        setInvoices((prev) => {
+          const currentIds = new Set(prev.map((i) => i.id || i.invoice_number));
+          const hasNew = remoteInvoices.some((inv) => !currentIds.has(inv.id || inv.invoice_number));
+          if (!hasNew) return prev;
+          const merged = Storage.mergeInvoices(prev, remoteInvoices, { isIncremental: true });
+          Storage.saveInvoices(merged);
+          return merged;
+        });
+      }
+      return remoteInvoices;
+    } catch (e) {
+      console.error("loadInvoicesForDateRange error:", e);
+      return [];
+    }
+  }, []);
 
   // NETWORK CONNECTIVITY & BACKGROUND SYNC LISTENERS
   useEffect(() => {
@@ -1297,6 +1322,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         refreshData: loadAllData,
         fetchHistoricalInvoices: SupabaseSync.fetchHistoricalInvoices.bind(SupabaseSync),
         fetchInvoiceById: SupabaseSync.fetchInvoiceById.bind(SupabaseSync),
+        fetchDailySalesSummary: SupabaseSync.fetchDailySalesSummary.bind(SupabaseSync),
+        loadInvoicesForDateRange,
         syncIncremental,
       }}
     >

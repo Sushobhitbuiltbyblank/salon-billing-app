@@ -510,3 +510,101 @@ export function getYearMonthWiseSales(
   };
 }
 
+export interface ServerDailySalesRow {
+  sale_date: string;
+  total_sales: number | string;
+  subtotal: number | string;
+  discount_amount: number | string;
+  tax_amount: number | string;
+  invoice_count: number | string;
+  cash_sales: number | string;
+  upi_sales: number | string;
+  card_sales: number | string;
+  split_sales: number | string;
+  product_sales: number | string;
+  product_units: number | string;
+  product_invoice_count: number | string;
+}
+
+/**
+ * Overlays server-aggregated daily sales stats onto a period's dataPoints.
+ * Recomputes totals, averages, peak, and lowest active days.
+ */
+export function applyServerSalesSummary(
+  baseSummary: PeriodicSalesSummary,
+  serverRows: ServerDailySalesRow[],
+  saleScope: SalesBreakdownScope = "all"
+): PeriodicSalesSummary {
+  if (!serverRows || serverRows.length === 0) return baseSummary;
+
+  const rowMap = new Map<string, ServerDailySalesRow>();
+  serverRows.forEach((r) => {
+    if (r.sale_date) {
+      // Normalize to YYYY-MM-DD
+      const dateKey = r.sale_date.slice(0, 10);
+      rowMap.set(dateKey, r);
+    }
+  });
+
+  const isProductScope = saleScope === "product";
+
+  const updatedDataPoints: SalesDataPoint[] = baseSummary.dataPoints.map((point) => {
+    const row = rowMap.get(point.key);
+    if (!row) return point;
+
+    const rowTotalSales = Number(row.total_sales) || 0;
+    const rowSubtotal = Number(row.subtotal) || 0;
+    const rowDiscount = Number(row.discount_amount) || 0;
+    const rowTax = Number(row.tax_amount) || 0;
+    const rowInvoiceCount = Number(row.invoice_count) || 0;
+
+    const rowProdSales = Number(row.product_sales) || 0;
+    const rowProdUnits = Number(row.product_units) || 0;
+    const rowProdInvoiceCount = Number(row.product_invoice_count) || 0;
+
+    const paymentBreakdown = {
+      cash: Number(row.cash_sales) || 0,
+      upi: Number(row.upi_sales) || 0,
+      card: Number(row.card_sales) || 0,
+      split: Number(row.split_sales) || 0,
+    };
+
+    return {
+      ...point,
+      totalSales: isProductScope ? rowProdSales : rowTotalSales,
+      subtotal: isProductScope ? rowProdSales : rowSubtotal,
+      discount: isProductScope ? 0 : rowDiscount,
+      tax: isProductScope ? 0 : rowTax,
+      invoiceCount: isProductScope ? rowProdInvoiceCount : rowInvoiceCount,
+      paymentBreakdown,
+      productSales: rowProdSales,
+      productUnits: rowProdUnits,
+      productInvoiceCount: rowProdInvoiceCount,
+    };
+  });
+
+  const totalSales = updatedDataPoints.reduce((s, p) => s + p.totalSales, 0);
+  const totalInvoices = updatedDataPoints.reduce((s, p) => s + p.invoiceCount, 0);
+  const totalProductSales = updatedDataPoints.reduce((s, p) => s + p.productSales, 0);
+  const totalProductUnits = updatedDataPoints.reduce((s, p) => s + p.productUnits, 0);
+  const activeDays = updatedDataPoints.filter((p) => p.totalSales > 0);
+  const elapsedDays = updatedDataPoints.filter((p) => !p.isFuture).length || 1;
+  const averageSales = Math.round(totalSales / elapsedDays);
+
+  const peakPoint = [...updatedDataPoints].sort((a, b) => b.totalSales - a.totalSales)[0] || null;
+  const lowestActivePoint =
+    activeDays.length > 0 ? [...activeDays].sort((a, b) => a.totalSales - b.totalSales)[0] : null;
+
+  return {
+    ...baseSummary,
+    totalSales,
+    totalInvoices,
+    averageSales,
+    activeDaysCount: activeDays.length,
+    peakPoint: peakPoint && peakPoint.totalSales > 0 ? peakPoint : null,
+    lowestActivePoint,
+    dataPoints: updatedDataPoints,
+    totalProductSales,
+    totalProductUnits,
+  };
+}

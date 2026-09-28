@@ -180,8 +180,8 @@ describe("Invoice Customer Detail Editing & Client Reconciliation", () => {
       name: "Anjali Verma",
       phone: "9811122233",
       gender: "female",
-      total_visits: 3,
-      total_spent: 2500,
+      total_visits: 0,
+      total_spent: 0,
     };
 
     Storage.saveCustomers([typoCustomer, realCustomer]);

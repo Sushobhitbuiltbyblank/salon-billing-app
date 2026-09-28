@@ -58,34 +58,34 @@ describe("Incremental Sync & 5MB LocalStorage Quota Protection", () => {
     ],
   });
 
-  describe("1. LocalStorage 5MB Quota Limit Protection (500 Invoices Cap)", () => {
-    it("caps stored synced invoices to MAX_LOCAL_INVOICES (500)", () => {
-      // Create 600 mock invoices
+  describe("1. LocalStorage 5MB Quota Limit Protection (2000 Invoices Cap)", () => {
+    it("caps stored synced invoices to MAX_LOCAL_INVOICES (2000)", () => {
+      // Create 2100 mock invoices
       const manyInvoices: Invoice[] = [];
-      for (let i = 1; i <= 600; i++) {
+      for (let i = 1; i <= 2100; i++) {
         // Earlier index = newer invoice
-        manyInvoices.push(generateMockInvoice(i, i * 0.1));
+        manyInvoices.push(generateMockInvoice(i, i * 0.01));
       }
 
       Storage.saveInvoices(manyInvoices);
       const retrieved = Storage.getInvoices();
 
-      // Must be capped to 500
-      expect(retrieved.length).toBe(500);
-      // Ensure the newest invoices are kept (inv-1 to inv-500)
+      // Must be capped to 2000
+      expect(retrieved.length).toBe(2000);
+      // Ensure the newest invoices are kept (inv-1 to inv-2000)
       expect(retrieved[0].id).toBe("inv-1");
-      expect(retrieved[retrieved.length - 1].id).toBe("inv-500");
+      expect(retrieved[retrieved.length - 1].id).toBe("inv-2000");
     });
 
-    it("never evicts un-synced offline pending invoices even when exceeding 500", () => {
+    it("never evicts un-synced offline pending invoices even when exceeding 2000", () => {
       // 1. Put 5 invoices into pending sync queue
       const pendingIds = ["pending-1", "pending-2", "pending-3", "pending-4", "pending-5"];
       Storage.savePendingInvoiceSyncQueue(pendingIds);
 
-      // Create 550 synced invoices
+      // Create 2050 synced invoices
       const invoicesList: Invoice[] = [];
-      for (let i = 1; i <= 550; i++) {
-        invoicesList.push(generateMockInvoice(i, i * 0.1));
+      for (let i = 1; i <= 2050; i++) {
+        invoicesList.push(generateMockInvoice(i, i * 0.01));
       }
 
       // Add the 5 pending invoices, with old timestamps
@@ -105,14 +105,14 @@ describe("Incremental Sync & 5MB LocalStorage Quota Protection", () => {
         expect(retrieved.some((inv) => inv.id === pId)).toBe(true);
       });
 
-      // Total count should not exceed 500
-      expect(retrieved.length).toBeLessThanOrEqual(500);
+      // Total count should not exceed 2000
+      expect(retrieved.length).toBeLessThanOrEqual(2000);
     });
 
-    it("archiveInvoice keeps archive list capped to 500 items", () => {
-      // Archive 500 invoices
-      for (let i = 1; i <= 500; i++) {
-        Storage.archiveInvoice(generateMockInvoice(i, i * 0.05));
+    it("archiveInvoice keeps archive list capped to 2000 items", () => {
+      // Archive 2000 invoices
+      for (let i = 1; i <= 2000; i++) {
+        Storage.archiveInvoice(generateMockInvoice(i, i * 0.01));
       }
 
       // Archive an additional new invoice
@@ -120,7 +120,7 @@ describe("Incremental Sync & 5MB LocalStorage Quota Protection", () => {
       Storage.archiveInvoice(newInv);
 
       const retrievedArchive = Storage.getInvoicesArchive();
-      expect(retrievedArchive.length).toBeLessThanOrEqual(500);
+      expect(retrievedArchive.length).toBeLessThanOrEqual(2000);
       expect(retrievedArchive.some((i) => i.id === "inv-9999")).toBe(true);
     });
   });

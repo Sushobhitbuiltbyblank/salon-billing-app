@@ -28,10 +28,21 @@ import { Card } from "@/components/ui/card";
 import { SalesBreakdownView } from "./SalesBreakdownView";
 
 export function SalesOverview() {
-  const { invoices, expenses, settings, staff, catalog, setActiveTab } = useApp();
+  const { invoices, expenses, settings, staff, catalog, setActiveTab, loadInvoicesForDateRange } = useApp();
   const [timeframe, setTimeframe] = useState<"today" | "week" | "month" | "all">("today");
   const [breakdownScope, setBreakdownScope] = useState<SalesBreakdownScope>("all");
   const [topItemsTab, setTopItemsTab] = useState<"services" | "products">("services");
+
+  // Automatically guarantee complete month data when viewing monthly KPIs
+  React.useEffect(() => {
+    if (!loadInvoicesForDateRange) return;
+    const now = new Date();
+    if (timeframe === "month") {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0).toISOString();
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+      loadInvoicesForDateRange(startOfMonth, endOfMonth);
+    }
+  }, [timeframe, loadInvoicesForDateRange]);
 
   // Filter invoices and expenses by timeframe
   const { filteredInvoices, filteredExpenses } = useMemo(() => {

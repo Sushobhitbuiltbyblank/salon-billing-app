@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useApp } from "@/context/AppContext";
 import { Invoice } from "@/types";
 import { formatCurrency, formatDate, generateWhatsAppReceiptUrl } from "@/lib/utils";
@@ -169,6 +169,51 @@ export function AdminInvoiceManagement() {
     });
   }, [allAvailableInvoices, datePreset, customStartDate, customEndDate, selectedSaleType, selectedMode, selectedStatus, searchQuery]);
 
+  // INFINITE SCROLL / PAGINATION STATE (Smooth virtual rendering of 50 bills at a time)
+  const PAGE_SIZE = 50;
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Reset pagination when any filter changes
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [datePreset, customStartDate, customEndDate, selectedSaleType, selectedMode, selectedStatus, searchQuery]);
+
+  // Displayed slice of filtered invoices for fast rendering
+  const displayedInvoices = useMemo(() => {
+    return filteredInvoices.slice(0, visibleCount);
+  }, [filteredInvoices, visibleCount]);
+
+  const hasMoreLocal = visibleCount < filteredInvoices.length;
+  const hasMoreCloud = historicalTotalCount !== null && filteredInvoices.length < historicalTotalCount;
+  const canLoadMore = hasMoreLocal || hasMoreCloud;
+
+  const handleLoadMore = () => {
+    if (hasMoreLocal) {
+      setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredInvoices.length));
+    } else if (hasMoreCloud && !isLoadingHistorical) {
+      handleFetchHistorical(true);
+    }
+  };
+
+  // Auto-trigger load more when scrolling near bottom
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !isLoadingHistorical) {
+          if (visibleCount < filteredInvoices.length) {
+            setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredInvoices.length));
+          }
+        }
+      },
+      { rootMargin: "300px" }
+    );
+
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [visibleCount, filteredInvoices.length, isLoadingHistorical]);
+
   // ON-DEMAND CLOUD FETCH HANDLER
   const handleFetchHistorical = async (loadMore = false) => {
     setIsLoadingHistorical(true);
@@ -250,6 +295,7 @@ export function AdminInvoiceManagement() {
     setHistoricalInvoices([]);
     setHistoricalSearched(false);
     setHistoricalTotalCount(null);
+    setVisibleCount(PAGE_SIZE);
   };
 
   // HANDLE PERMANENT DELETE
@@ -595,7 +641,7 @@ export function AdminInvoiceManagement() {
                   </td>
                 </tr>
               ) : (
-                filteredInvoices.map((inv) => {
+                displayedInvoices.map((inv) => {
                   const isVoid = inv.status === "void";
 
                   return (
@@ -899,11 +945,35 @@ export function AdminInvoiceManagement() {
           </table>
         </div>
 
+        {/* INFINITE SCROLL SENTINEL & LOAD MORE BAR */}
+        {filteredInvoices.length > displayedInvoices.length && (
+          <div className="p-3 bg-zinc-900/40 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400">
+            <span className="font-mono text-[11px] text-zinc-400">
+              Showing {displayedInvoices.length} of {filteredInvoices.length} bills (Scroll down to auto-load)
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleLoadMore}
+              className="h-7 text-xs text-purple-400 hover:text-white hover:bg-purple-950/40 cursor-pointer"
+            >
+              Load Next 50 Bills ↓
+            </Button>
+          </div>
+        )}
+        <div ref={sentinelRef} className="h-4 w-full pointer-events-none" />
+
         {/* CLOUD HISTORICAL ARCHIVE FOOTER */}
         <div className="p-3 bg-zinc-900/60 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-zinc-400">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-block h-2 w-2 rounded-full bg-emerald-400"></span>
-            <span>Local Active Cache: up to 500 recent invoices (safeguards browser storage quota)</span>
+            <span>Local Active Cache: up to 2,000 recent invoices (safeguards browser storage quota)</span>
+            {displayedInvoices.length < filteredInvoices.length && (
+              <Badge variant="secondary" className="text-[10px] font-mono py-0 px-2 font-bold">
+                Showing {displayedInvoices.length} of {filteredInvoices.length}
+              </Badge>
+            )}
             {historicalInvoices.length > 0 && (
               <Badge variant="purple" className="text-[10px] font-mono py-0 px-2 font-bold">
                 +{historicalInvoices.length} loaded from Cloud Archive

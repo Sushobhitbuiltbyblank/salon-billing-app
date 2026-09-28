@@ -44,8 +44,8 @@ const KEYS = {
   INITIALIZED: `${STORAGE_PREFIX}full_catalog_v5`,
 };
 
-export const MAX_LOCAL_INVOICES = 500;
-export const MAX_LOCAL_DAYS = 60;
+export const MAX_LOCAL_INVOICES = 2000;
+export const MAX_LOCAL_DAYS = 90;
 
 // PRODUCTION USERS: 2 ADMINS (SUSHOBHIT & PRABHAT) + 1 RECEPTIONIST (AMIT) (@belezia.com)
 export const DEFAULT_USERS: AppUser[] = [

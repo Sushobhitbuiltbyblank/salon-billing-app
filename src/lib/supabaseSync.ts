@@ -14,6 +14,7 @@ import {
   Staff,
 } from "@/types";
 import { WheelInventoryItem } from "@/types/rewards";
+import { ServerDailySalesRow } from "./salesAnalytics";
 
 export const isValidUUID = (str?: string | null): boolean =>
   Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
@@ -182,7 +183,7 @@ export const SupabaseSync = {
         supabase.from("categories").select("*").order("name").limit(500),
         supabase.from("catalog_items").select("*").order("name").limit(2000),
         supabase.from("customers").select("*").order("created_at", { ascending: false }).limit(5000),
-        supabase.from("invoices").select("*, invoice_items(*)").order("created_at", { ascending: false }).limit(500),
+        supabase.from("invoices").select("*, invoice_items(*)").order("created_at", { ascending: false }).limit(2000),
         supabase.from("expenses").select("*").order("expense_date", { ascending: false }).limit(5000),
         supabase.from("app_users").select("*").order("role").limit(100),
         supabase.from("wheel_inventory").select("*").order("created_at").limit(100),
@@ -466,6 +467,38 @@ export const SupabaseSync = {
     } catch (err) {
       console.error("Supabase fetchHistoricalInvoices exception:", err);
       return { invoices: [], totalCount: 0 };
+    }
+  },
+
+  async fetchInvoicesByDateRange(startDate: string, endDate: string, limit = 2000): Promise<Invoice[]> {
+    const res = await this.fetchHistoricalInvoices({
+      startDate,
+      endDate,
+      limit,
+    });
+    return res.invoices;
+  },
+
+  /**
+   * Fetches lightweight, pre-aggregated daily sales summary directly from PostgreSQL RPC.
+   * Total network payload size is only ~2 KB (one row per day).
+   */
+  async fetchDailySalesSummary(startDate: string, endDate: string): Promise<ServerDailySalesRow[] | null> {
+    if (!isSupabaseConfigured() || !supabase) return null;
+    try {
+      const { data, error } = await supabase.rpc("get_daily_sales_summary", {
+        start_date: startDate,
+        end_date: endDate,
+      });
+
+      if (error || !data) {
+        // Fallback gracefully if RPC is not yet created in PostgreSQL
+        return null;
+      }
+
+      return data as ServerDailySalesRow[];
+    } catch {
+      return null;
     }
   },
 

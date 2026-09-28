@@ -332,25 +332,28 @@ export function unifyCustomerList(
         }
       });
 
-      const hasAnyInvoices = Array.isArray(invoices) && invoices.length > 0;
+      // Server-side authoritative truth:
+      // If customer already has calculated visits/spent from the database (e.g. historical visits before current cache),
+      // we take the MAXIMUM of the server count and local invoice count.
+      // This ensures customers NEVER show 0 visits on cards even when their older invoices are not downloaded in memory!
+      const serverVisits = Number(cust.total_visits) || 0;
+      const serverSpent = Number(cust.total_spent) || 0;
+      const finalVisits = Math.max(serverVisits, invoiceVisits);
+      const finalSpent = Math.max(serverSpent, invoiceSpent);
+
+      // Latest visit: use the most recent timestamp between server last_visit and matching invoices
+      let finalLastVisit = cust.last_visit;
+      if (latestVisit) {
+        if (!finalLastVisit || new Date(latestVisit) > new Date(finalLastVisit)) {
+          finalLastVisit = latestVisit;
+        }
+      }
 
       return {
         ...cust,
-        total_visits: hasAnyInvoices
-          ? invoiceVisits
-          : invoiceVisits > 0
-          ? invoiceVisits
-          : Number(cust.total_visits) >= 0
-          ? Number(cust.total_visits)
-          : 0,
-        total_spent: hasAnyInvoices
-          ? invoiceSpent
-          : invoiceSpent > 0
-          ? invoiceSpent
-          : Number(cust.total_spent) >= 0
-          ? Number(cust.total_spent)
-          : 0,
-        last_visit: hasAnyInvoices ? latestVisit : (latestVisit || cust.last_visit),
+        total_visits: finalVisits,
+        total_spent: finalSpent,
+        last_visit: finalLastVisit,
       };
     });
 }

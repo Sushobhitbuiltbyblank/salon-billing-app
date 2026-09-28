@@ -3,6 +3,8 @@ import {
   getWeekDayWiseSales,
   getMonthDayWiseSales,
   getYearMonthWiseSales,
+  applyServerSalesSummary,
+  ServerDailySalesRow,
 } from "@/lib/salesAnalytics";
 import { Invoice } from "@/types";
 
@@ -291,4 +293,68 @@ describe("salesAnalytics tests", () => {
     expect(yearProd.totalSales).toBe(3170);
     expect(yearProd.totalProductUnits).toBe(3);
   });
+
+  it("should overlay server-side aggregated summary correctly", () => {
+    const emptySummary = getMonthDayWiseSales([], refDate);
+    expect(emptySummary.totalSales).toBe(0);
+
+    const mockServerRows: ServerDailySalesRow[] = [
+      {
+        sale_date: "2026-09-02",
+        total_sales: 17690,
+        subtotal: 18000,
+        discount_amount: 310,
+        tax_amount: 0,
+        invoice_count: 16,
+        cash_sales: 7500,
+        upi_sales: 8000,
+        card_sales: 2190,
+        split_sales: 0,
+        product_sales: 4500,
+        product_units: 3,
+        product_invoice_count: 2,
+      },
+      {
+        sale_date: "2026-09-05",
+        total_sales: 12000,
+        subtotal: 12000,
+        discount_amount: 0,
+        tax_amount: 0,
+        invoice_count: 8,
+        cash_sales: 2000,
+        upi_sales: 10000,
+        card_sales: 0,
+        split_sales: 0,
+        product_sales: 0,
+        product_units: 0,
+        product_invoice_count: 0,
+      },
+    ];
+
+    const overlayed = applyServerSalesSummary(emptySummary, mockServerRows, "all");
+
+    // Total sales = 17690 + 12000 = 29690
+    expect(overlayed.totalSales).toBe(29690);
+    expect(overlayed.totalInvoices).toBe(24);
+    expect(overlayed.activeDaysCount).toBe(2);
+
+    // Day 2 (index 1)
+    const day2 = overlayed.dataPoints[1];
+    expect(day2.key).toBe("2026-09-02");
+    expect(day2.totalSales).toBe(17690);
+    expect(day2.invoiceCount).toBe(16);
+    expect(day2.paymentBreakdown.upi).toBe(8000);
+    expect(day2.paymentBreakdown.cash).toBe(7500);
+
+    // Peak day should be Day 2
+    expect(overlayed.peakPoint?.key).toBe("2026-09-02");
+    expect(overlayed.peakPoint?.totalSales).toBe(17690);
+
+    // In product scope
+    const overlayedProduct = applyServerSalesSummary(emptySummary, mockServerRows, "product");
+    expect(overlayedProduct.totalSales).toBe(4500);
+    expect(overlayedProduct.totalProductUnits).toBe(3);
+    expect(overlayedProduct.dataPoints[1].totalSales).toBe(4500);
+  });
 });
+

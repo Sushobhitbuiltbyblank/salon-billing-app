@@ -13,6 +13,8 @@ import {
   PeriodicSalesSummary,
   SalesDataPoint,
   SalesBreakdownScope,
+  applyServerSalesSummary,
+  ServerDailySalesRow,
 } from "@/lib/salesAnalytics";
 import {
   Calendar,
@@ -34,6 +36,7 @@ import {
   CheckCircle2,
   ShoppingBag,
   Package,
+  Loader2,
 } from "lucide-react";
 
 export type SalesPeriodTab = "week" | "month" | "year";
@@ -51,10 +54,71 @@ export function SalesBreakdownView({
   activeScope: controlledScope,
   onScopeChange,
 }: SalesBreakdownViewProps) {
-  const { invoices, settings } = useApp();
+  const { invoices, settings, loadInvoicesForDateRange, fetchDailySalesSummary } = useApp();
   const [selectedPeriod, setSelectedPeriod] = useState<SalesPeriodTab>(initialTab);
   const [internalScope, setInternalScope] = useState<SalesBreakdownScope>(initialScope);
   const currentScope = controlledScope ?? internalScope;
+  const [isLoadingPeriod, setIsLoadingPeriod] = useState<boolean>(false);
+  const [serverSummaryRows, setServerSummaryRows] = useState<ServerDailySalesRow[] | null>(null);
+
+  // AUTOMATIC DATE-BOUNDED AGGREGATION:
+  // 1. Attempts ~2 KB server-side SQL aggregation RPC first (instantaneous & 0 egress overhead)
+  // 2. Automatically falls back to date-bounded invoice loading if RPC is unavailable or offline
+  React.useEffect(() => {
+    const now = new Date();
+    let startDate: string | undefined;
+    let endDate: string | undefined;
+
+    if (selectedPeriod === "week") {
+      const currentDayOfWeek = (now.getDay() + 6) % 7;
+      const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - currentDayOfWeek, 0, 0, 0);
+      const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6, 23, 59, 59, 999);
+      startDate = monday.toISOString();
+      endDate = sunday.toISOString();
+    } else if (selectedPeriod === "month") {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      startDate = monthStart.toISOString();
+      endDate = monthEnd.toISOString();
+    } else if (selectedPeriod === "year") {
+      const yearStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
+      const yearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      startDate = yearStart.toISOString();
+      endDate = yearEnd.toISOString();
+    }
+
+    if (!startDate || !endDate) return;
+
+    let isMounted = true;
+    setIsLoadingPeriod(true);
+
+    const runAggregation = async () => {
+      try {
+        if (fetchDailySalesSummary) {
+          const serverRows = await fetchDailySalesSummary(startDate, endDate);
+          if (isMounted && serverRows && serverRows.length > 0) {
+            setServerSummaryRows(serverRows);
+            return;
+          }
+        }
+
+        // Fallback: load raw invoices for that date range
+        if (loadInvoicesForDateRange) {
+          await loadInvoicesForDateRange(startDate, endDate);
+        }
+      } catch (err) {
+        console.warn("SalesBreakdown aggregation sync error:", err);
+      } finally {
+        if (isMounted) setIsLoadingPeriod(false);
+      }
+    };
+
+    runAggregation();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedPeriod, loadInvoicesForDateRange, fetchDailySalesSummary]);
 
   const handleScopeChange = (scope: SalesBreakdownScope) => {
     setInternalScope(scope);
@@ -66,16 +130,22 @@ export function SalesBreakdownView({
   const [hoveredPointKey, setHoveredPointKey] = useState<string | null>(null);
   const [selectedPointKey, setSelectedPointKey] = useState<string | null>(null);
 
-  // Compute the periodic summary data
+  // Compute the periodic summary data (overlaying server-side aggregation if available)
   const summary: PeriodicSalesSummary = useMemo(() => {
+    let base: PeriodicSalesSummary;
     if (selectedPeriod === "week") {
-      return getWeekDayWiseSales(invoices, undefined, currentScope);
+      base = getWeekDayWiseSales(invoices, undefined, currentScope);
+    } else if (selectedPeriod === "month") {
+      base = getMonthDayWiseSales(invoices, undefined, currentScope);
+    } else {
+      base = getYearMonthWiseSales(invoices, undefined, currentScope);
     }
-    if (selectedPeriod === "month") {
-      return getMonthDayWiseSales(invoices, undefined, currentScope);
+
+    if (serverSummaryRows && serverSummaryRows.length > 0 && selectedPeriod !== "year") {
+      return applyServerSalesSummary(base, serverSummaryRows, currentScope);
     }
-    return getYearMonthWiseSales(invoices, undefined, currentScope);
-  }, [invoices, selectedPeriod, currentScope]);
+    return base;
+  }, [invoices, selectedPeriod, currentScope, serverSummaryRows]);
 
   // Determine peak sales value for scaling bars (minimum 1 to avoid division by 0)
   const maxSales = useMemo(() => {
@@ -235,15 +305,18 @@ export function SalesBreakdownView({
               </h3>
               <Badge
                 variant={isProduct ? "secondary" : "purple"}
-                className={`text-[10px] uppercase font-mono tracking-wider font-bold ${
+                className={`text-[10px] uppercase font-mono tracking-wider font-bold inline-flex items-center gap-1 ${
                   isProduct ? "bg-pink-950/80 text-pink-300 border-pink-700/60" : ""
                 }`}
               >
-                {selectedPeriod === "week"
-                  ? "This Week (Day-wise)"
-                  : selectedPeriod === "month"
-                  ? "This Month (Day-wise)"
-                  : "This Year (Month-wise)"}
+                <span>
+                  {selectedPeriod === "week"
+                    ? "This Week (Day-wise)"
+                    : selectedPeriod === "month"
+                    ? "This Month (Day-wise)"
+                    : "This Year (Month-wise)"}
+                </span>
+                {isLoadingPeriod && <Loader2 className="h-2.5 w-2.5 animate-spin text-purple-300" />}
               </Badge>
             </div>
             <p className="text-xs text-zinc-400 mt-0.5">
