@@ -398,38 +398,10 @@ export function initStorage() {
           }
         } catch {}
       }
-      // Explicitly purge BZ-20260901-4311 requested by admin
-      Storage.deleteInvoice("BZ-20260901-4311");
-      Storage.deleteInvoice("463fceae-a7b5-4d57-98bf-6bbb47933198");
-
-      // Explicitly purge deleted customer 9250755655 requested by admin
-      Storage.deleteCustomer("", "9250755655");
-
-      // Reconcile 8802809679 customer spend and visits
-      const custs = Storage.getCustomers();
-      const sushobhit = custs.find((c) => normalizePhoneNumber(c.phone) === "8802809679");
-      if (sushobhit) {
-        const remaining = Storage.getInvoices().filter(
-          (inv) => inv.status !== "void" && normalizePhoneNumber(inv.customer_phone) === "8802809679"
-        );
-        sushobhit.total_visits = remaining.length;
-        sushobhit.total_spent = remaining.reduce((sum, inv) => sum + (Number(inv.grand_total) || 0), 0);
-        sushobhit.last_visit = remaining[0]?.created_at || undefined;
-      }
-
-      // Ensure BZ-20260906-5532 has the correct phone 8118298469
+      // 1. Generic self-healing invoice reconciliation: ensure single-stylist assignments on items and packages remain strictly in sync with primary_staff_id
       const localInvoices = Storage.getInvoices();
       let invChanged = false;
       localInvoices.forEach((inv) => {
-        if (inv.invoice_number === "BZ-20260906-5532" || inv.id === "e5ac68a4-40b4-4c1b-8c8b-fbd82bbf99d2") {
-          if (normalizePhoneNumber(inv.customer_phone) !== "8118298469") {
-            inv.customer_phone = "8118298469";
-            inv.customer_name = "Swati ji";
-            inv.customer_id = "cc9b6ac6-4e7e-479e-af91-bb3d7a2fc677";
-            invChanged = true;
-          }
-        }
-        // Generic self-healing reconciliation: ensure single-stylist assignments on items and packages remain strictly in sync with primary_staff_id
         (inv.items || []).forEach((it) => {
           if (
             it.primary_staff_id &&
@@ -459,31 +431,46 @@ export function initStorage() {
         Storage.saveInvoices(localInvoices);
       }
 
-      // Explicitly purge typo duplicate customers and ensure correct Swati ji (8118298469)
-      const cleanCusts = custs.filter(
-        (c) =>
-          c.id !== "00082bcc-7e03-428b-9bc6-ca7eccfbd112" &&
-          c.id !== "5d9a9338-b39c-478c-98c5-7dc2d0a610a6" &&
-          c.id !== "2d99bb9a-15f7-4ff2-aaa3-4920df80d820" &&
-          normalizePhoneNumber(c.phone) !== "8178298469" &&
-          normalizePhoneNumber(c.phone) !== "9250755665" &&
-          normalizePhoneNumber(c.phone) !== "9250755655" &&
-          normalizePhoneNumber(c.phone) !== "6092153532"
-      );
+      // 2. Generic customer metrics and deduplication reconciliation across all customers
+      const allCustomers = Storage.getCustomers();
+      if (allCustomers && allCustomers.length > 0) {
+        const invoiceStatsByPhone = new Map<string, { visits: number; spent: number; lastVisit?: string }>();
+        localInvoices
+          .filter((inv) => (inv.status as string) !== "void" && (inv.status as string) !== "cancelled")
+          .forEach((inv) => {
+            const phone = normalizePhoneNumber(inv.customer_phone);
+            if (!phone || phone.length < 7) return;
+            const existingStat = invoiceStatsByPhone.get(phone) || { visits: 0, spent: 0 };
+            existingStat.visits += 1;
+            existingStat.spent += Number(inv.grand_total) || 0;
+            if (inv.created_at && (!existingStat.lastVisit || new Date(inv.created_at) > new Date(existingStat.lastVisit))) {
+              existingStat.lastVisit = inv.created_at;
+            }
+            invoiceStatsByPhone.set(phone, existingStat);
+          });
 
-      if (!cleanCusts.some((c) => normalizePhoneNumber(c.phone) === "8118298469")) {
-        cleanCusts.unshift({
-          id: "cc9b6ac6-4e7e-479e-af91-bb3d7a2fc677",
-          name: "Swati ji",
-          phone: "8118298469",
-          gender: "female",
-          total_visits: 1,
-          total_spent: 400,
-          last_visit: "2026-09-06T06:44:37.198Z",
-          created_at: "2026-09-06T06:44:37.198Z",
+        let custChanged = false;
+        allCustomers.forEach((c) => {
+          const phone = normalizePhoneNumber(c.phone);
+          if (!phone || phone.length < 7) return;
+          const stats = invoiceStatsByPhone.get(phone);
+          if (stats) {
+            if (c.total_visits !== stats.visits || c.total_spent !== stats.spent) {
+              c.total_visits = stats.visits;
+              c.total_spent = stats.spent;
+              if (stats.lastVisit && (!c.last_visit || new Date(stats.lastVisit) > new Date(c.last_visit))) {
+                c.last_visit = stats.lastVisit;
+              }
+              custChanged = true;
+            }
+          }
         });
+
+        const dedupedCustomers = deduplicateCustomerArray(allCustomers);
+        if (custChanged || dedupedCustomers.length !== allCustomers.length) {
+          Storage.saveCustomers(dedupedCustomers);
+        }
       }
-      Storage.saveCustomers(cleanCusts);
     }
   } catch (err) {
     console.error("initStorage error:", err);
