@@ -184,6 +184,19 @@ export const DEFAULT_STAFF: Staff[] = [
     color: "#f59e0b",
     notes: "Beautician Stylist",
   },
+  {
+    id: "016b5ed4-ab1f-4ae5-9ffb-750a9cdcfcda",
+    name: "Farhan",
+    role: "Stylist",
+    phone: "",
+    commission_rate: 15,
+    commission_type: "percent",
+    product_commission_rate: 10,
+    product_commission_type: "percent",
+    status: "active",
+    color: "#0284c7",
+    notes: "Stylist",
+  },
 ];
 
 // 49 REAL SERVICES + 36 REAL RETAIL PRODUCTS (85 TOTAL CATALOG ITEMS)
@@ -415,6 +428,21 @@ export function initStorage() {
             inv.customer_id = "cc9b6ac6-4e7e-479e-af91-bb3d7a2fc677";
             invChanged = true;
           }
+        }
+        // Ensure BZ-20261001-19574113 has Farhan correctly assigned to package sub-services
+        if (inv.invoice_number === "BZ-20261001-19574113" || inv.id === "b3c8834a-cf95-49e7-8cd7-b955971a75b7") {
+          const farhanId = "016b5ed4-ab1f-4ae5-9ffb-750a9cdcfcda";
+          (inv.items || []).forEach((it) => {
+            it.primary_staff_id = farhanId;
+            it.staff_splits = [{ staff_id: farhanId, amount: it.total_price || 200, ratio: 100 }];
+            if (it.package_services) {
+              it.package_services.forEach((s) => {
+                s.primary_staff_id = farhanId;
+                s.staff_splits = [{ staff_id: farhanId, amount: s.price, ratio: 100 }];
+              });
+            }
+          });
+          invChanged = true;
         }
       });
       if (invChanged) {

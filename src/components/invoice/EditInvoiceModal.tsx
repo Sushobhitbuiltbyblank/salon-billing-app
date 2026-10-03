@@ -252,8 +252,17 @@ export function EditInvoiceModal() {
     setItems((prev) =>
       prev.map((item) => {
         if (item.id === itemId) {
+          const newStaffId = staffId || undefined;
           const services = (item.package_services || []).map((s) =>
-            s.service_id === serviceId ? { ...s, primary_staff_id: staffId || undefined } : s
+            s.service_id === serviceId
+              ? {
+                  ...s,
+                  primary_staff_id: newStaffId,
+                  staff_splits: newStaffId
+                    ? [{ staff_id: newStaffId, amount: Number(s.price) || 0, ratio: 100 }]
+                    : undefined,
+                }
+              : s
           );
           const firstStaff = services.find((s) => s.primary_staff_id)?.primary_staff_id;
           return {
@@ -271,14 +280,21 @@ export function EditInvoiceModal() {
     setItems((prev) =>
       prev.map((item) => {
         if (item.id === itemId) {
+          const newStaffId = staffId || undefined;
           const services = (item.package_services || []).map((s) => ({
             ...s,
-            primary_staff_id: staffId || undefined,
+            primary_staff_id: newStaffId,
+            staff_splits: newStaffId
+              ? [{ staff_id: newStaffId, amount: Number(s.price) || 0, ratio: 100 }]
+              : undefined,
           }));
           return {
             ...item,
             package_services: services,
-            primary_staff_id: staffId || undefined,
+            primary_staff_id: newStaffId,
+            staff_splits: newStaffId
+              ? [{ staff_id: newStaffId, amount: item.total_price || item.unit_price, ratio: 100 }]
+              : undefined,
           };
         }
         return item;
@@ -300,7 +316,30 @@ export function EditInvoiceModal() {
 
   const handleItemStaffChange = (itemId: string, staffId: string) => {
     setItems((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, primary_staff_id: staffId || undefined } : item))
+      prev.map((item) => {
+        if (item.id === itemId) {
+          const newStaffId = staffId || undefined;
+          let updatedPackageServices = item.package_services;
+          if (item.item_type === "package" && item.package_services && item.package_services.length > 0) {
+            updatedPackageServices = item.package_services.map((s) => ({
+              ...s,
+              primary_staff_id: newStaffId,
+              staff_splits: newStaffId
+                ? [{ staff_id: newStaffId, amount: Number(s.price) || 0, ratio: 100 }]
+                : undefined,
+            }));
+          }
+          return {
+            ...item,
+            primary_staff_id: newStaffId,
+            staff_splits: newStaffId
+              ? [{ staff_id: newStaffId, amount: item.total_price || item.unit_price, ratio: 100 }]
+              : undefined,
+            package_services: updatedPackageServices,
+          };
+        }
+        return item;
+      })
     );
   };
 

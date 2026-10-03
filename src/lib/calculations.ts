@@ -241,11 +241,30 @@ export function calculateItemStaffCommissions(
   const realizedItemTotal = itemNetTotal * invoiceRealizationFactor;
   const splits: IndividualStaffCommission[] = [];
 
-  if (item.staff_splits && item.staff_splits.length > 0) {
-    // Process N-Staff Split Assignments
-    const totalSplitAmount = item.staff_splits.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+  let effectiveSplits = item.staff_splits;
+  // If staff_splits is a single-stylist assignment and primary_staff_id is set to a different valid staff member,
+  // harmonize staff_splits to match primary_staff_id so a stale split doesn't falsely attribute credit.
+  if (
+    effectiveSplits &&
+    effectiveSplits.length === 1 &&
+    item.primary_staff_id &&
+    effectiveSplits[0].staff_id !== item.primary_staff_id
+  ) {
+    const matchedPrimary = staffList.find((s) => s.id === item.primary_staff_id);
+    effectiveSplits = [
+      {
+        ...effectiveSplits[0],
+        staff_id: item.primary_staff_id,
+        staff_name: matchedPrimary?.name || effectiveSplits[0].staff_name,
+      },
+    ];
+  }
 
-    item.staff_splits.forEach((split) => {
+  if (effectiveSplits && effectiveSplits.length > 0) {
+    // Process N-Staff Split Assignments
+    const totalSplitAmount = effectiveSplits.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+
+    effectiveSplits.forEach((split) => {
       const staffMember = staffList.find((s) => s.id === split.staff_id);
       const rawAmount = Number(split.amount) || 0;
       const ratio =
@@ -420,13 +439,32 @@ export function calculateStaffPerformance(
 
             const svcNetSales = itemNetTotal * svcWeight;
 
-            if (pkgSvc.staff_splits && pkgSvc.staff_splits.length > 0) {
-              const totalSplitAmount = pkgSvc.staff_splits.reduce(
+            let effectivePkgSplits = pkgSvc.staff_splits;
+            // Defensive: If staff_splits is a single-stylist assignment and primary_staff_id is set to a different valid staff member,
+            // harmonize staff_splits to match primary_staff_id so a stale split doesn't falsely attribute credit.
+            if (
+              effectivePkgSplits &&
+              effectivePkgSplits.length === 1 &&
+              pkgSvc.primary_staff_id &&
+              effectivePkgSplits[0].staff_id !== pkgSvc.primary_staff_id
+            ) {
+              const matchedPrimary = staffList.find((s) => s.id === pkgSvc.primary_staff_id);
+              effectivePkgSplits = [
+                {
+                  ...effectivePkgSplits[0],
+                  staff_id: pkgSvc.primary_staff_id,
+                  staff_name: matchedPrimary?.name || effectivePkgSplits[0].staff_name,
+                },
+              ];
+            }
+
+            if (effectivePkgSplits && effectivePkgSplits.length > 0) {
+              const totalSplitAmount = effectivePkgSplits.reduce(
                 (s, x) => s + (Number(x.amount) || 0),
                 0
               );
 
-              pkgSvc.staff_splits.forEach((split) => {
+              effectivePkgSplits.forEach((split) => {
                 if (summaryMap.has(split.staff_id)) {
                   const staffMember = staffList.find((s) => s.id === split.staff_id);
                   const entry = summaryMap.get(split.staff_id)!;
