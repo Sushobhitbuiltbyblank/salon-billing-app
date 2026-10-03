@@ -141,6 +141,8 @@ describe("Customer Deletion & Tombstone Resilience Tests", () => {
       name: "Audit Client",
       phone: "9123456780",
       gender: "male",
+      total_visits: 1,
+      total_spent: 800,
     };
     Storage.saveCustomer(customer);
 
@@ -192,6 +194,8 @@ describe("Customer Deletion & Tombstone Resilience Tests", () => {
       name: "New Profile",
       phone: "9250755655",
       gender: "female",
+      total_visits: 0,
+      total_spent: 0,
     });
 
     expect(Storage.isCustomerDeleted(undefined, "9250755655")).toBe(false);

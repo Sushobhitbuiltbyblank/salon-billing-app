@@ -47,6 +47,20 @@ const KEYS = {
 export const MAX_LOCAL_INVOICES = 2000;
 export const MAX_LOCAL_DAYS = 90;
 
+export function isQuotaExceededError(err: unknown): boolean {
+  return (
+    Boolean(err) &&
+    typeof err === "object" &&
+    (((err as any) instanceof DOMException &&
+      ((err as any).code === 22 ||
+        (err as any).code === 1014 ||
+        (err as any).name === "QuotaExceededError" ||
+        (err as any).name === "NS_ERROR_DOM_QUOTA_REACHED")) ||
+      (err as any).name === "QuotaExceededError" ||
+      String((err as any).message || "").toLowerCase().includes("quota"))
+  );
+}
+
 // PRODUCTION USERS: 2 ADMINS (SUSHOBHIT & PRABHAT) + 1 RECEPTIONIST (AMIT) (@belezia.com)
 export const DEFAULT_USERS: AppUser[] = [
   {
@@ -856,7 +870,21 @@ export const Storage = {
         return true;
       });
       const deduped = deduplicateCustomerArray(active);
-      localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(deduped));
+      try {
+        localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(deduped));
+      } catch (err) {
+        if (isQuotaExceededError(err)) {
+          console.warn("LocalStorage quota exceeded in saveCustomers. Evicting secondary archive to free space...");
+          try {
+            localStorage.removeItem(KEYS.INVOICES_ARCHIVE);
+            localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(deduped));
+          } catch (retryErr) {
+            console.error("Critical: Storage quota exceeded even after clearing archive:", retryErr);
+          }
+        } else {
+          throw err;
+        }
+      }
     } catch (e) {
       console.error(e);
     }
@@ -1042,13 +1070,45 @@ export const Storage = {
       // Sort synced invoices descending by created_at
       syncedInvoices.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
-      // Cap total active invoices strictly to MAX_LOCAL_INVOICES (500)
+      // Cap total active invoices strictly to MAX_LOCAL_INVOICES (2000)
       // Pending invoices take top priority so they are never evicted before sync
-      const allowedSynced = Math.max(0, MAX_LOCAL_INVOICES - pendingInvoices.length);
-      const recentSynced = syncedInvoices.slice(0, allowedSynced);
+      let allowedSynced = Math.max(0, MAX_LOCAL_INVOICES - pendingInvoices.length);
+      let recentSynced = syncedInvoices.slice(0, allowedSynced);
+      let windowed = [...pendingInvoices, ...recentSynced];
 
-      const windowed = [...pendingInvoices, ...recentSynced];
-      localStorage.setItem(KEYS.INVOICES, JSON.stringify(windowed));
+      try {
+        localStorage.setItem(KEYS.INVOICES, JSON.stringify(windowed));
+      } catch (err) {
+        if (isQuotaExceededError(err)) {
+          console.warn("LocalStorage quota exceeded in saveInvoices. Shedding archive and older synced invoices...");
+          try {
+            localStorage.removeItem(KEYS.INVOICES_ARCHIVE);
+          } catch {
+            // Ignore
+          }
+          // Progressively reduce synced invoices limit until it fits, while keeping 100% of pending invoices
+          const fallbackLimits = [1000, 500, 250, 100, 50];
+          let saved = false;
+          for (const limit of fallbackLimits) {
+            allowedSynced = Math.max(0, limit - pendingInvoices.length);
+            recentSynced = syncedInvoices.slice(0, allowedSynced);
+            windowed = [...pendingInvoices, ...recentSynced];
+            try {
+              localStorage.setItem(KEYS.INVOICES, JSON.stringify(windowed));
+              saved = true;
+              break;
+            } catch (retryErr) {
+              if (!isQuotaExceededError(retryErr)) throw retryErr;
+            }
+          }
+          if (!saved) {
+            // Emergency fallback: save ONLY pending invoices
+            localStorage.setItem(KEYS.INVOICES, JSON.stringify(pendingInvoices));
+          }
+        } else {
+          throw err;
+        }
+      }
     } catch (e) {
       console.error("Storage saveInvoices error:", e);
     }
@@ -1208,7 +1268,25 @@ export const Storage = {
       } else {
         archive.unshift(invoice);
       }
-      localStorage.setItem(KEYS.INVOICES_ARCHIVE, JSON.stringify(archive.slice(0, MAX_LOCAL_INVOICES)));
+      const trimmed = archive.slice(0, MAX_LOCAL_INVOICES);
+      try {
+        localStorage.setItem(KEYS.INVOICES_ARCHIVE, JSON.stringify(trimmed));
+      } catch (err) {
+        if (isQuotaExceededError(err)) {
+          console.warn("LocalStorage quota exceeded in archiveInvoice. Capping archive window...");
+          const fallbackLimits = [500, 200, 50];
+          for (const limit of fallbackLimits) {
+            try {
+              localStorage.setItem(KEYS.INVOICES_ARCHIVE, JSON.stringify(trimmed.slice(0, limit)));
+              break;
+            } catch (retryErr) {
+              if (!isQuotaExceededError(retryErr)) throw retryErr;
+            }
+          }
+        } else {
+          throw err;
+        }
+      }
     } catch (e) {
       console.warn("Failed to update local invoice archive:", e);
     }

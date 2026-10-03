@@ -323,7 +323,7 @@ export function calculateItemStaffCommissions(
       if (type === "fixed") {
         primaryCommission =
           itemNetTotal > 0
-            ? (rate * item.quantity * primaryRatio * (primarySalesVolume / itemNetTotal)) / 100
+            ? rate * item.quantity * (primarySalesVolume / itemNetTotal)
             : (item.unit_price > 0 ? 0 : (rate * item.quantity * primaryRatio) / 100);
       } else {
         primaryCommission = (primarySalesVolume * rate) / 100;
@@ -351,7 +351,7 @@ export function calculateItemStaffCommissions(
       if (type === "fixed") {
         secondaryCommission =
           itemNetTotal > 0
-            ? (rate * item.quantity * secondaryRatio * (secondarySalesVolume / itemNetTotal)) / 100
+            ? rate * item.quantity * (secondarySalesVolume / itemNetTotal)
             : (item.unit_price > 0 ? 0 : (rate * item.quantity * secondaryRatio) / 100);
       } else {
         secondaryCommission = (secondarySalesVolume * rate) / 100;

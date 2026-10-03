@@ -39,6 +39,8 @@ describe("Incremental Sync & 5MB LocalStorage Quota Protection", () => {
     customer_phone: `987654${String(index).padStart(4, "0")}`,
     subtotal: 1000,
     discount_amount: 0,
+    discount_type: "flat",
+    discount_value: 0,
     tax_amount: 0,
     tax_rate: 0,
     grand_total: 1000,

@@ -408,9 +408,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           (c) => !(c.id && deletedSet.has(c.id)) && !(c.phone && deletedSet.has(normalizePhoneNumber(c.phone)))
         );
         const mergedCusts = deduplicateCustomerArray([...validDelta, ...localCustomers]);
-        setCustomers((prev) =>
-          JSON.stringify(prev) !== JSON.stringify(mergedCusts) ? mergedCusts : prev
-        );
+        setCustomers((prev) => {
+          if (
+            prev.length === mergedCusts.length &&
+            prev.every(
+              (c, i) =>
+                c.id === mergedCusts[i]?.id &&
+                c.updated_at === mergedCusts[i]?.updated_at &&
+                c.total_visits === mergedCusts[i]?.total_visits &&
+                c.total_spent === mergedCusts[i]?.total_spent
+            )
+          ) {
+            return prev;
+          }
+          return mergedCusts;
+        });
         Storage.saveCustomers(mergedCusts);
       }
 
@@ -423,13 +435,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const mergedExpenses = Array.from(expMap.values()).sort(
           (a, b) => new Date(b.expense_date || b.created_at || "").getTime() - new Date(a.expense_date || a.created_at || "").getTime()
         );
-        setExpenses((prev) => (JSON.stringify(prev) !== JSON.stringify(mergedExpenses) ? mergedExpenses : prev));
+        setExpenses((prev) => {
+          if (
+            prev.length === mergedExpenses.length &&
+            prev.every(
+              (e, i) =>
+                e.id === mergedExpenses[i]?.id &&
+                e.amount === mergedExpenses[i]?.amount &&
+                e.expense_date === mergedExpenses[i]?.expense_date
+            )
+          ) {
+            return prev;
+          }
+          return mergedExpenses;
+        });
         Storage.saveExpenses(mergedExpenses);
       }
 
       // Wheel inventory
       if (delta.wheelInventory && delta.wheelInventory.length > 0) {
-        setWheelInventory((prev) => (JSON.stringify(prev) !== JSON.stringify(delta.wheelInventory) ? delta.wheelInventory : prev));
+        const incomingWheel = delta.wheelInventory;
+        setWheelInventory((prev) => {
+          if (
+            prev.length === incomingWheel.length &&
+            prev.every(
+              (w, i) =>
+                w.id === incomingWheel[i]?.id &&
+                w.quantity === incomingWheel[i]?.quantity &&
+                w.is_active === incomingWheel[i]?.is_active
+            )
+          ) {
+            return prev;
+          }
+          return incomingWheel;
+        });
         Storage.saveWheelInventory(delta.wheelInventory);
       }
     } catch (err) {

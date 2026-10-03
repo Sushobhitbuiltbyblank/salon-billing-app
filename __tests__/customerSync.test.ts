@@ -753,7 +753,7 @@ describe("Database & Customer Directory Count Parity Test", () => {
       gender: "male",
       total_visits: 0,
       total_spent: 0,
-      last_visit: null,
+      last_visit: undefined,
       created_at: new Date().toISOString(), // Created right now
     };
 

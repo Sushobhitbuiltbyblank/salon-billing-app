@@ -10,6 +10,7 @@ import { Invoice, InvoiceItem, SalonSettings } from "@/types";
 
 describe("Product and Service Sales Separation", () => {
   const mockSettings: SalonSettings = {
+    id: "00000000-0000-0000-0000-000000000001",
     salon_name: "Belezia Salon Laxmi Nagar",
     tagline: "Luxury Beauty & Wellness",
     address: "Laxmi Nagar, Delhi",
@@ -17,6 +18,9 @@ describe("Product and Service Sales Separation", () => {
     email: "info@belezia.com",
     gst_number: "07AAAAA0000A1Z5",
     currency_symbol: "₹",
+    currency_code: "INR",
+    upi_id: "belezia@okaxis",
+    thermal_width: "80mm",
     tax_enabled: true,
     tax_rate: 18,
     invoice_prefix: "BEL",

@@ -9,13 +9,17 @@ import { Invoice, InvoiceItem, Staff, SalonSettings } from "@/types";
 
 describe("Optional Stylist Billing & Quick Invoice Generation", () => {
   const mockSettings: SalonSettings = {
+    id: "00000000-0000-0000-0000-000000000001",
     salon_name: "Belezia Salon",
     tagline: "Luxury Salon Experience",
     address: "Laxmi Nagar, Delhi",
     phone: "9876543210",
     email: "info@belezia.com",
-    gstin: "07AAAAA0000A1Z5",
+    gst_number: "07AAAAA0000A1Z5",
     currency_symbol: "₹",
+    currency_code: "INR",
+    upi_id: "belezia@okaxis",
+    thermal_width: "80mm",
     tax_enabled: true,
     tax_rate: 18,
     invoice_prefix: "BEL",
@@ -65,9 +69,7 @@ describe("Optional Stylist Billing & Quick Invoice Generation", () => {
         id: "staff-1",
         name: "Aman",
         role: "Senior Stylist",
-        commission_percentage: 10,
-        service_commission_rate: 10,
-        product_commission_rate: 5,
+        commission_rate: 10,
         status: "active",
       },
     ];
@@ -79,6 +81,8 @@ describe("Optional Stylist Billing & Quick Invoice Generation", () => {
       customer_phone: "9876543210",
       subtotal: 500,
       discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
       tax_amount: 0,
       tax_rate: 0,
       grand_total: 500,
@@ -99,7 +103,7 @@ describe("Optional Stylist Billing & Quick Invoice Generation", () => {
       ],
     };
 
-    const performance = calculateStaffPerformance(staffList, [unassignedInvoice]);
+    const performance = calculateStaffPerformance([unassignedInvoice], staffList);
     expect(performance).toHaveLength(1);
     expect(performance[0].total_sales_generated).toBe(0);
     expect(performance[0].total_commission_earned).toBe(0);
@@ -115,6 +119,8 @@ describe("Optional Stylist Billing & Quick Invoice Generation", () => {
       customer_phone: "9999888877",
       subtotal: 250,
       discount_amount: 0,
+      discount_type: "flat",
+      discount_value: 0,
       tax_amount: 0,
       tax_rate: 0,
       grand_total: 250,
