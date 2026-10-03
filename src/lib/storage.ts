@@ -444,6 +444,21 @@ export function initStorage() {
           });
           invChanged = true;
         }
+        // Ensure BZ-20261001-19285370 Clean up sub-service is correctly attributed to Mahi
+        if (inv.invoice_number === "BZ-20261001-19285370" || inv.id === "2d3f0275-8e6a-4226-a0f6-3985129afc08") {
+          const mahiId = "11111111-1111-1111-1111-111111111104";
+          (inv.items || []).forEach((it) => {
+            if (it.package_services) {
+              it.package_services.forEach((s) => {
+                if (s.service_name?.toLowerCase().includes("clean up") || s.service_id === "43b8f051-8a61-4881-99b8-e3c881062cfe") {
+                  s.primary_staff_id = mahiId;
+                  s.staff_splits = [{ staff_id: mahiId, amount: s.price || 200, ratio: 100 }];
+                }
+              });
+            }
+          });
+          invChanged = true;
+        }
       });
       if (invChanged) {
         Storage.saveInvoices(localInvoices);
