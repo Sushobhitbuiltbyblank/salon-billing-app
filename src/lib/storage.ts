@@ -429,36 +429,31 @@ export function initStorage() {
             invChanged = true;
           }
         }
-        // Ensure BZ-20261001-19574113 has Farhan correctly assigned to package sub-services
-        if (inv.invoice_number === "BZ-20261001-19574113" || inv.id === "b3c8834a-cf95-49e7-8cd7-b955971a75b7") {
-          const farhanId = "016b5ed4-ab1f-4ae5-9ffb-750a9cdcfcda";
-          (inv.items || []).forEach((it) => {
-            it.primary_staff_id = farhanId;
-            it.staff_splits = [{ staff_id: farhanId, amount: it.total_price || 200, ratio: 100 }];
-            if (it.package_services) {
-              it.package_services.forEach((s) => {
-                s.primary_staff_id = farhanId;
-                s.staff_splits = [{ staff_id: farhanId, amount: s.price, ratio: 100 }];
-              });
-            }
-          });
-          invChanged = true;
-        }
-        // Ensure BZ-20261001-19285370 Clean up sub-service is correctly attributed to Mahi
-        if (inv.invoice_number === "BZ-20261001-19285370" || inv.id === "2d3f0275-8e6a-4226-a0f6-3985129afc08") {
-          const mahiId = "11111111-1111-1111-1111-111111111104";
-          (inv.items || []).forEach((it) => {
-            if (it.package_services) {
-              it.package_services.forEach((s) => {
-                if (s.service_name?.toLowerCase().includes("clean up") || s.service_id === "43b8f051-8a61-4881-99b8-e3c881062cfe") {
-                  s.primary_staff_id = mahiId;
-                  s.staff_splits = [{ staff_id: mahiId, amount: s.price || 200, ratio: 100 }];
-                }
-              });
-            }
-          });
-          invChanged = true;
-        }
+        // Generic self-healing reconciliation: ensure single-stylist assignments on items and packages remain strictly in sync with primary_staff_id
+        (inv.items || []).forEach((it) => {
+          if (
+            it.primary_staff_id &&
+            it.staff_splits &&
+            it.staff_splits.length === 1 &&
+            it.staff_splits[0].staff_id !== it.primary_staff_id
+          ) {
+            it.staff_splits[0].staff_id = it.primary_staff_id;
+            invChanged = true;
+          }
+          if (it.package_services) {
+            it.package_services.forEach((s) => {
+              if (
+                s.primary_staff_id &&
+                s.staff_splits &&
+                s.staff_splits.length === 1 &&
+                s.staff_splits[0].staff_id !== s.primary_staff_id
+              ) {
+                s.staff_splits[0].staff_id = s.primary_staff_id;
+                invChanged = true;
+              }
+            });
+          }
+        });
       });
       if (invChanged) {
         Storage.saveInvoices(localInvoices);
