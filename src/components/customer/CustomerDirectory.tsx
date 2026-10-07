@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Storage } from "@/lib/storage";
 import { CustomerModal } from "@/components/customer/CustomerModal";
+import { ReminderConversionModal } from "@/components/customer/ReminderConversionModal";
 import {
   Dialog,
   DialogHeader,
@@ -101,6 +102,9 @@ export function CustomerDirectory() {
 
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+
+  // ON-DEMAND CONVERSION MATRIX MODAL STATE
+  const [isConversionModalOpen, setIsConversionModalOpen] = useState(false);
 
   // INVOICE HISTORY MODAL STATE
   const [selectedHistoryCustomer, setSelectedHistoryCustomer] = useState<Customer | null>(null);
@@ -561,7 +565,21 @@ export function CustomerDirectory() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={() => setIsConversionModalOpen(true)}
+            className="gap-1.5 text-xs text-emerald-300 hover:text-white border-emerald-800/80 hover:bg-emerald-950/60 h-10 px-3 cursor-pointer"
+            title="View Reminder Conversion & ROI Matrix (On Demand)"
+          >
+            <TrendingUp className="h-4 w-4 text-emerald-400" />
+            <span className="hidden sm:inline">Conversion Matrix</span>
+            <span className="sm:hidden">Matrix</span>
+            <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] py-0 px-1 font-bold">
+              On Demand
+            </Badge>
+          </Button>
+
           <Button
             variant="outline"
             onClick={handleSyncAllCustomersToDB}
@@ -645,7 +663,7 @@ export function CustomerDirectory() {
       {/* KPI SUMMARY CARDS */}
       {activeCrmTab === "reminders" ? (
         /* REMINDERS KPI CARDS */
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Card
             onClick={() => setReminderSubFilter("today")}
             className={`p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden ${
@@ -703,6 +721,24 @@ export function CustomerDirectory() {
             <div className="mt-1.5 flex items-baseline gap-1.5">
               <span className="text-xl sm:text-2xl font-black text-emerald-300">{reminderData.sentCount}</span>
               <span className="text-[10px] text-zinc-500 font-medium">in cooldown</span>
+            </div>
+          </Card>
+
+          <Card
+            onClick={() => setIsConversionModalOpen(true)}
+            className="p-3 bg-zinc-950/80 transition-all cursor-pointer relative overflow-hidden border-emerald-500/40 hover:border-emerald-400/80 hover:bg-emerald-950/20"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">📊 Conversion Matrix</span>
+              <div className="h-6 w-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <TrendingUp className="h-3.5 w-3.5" />
+              </div>
+            </div>
+            <div className="mt-1.5 flex items-baseline justify-between">
+              <span className="text-sm font-bold text-emerald-300">View Returned</span>
+              <span className="text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                On Demand
+              </span>
             </div>
           </Card>
         </div>
@@ -1627,6 +1663,19 @@ export function CustomerDirectory() {
           </DialogFooter>
         </Dialog>
       )}
+
+      {/* ON-DEMAND REMINDER CONVERSION & ROI MATRIX MODAL */}
+      <ReminderConversionModal
+        isOpen={isConversionModalOpen}
+        onClose={() => setIsConversionModalOpen(false)}
+        customers={unifiedCustomers}
+        invoices={invoices}
+        onStartBill={handleStartBill}
+        onViewHistory={(cust) => {
+          setSelectedHistoryCustomer(cust);
+          setIsHistoryModalOpen(true);
+        }}
+      />
 
     </div>
   );

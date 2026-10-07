@@ -9,6 +9,7 @@ import {
   getDaysRemainingInCooldown,
   formatReminderCooldownStatus,
   REMINDER_COOLDOWN_DAYS,
+  calculateReminderConversionMatrix,
 } from "@/lib/reminderUtils";
 import { Customer, Invoice } from "@/types";
 
@@ -696,6 +697,99 @@ describe("Customer Reminder Engine - Monthly Follow-ups", () => {
       expect(rems[0].inCooldown).toBe(false);
       expect(rems[0].hasVisitedSinceReminder).toBe(true);
       expect(rems[0].cooldownRemainingDays).toBe(0);
+    });
+  });
+
+  describe("calculateReminderConversionMatrix on-demand calculation", () => {
+    it("computes accurate conversion metrics and returned customer list", () => {
+      const reminderSentDate = "2026-09-20T10:00:00.000Z";
+      const visitAfterDate = "2026-09-22T14:00:00.000Z";
+
+      const convertedCustomer: Customer = {
+        id: "cust-conv-1",
+        name: "Pooja",
+        phone: "9876543210",
+        total_visits: 2,
+        total_spent: 800,
+        last_reminder_sent_at: reminderSentDate,
+        last_visit: visitAfterDate,
+      };
+
+      const nonConvertedCustomer: Customer = {
+        id: "cust-not-conv",
+        name: "Aman",
+        phone: "9876543211",
+        total_visits: 1,
+        total_spent: 300,
+        last_reminder_sent_at: reminderSentDate,
+        last_visit: "2026-08-15T10:00:00.000Z", // before reminder
+      };
+
+      const neverRemindedCustomer: Customer = {
+        id: "cust-unreminded",
+        name: "Neha",
+        phone: "9876543212",
+        total_visits: 1,
+        total_spent: 200,
+      };
+
+      const invoiceOld: Invoice = {
+        id: "inv-old",
+        invoice_number: "BZ-OLD",
+        customer_id: "cust-conv-1",
+        customer_name: "Pooja",
+        customer_phone: "9876543210",
+        subtotal: 300,
+        discount_amount: 0,
+        discount_type: "flat",
+        discount_value: 0,
+        tax_amount: 0,
+        tax_rate: 0,
+        grand_total: 300,
+        payment_mode: "cash",
+        status: "paid",
+        created_at: "2026-08-15T10:00:00.000Z",
+        items: [{ id: "it-1", item_name: "Haircut", item_type: "service", quantity: 1, unit_price: 300, discount: 0, total_price: 300 }],
+      };
+
+      const invoiceAfter: Invoice = {
+        id: "inv-after",
+        invoice_number: "BZ-AFTER",
+        customer_id: "cust-conv-1",
+        customer_name: "Pooja",
+        customer_phone: "9876543210",
+        subtotal: 500,
+        discount_amount: 0,
+        discount_type: "flat",
+        discount_value: 0,
+        tax_amount: 0,
+        tax_rate: 0,
+        grand_total: 500,
+        payment_mode: "upi",
+        status: "paid",
+        created_at: visitAfterDate,
+        items: [{ id: "it-2", item_name: "Facial", item_type: "service", quantity: 1, unit_price: 500, discount: 0, total_price: 500 }],
+      };
+
+      const matrix = calculateReminderConversionMatrix(
+        [convertedCustomer, nonConvertedCustomer, neverRemindedCustomer],
+        [invoiceOld, invoiceAfter]
+      );
+
+      expect(matrix.totalRemindedCustomers).toBe(2);
+      expect(matrix.totalConvertedCustomers).toBe(1);
+      expect(matrix.conversionRate).toBe(50);
+      expect(matrix.totalRevenueGenerated).toBe(500);
+      expect(matrix.averageRevenuePerConverted).toBe(500);
+      expect(matrix.convertedRecords.length).toBe(1);
+
+      const record = matrix.convertedRecords[0];
+      expect(record.customer.name).toBe("Pooja");
+      expect(record.customer.phone).toBe("9876543210");
+      expect(record.firstReminderSentAt).toBe(reminderSentDate);
+      expect(record.invoicesAfterReminder.length).toBe(1);
+      expect(record.invoicesAfterReminder[0].invoice_number).toBe("BZ-AFTER");
+      expect(record.daysToReturn).toBe(2);
     });
   });
 });

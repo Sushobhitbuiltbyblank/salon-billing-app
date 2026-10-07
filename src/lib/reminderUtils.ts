@@ -414,3 +414,189 @@ export function generateWhatsAppReminderUrl(
 
   return `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(message)}`;
 }
+
+export interface ReminderConversionRecord {
+  customer: Customer;
+  firstReminderSentAt: string;
+  lastReminderSentAt: string;
+  firstVisitAfterReminder?: string;
+  lastVisitAfterReminder?: string;
+  invoicesAfterReminder: Invoice[];
+  totalRevenueAfterReminder: number;
+  daysToReturn?: number;
+}
+
+export interface ReminderConversionMatrix {
+  totalRemindedCustomers: number;
+  totalConvertedCustomers: number;
+  conversionRate: number; // Percentage, e.g. 6.9
+  totalRevenueGenerated: number;
+  averageRevenuePerConverted: number;
+  convertedRecords: ReminderConversionRecord[];
+}
+
+/**
+ * Returns all valid timestamp numbers for reminders recorded on a customer profile.
+ */
+export function getCustomerReminderTimestamps(customer: Customer): number[] {
+  const timestamps: number[] = [];
+  if (customer.last_reminder_sent_at) {
+    const t = new Date(customer.last_reminder_sent_at).getTime();
+    if (!isNaN(t)) timestamps.push(t);
+  }
+  if (customer.reminder_history && Array.isArray(customer.reminder_history)) {
+    customer.reminder_history.forEach((r) => {
+      if (r.sent_at) {
+        const t = new Date(r.sent_at).getTime();
+        if (!isNaN(t)) timestamps.push(t);
+      }
+    });
+  }
+  return timestamps;
+}
+
+/**
+ * On-demand computation of the Reminder Conversion & ROI Matrix.
+ * Analyzes customers who received a reminder and returned to visit/transact at the salon afterwards.
+ */
+export function calculateReminderConversionMatrix(
+  customers: Customer[],
+  invoices: Invoice[]
+): ReminderConversionMatrix {
+  let totalRemindedCustomers = 0;
+  const convertedRecords: ReminderConversionRecord[] = [];
+
+  const nonVoidInvoices = (invoices || []).filter(
+    (inv) => inv.status !== "void" && (inv.status as string) !== "cancelled"
+  );
+
+  // Group invoices by phone & customer_id for fast lookup
+  const invoicesByPhone = new Map<string, Invoice[]>();
+  const invoicesByCustomerId = new Map<string, Invoice[]>();
+
+  nonVoidInvoices.forEach((inv) => {
+    const p = normalizePhoneNumber(inv.customer_phone);
+    if (p && p.length >= 7) {
+      const arr = invoicesByPhone.get(p) || [];
+      arr.push(inv);
+      invoicesByPhone.set(p, arr);
+    }
+    if (inv.customer_id) {
+      const arr = invoicesByCustomerId.get(inv.customer_id) || [];
+      arr.push(inv);
+      invoicesByCustomerId.set(inv.customer_id, arr);
+    }
+  });
+
+  customers.forEach((cust) => {
+    const reminderTimes = getCustomerReminderTimestamps(cust);
+    if (reminderTimes.length === 0) return;
+
+    totalRemindedCustomers++;
+
+    const minReminderTime = Math.min(...reminderTimes);
+    const maxReminderTime = Math.max(...reminderTimes);
+
+    const custPhone = normalizePhoneNumber(cust.phone);
+    const seenInvoiceIds = new Set<string>();
+    const custInvoices: Invoice[] = [];
+
+    if (custPhone && custPhone.length >= 7) {
+      (invoicesByPhone.get(custPhone) || []).forEach((inv) => {
+        const key = inv.id || inv.invoice_number;
+        if (!seenInvoiceIds.has(key)) {
+          seenInvoiceIds.add(key);
+          custInvoices.push(inv);
+        }
+      });
+    }
+
+    if (cust.id) {
+      (invoicesByCustomerId.get(cust.id) || []).forEach((inv) => {
+        const key = inv.id || inv.invoice_number;
+        if (!seenInvoiceIds.has(key)) {
+          seenInvoiceIds.add(key);
+          custInvoices.push(inv);
+        }
+      });
+    }
+
+    // Invoices occurring strictly after the first reminder was sent
+    const invoicesAfterReminder = custInvoices.filter((inv) => {
+      const invTime = new Date(inv.created_at).getTime();
+      return !isNaN(invTime) && invTime > minReminderTime;
+    });
+
+    let lastVisitTime = 0;
+    if (cust.last_visit) {
+      const t = new Date(cust.last_visit).getTime();
+      if (!isNaN(t)) lastVisitTime = t;
+    }
+
+    const hasVisited = invoicesAfterReminder.length > 0 || (lastVisitTime > minReminderTime);
+
+    if (hasVisited) {
+      invoicesAfterReminder.sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+
+      const totalRevenueAfterReminder = invoicesAfterReminder.reduce(
+        (sum, inv) => sum + (Number(inv.grand_total) || 0),
+        0
+      );
+
+      const firstVisitDate = invoicesAfterReminder.length > 0
+        ? invoicesAfterReminder[0].created_at
+        : cust.last_visit;
+
+      const lastVisitDate = invoicesAfterReminder.length > 0
+        ? invoicesAfterReminder[invoicesAfterReminder.length - 1].created_at
+        : cust.last_visit;
+
+      let daysToReturn: number | undefined;
+      if (firstVisitDate) {
+        const diffMs = new Date(firstVisitDate).getTime() - minReminderTime;
+        daysToReturn = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      }
+
+      convertedRecords.push({
+        customer: cust,
+        firstReminderSentAt: new Date(minReminderTime).toISOString(),
+        lastReminderSentAt: new Date(maxReminderTime).toISOString(),
+        firstVisitAfterReminder: firstVisitDate,
+        lastVisitAfterReminder: lastVisitDate,
+        invoicesAfterReminder,
+        totalRevenueAfterReminder,
+        daysToReturn,
+      });
+    }
+  });
+
+  // Sort converted records: most recently visited first
+  convertedRecords.sort((a, b) => {
+    const timeA = a.lastVisitAfterReminder ? new Date(a.lastVisitAfterReminder).getTime() : 0;
+    const timeB = b.lastVisitAfterReminder ? new Date(b.lastVisitAfterReminder).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  const totalConvertedCustomers = convertedRecords.length;
+  const totalRevenueGenerated = convertedRecords.reduce(
+    (sum, r) => sum + r.totalRevenueAfterReminder,
+    0
+  );
+  const conversionRate = totalRemindedCustomers > 0
+    ? Number(((totalConvertedCustomers / totalRemindedCustomers) * 100).toFixed(1))
+    : 0;
+  const averageRevenuePerConverted = totalConvertedCustomers > 0
+    ? Math.round(totalRevenueGenerated / totalConvertedCustomers)
+    : 0;
+
+  return {
+    totalRemindedCustomers,
+    totalConvertedCustomers,
+    conversionRate,
+    totalRevenueGenerated,
+    averageRevenuePerConverted,
+    convertedRecords,
+  };
+}
