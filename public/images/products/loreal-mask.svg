@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="jarEmerald" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="50%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#064e3b" />
+    </linearGradient>
+    <linearGradient id="goldLid" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#b45309" />
+    </linearGradient>
+    <linearGradient id="creamGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef9c3" />
+      <stop offset="100%" stop-color="#fde047" />
+    </linearGradient>
+  </defs>
+  <!-- Background Glow Circle -->
+  <circle cx="50" cy="50" r="46" fill="#064e3b" opacity="0.4" />
+
+  <!-- Luxury Jar Body -->
+  <path d="M25 46 Q22 80 50 82 Q78 80 75 46 Z" fill="url(#jarEmerald)" stroke="url(#goldLid)" stroke-width="1.8" />
+  <ellipse cx="50" cy="46" rx="25" ry="8" fill="#047857" stroke="url(#goldLid)" stroke-width="1.2" />
+
+  <!-- Rich Cream Texture inside Jar -->
+  <ellipse cx="50" cy="45" rx="21" ry="6" fill="url(#creamGold)" />
+
+  <!-- Metallic Gold Jar Lid (tilted/open slightly behind) -->
+  <g transform="rotate(-15, 52, 28)">
+    <ellipse cx="52" cy="28" rx="27" ry="9" fill="url(#goldLid)" stroke="#78350f" stroke-width="1.2" />
+    <path d="M25 28 Q25 35 52 35 Q79 35 79 28 Z" fill="#b45309" />
+    <ellipse cx="52" cy="27" rx="25" ry="7" fill="url(#goldLid)" />
+  </g>
+
+  <!-- L'Oréal Absolut Repair Label -->
+  <rect x="33" y="56" width="34" height="20" rx="3" fill="#ffffff" />
+  <rect x="34" y="57" width="32" height="2" fill="#d97706" />
+  <text x="50" y="64" font-family="sans-serif" font-size="4.8" font-weight="900" text-anchor="middle" fill="#064e3b">L'ORÉAL</text>
+  <text x="50" y="70" font-family="sans-serif" font-size="3" font-weight="800" text-anchor="middle" fill="#d97706">ABSOLUT REPAIR</text>
+  <text x="50" y="74" font-family="sans-serif" font-size="2" font-weight="700" text-anchor="middle" fill="#6b7280">HAIR MASK</text>
+
+  <!-- Golden Crown / Sparkle on top -->
+  <path d="M74 34 L76 37 L79 38 L76 39 L74 42 L72 39 L69 38 L72 37 Z" fill="#fbbf24" />
+  <circle cx="24" cy="52" r="2" fill="#a7f3d0" opacity="0.8" />
+</svg>

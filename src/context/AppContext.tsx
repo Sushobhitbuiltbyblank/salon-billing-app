@@ -18,7 +18,7 @@ import {
   AttendanceRecord,
   AttendanceStatus,
 } from "@/types";
-import { WheelInventoryItem } from "@/types/rewards";
+import { WheelInventoryItem, SpinLog, DEFAULT_WHEEL_INVENTORY } from "@/types/rewards";
 import { Storage, initStorage, DEFAULT_SETTINGS, DEFAULT_USERS } from "@/lib/storage";
 import { SupabaseSync } from "@/lib/supabaseSync";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
@@ -122,6 +122,38 @@ interface AppContextType {
   saveWheelInventoryItem: (item: WheelInventoryItem) => Promise<void>;
   deleteWheelInventoryItem: (itemId: string) => Promise<void>;
   decrementWheelItemQuantity: (itemId: string) => Promise<WheelInventoryItem | null>;
+  checkPhoneHasClaimed: (phone: string) => Promise<boolean>;
+  validateOfferToken: (
+    token: string
+  ) => Promise<{ valid: boolean; isRedeemed: boolean; record?: SpinLog | null }>;
+  recordSpinLog: (logData: {
+    offer_token?: string;
+    customer_name?: string;
+    phone_number: string;
+    won_item: string;
+    prize_id?: string;
+    is_redeemed?: boolean;
+  }) => Promise<SpinLog>;
+  verifyOfferById: (offerId: string) => Promise<{
+    isValid: boolean;
+    offerDetails?: {
+      id: string;
+      offerToken: string;
+      customerName: string;
+      phoneNumber: string;
+      wonItem: string;
+      prizeId?: string;
+      isRedeemed: boolean;
+      redeemedAt?: string;
+      createdAt: string;
+      eventDate: string;
+      terms: string;
+      venue: string;
+    } | null;
+    error?: string;
+  }>;
+  deleteClaimRecord: (id: string, offerCode?: string, phone?: string) => Promise<boolean>;
+  clearAllClaimRecords: () => Promise<boolean>;
 
   // GLOBAL ACTIONS
   resetDemoData: () => void;
@@ -159,7 +191,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
-  const [wheelInventory, setWheelInventory] = useState<WheelInventoryItem[]>([]);
+  const [wheelInventory, setWheelInventory] = useState<WheelInventoryItem[]>(DEFAULT_WHEEL_INVENTORY);
   
   const [activeTab, setActiveTab] = useState<AppTab>("pos");
 
@@ -1357,6 +1389,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return updated;
         },
+        checkPhoneHasClaimed: (phone: string) => SupabaseSync.checkPhoneHasClaimed(phone),
+        validateOfferToken: (token: string) => SupabaseSync.validateOfferToken(token),
+        recordSpinLog: (logData) => SupabaseSync.recordSpinLog(logData),
+        verifyOfferById: (offerId: string) => SupabaseSync.verifyOfferById(offerId),
+        deleteClaimRecord: (id: string, offerCode?: string, phone?: string) =>
+          SupabaseSync.deleteSpinLog(offerCode || id, phone),
+        clearAllClaimRecords: () => SupabaseSync.clearAllSpinLogs(),
         resetDemoData,
         refreshData: loadAllData,
         fetchHistoricalInvoices: SupabaseSync.fetchHistoricalInvoices.bind(SupabaseSync),

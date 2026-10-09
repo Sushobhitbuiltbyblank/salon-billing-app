@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="haircutGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ec4899" />
+      <stop offset="50%" stop-color="#db2777" />
+      <stop offset="100%" stop-color="#9d174d" />
+    </linearGradient>
+    <linearGradient id="bladeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="50%" stop-color="#e2e8f0" />
+      <stop offset="100%" stop-color="#94a3b8" />
+    </linearGradient>
+    <linearGradient id="handlePink" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f472b6" />
+      <stop offset="100%" stop-color="#be185d" />
+    </linearGradient>
+  </defs>
+  <!-- Background Glow Circle -->
+  <circle cx="50" cy="50" r="46" fill="#831843" opacity="0.4" />
+
+  <!-- Salon Styling Comb (behind scissors) -->
+  <g transform="rotate(45, 50, 50) translate(-8, -12)">
+    <rect x="25" y="44" width="60" height="10" rx="3" fill="#cbd5e1" stroke="#475569" stroke-width="1.2" />
+    <!-- Comb Teeth -->
+    <line x1="30" y1="54" x2="30" y2="64" stroke="#475569" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="35" y1="54" x2="35" y2="64" stroke="#475569" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="40" y1="54" x2="40" y2="64" stroke="#475569" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="45" y1="54" x2="45" y2="64" stroke="#475569" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="50" y1="54" x2="50" y2="64" stroke="#475569" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="55" y1="54" x2="55" y2="64" stroke="#475569" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="60" y1="54" x2="60" y2="64" stroke="#475569" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="65" y1="54" x2="65" y2="64" stroke="#475569" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="70" y1="54" x2="70" y2="64" stroke="#475569" stroke-width="1.8" stroke-linecap="round" />
+    <line x1="75" y1="54" x2="75" y2="64" stroke="#475569" stroke-width="1.8" stroke-linecap="round" />
+  </g>
+
+  <!-- Professional Shears / Scissors (Front) -->
+  <g transform="rotate(-30, 50, 50)">
+    <!-- Blade 1 -->
+    <path d="M48 48 L46 16 Q50 18 52 48 Z" fill="url(#bladeGrad)" stroke="#64748b" stroke-width="1" />
+    <!-- Blade 2 -->
+    <path d="M52 48 L54 16 Q50 18 48 48 Z" fill="url(#bladeGrad)" stroke="#64748b" stroke-width="1" />
+    <!-- Pivot Screw -->
+    <circle cx="50" cy="48" r="3.5" fill="#f59e0b" stroke="#78350f" stroke-width="1" />
+    <!-- Handle 1 -->
+    <path d="M48 50 L40 68" stroke="url(#handlePink)" stroke-width="3.5" stroke-linecap="round" />
+    <circle cx="36" cy="74" r="8" fill="none" stroke="url(#handlePink)" stroke-width="3.5" />
+    <!-- Handle 2 -->
+    <path d="M52 50 L60 68" stroke="url(#handlePink)" stroke-width="3.5" stroke-linecap="round" />
+    <circle cx="64" cy="74" r="8" fill="none" stroke="url(#handlePink)" stroke-width="3.5" />
+  </g>
+
+  <!-- Hair Cut Badge -->
+  <rect x="22" y="74" width="56" height="14" rx="4" fill="#ffffff" stroke="#ec4899" stroke-width="1.2" />
+  <text x="50" y="84" font-family="sans-serif" font-size="6" font-weight="900" text-anchor="middle" fill="#be185d">HAIR CUT</text>
+
+  <!-- Sparkle Accents -->
+  <path d="M22 28 L24 32 L28 33 L24 34 L22 38 L20 34 L16 33 L20 32 Z" fill="#fbcfe8" />
+  <path d="M78 26 L80 29 L83 30 L80 31 L78 34 L76 31 L73 30 L76 29 Z" fill="#f472b6" />
+</svg>

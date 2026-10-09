@@ -8,6 +8,16 @@ export function generateClaimCode(): string {
   return `BZ-SPIN-${num}`;
 }
 
+export function getOfferProductImage(title: string): string {
+  const t = (title || "").toLowerCase();
+  if (t.includes("shampoo")) return "/images/products/loreal-shampoo.jpg";
+  if (t.includes("facewash")) return "/images/products/loreal-facewash.jpg";
+  if (t.includes("d-tan") || t.includes("de-tan")) return "/images/products/dtan-service.jpg";
+  if (t.includes("hair cut") || t.includes("haircut")) return "/images/products/haircut-service.jpg";
+  if (t.includes("mask") || t.includes("repair")) return "/images/products/loreal-mask.jpg";
+  return "/images/products/loreal-shampoo.jpg";
+}
+
 export function getActivePrizes(): RewardPrize[] {
   if (typeof window === "undefined") return DEFAULT_PRIZES;
   try {
@@ -37,6 +47,8 @@ export function resetActivePrizes(): RewardPrize[] {
   return DEFAULT_PRIZES;
 }
 
+import { cleanPhoneNumber } from "./whatsapp";
+
 export function getClaimRecords(): SpinClaimRecord[] {
   if (typeof window === "undefined") return [];
   try {
@@ -49,6 +61,122 @@ export function getClaimRecords(): SpinClaimRecord[] {
   }
 }
 
+function getApiUrl(path: string): string {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${path}`;
+  }
+  return path;
+}
+
+export async function syncClaimToServer(record: SpinClaimRecord): Promise<boolean> {
+  if (typeof window === "undefined" || !window.location?.origin) return false;
+  try {
+    const res = await fetch(getApiUrl("/api/spin-claims"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(record),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn("Failed to sync spin claim to server:", err);
+    return false;
+  }
+}
+
+export async function fetchServerClaimRecords(): Promise<SpinClaimRecord[]> {
+  if (typeof window === "undefined" || !window.location?.origin) return getClaimRecords();
+  try {
+    const res = await fetch(getApiUrl("/api/spin-claims"), { cache: "no-store" });
+    if (!res.ok) return getClaimRecords();
+    const data = await res.json();
+    if (data && Array.isArray(data.claims)) {
+      const serverClaims: SpinClaimRecord[] = data.claims;
+      const local = getClaimRecords();
+      const map = new Map<string, SpinClaimRecord>();
+      serverClaims.forEach((c) => map.set(c.claimCode || c.id, c));
+      local.forEach((c) => {
+        const key = c.claimCode || c.id;
+        if (!map.has(key)) {
+          map.set(key, c);
+          // Sync missing local claim to server in background
+          syncClaimToServer(c).catch(() => {});
+        }
+      });
+      const unified = Array.from(map.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      try {
+        localStorage.setItem(CLAIMS_STORAGE_KEY, JSON.stringify(unified.slice(0, 100)));
+      } catch {}
+      return unified;
+    }
+    return getClaimRecords();
+  } catch (err) {
+    console.warn("Failed to fetch spin claims from server, using local:", err);
+    return getClaimRecords();
+  }
+}
+
+export async function deleteServerClaimRecord(
+  idOrCode?: string,
+  code?: string,
+  phone?: string
+): Promise<boolean> {
+  if (typeof window === "undefined" || !window.location?.origin) return false;
+  try {
+    const params = new URLSearchParams();
+    if (idOrCode) params.set("id", idOrCode);
+    if (code) params.set("code", code);
+    if (phone) params.set("phone", phone);
+    const res = await fetch(getApiUrl(`/api/spin-claims?${params.toString()}`), {
+      method: "DELETE",
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn("Failed to delete spin claim from server:", err);
+    return false;
+  }
+}
+
+export async function clearAllServerClaimRecords(): Promise<boolean> {
+  if (typeof window === "undefined" || !window.location?.origin) return false;
+  try {
+    const res = await fetch(getApiUrl("/api/spin-claims?all=true"), { method: "DELETE" });
+    return res.ok;
+  } catch (err) {
+    console.warn("Failed to clear spin claims from server:", err);
+    return false;
+  }
+}
+
+export async function checkPhoneHasClaimedServer(phoneNumber: string): Promise<boolean> {
+  if (!phoneNumber || typeof window === "undefined" || !window.location?.origin) return false;
+  try {
+    const clean = cleanPhoneNumber(phoneNumber);
+    const res = await fetch(getApiUrl(`/api/spin-claims?phone=${encodeURIComponent(clean)}`), {
+      cache: "no-store",
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data.hasClaimed);
+  } catch {
+    return false;
+  }
+}
+
+export async function verifyOfferOnServer(offerId: string) {
+  if (!offerId || typeof window === "undefined" || !window.location?.origin) return null;
+  try {
+    const res = await fetch(getApiUrl(`/api/spin-claims?verify=${encodeURIComponent(offerId.trim())}`), {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export function saveClaimRecord(record: SpinClaimRecord): void {
   if (typeof window === "undefined") return;
   try {
@@ -58,5 +186,145 @@ export function saveClaimRecord(record: SpinClaimRecord): void {
   } catch (err) {
     console.error("Failed to save spin claim record:", err);
   }
+  // Immediately sync to server
+  syncClaimToServer(record).catch(() => {});
+}
+
+export function deleteClaimRecord(idOrCode: string, code?: string, phone?: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getClaimRecords();
+    const updated = current.filter(
+      (c) => c.id !== idOrCode && c.claimCode !== idOrCode && (!code || c.claimCode !== code)
+    );
+    localStorage.setItem(CLAIMS_STORAGE_KEY, JSON.stringify(updated));
+    deleteLocalSpinLog(idOrCode);
+    if (code) deleteLocalSpinLog(code);
+    if (phone) deleteLocalSpinLog(phone);
+  } catch (err) {
+    console.error("Failed to delete claim record:", err);
+  }
+  deleteServerClaimRecord(idOrCode, code, phone).catch(() => {});
+}
+
+export function clearAllClaimRecords(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(CLAIMS_STORAGE_KEY);
+    clearAllLocalSpinLogs();
+    sessionStorage.removeItem("belezia_spin_won_state");
+  } catch (err) {
+    console.error("Failed to clear claim records:", err);
+  }
+  clearAllServerClaimRecords().catch(() => {});
+}
+
+// -------------------------------------------------------------
+// L'OREAL PROFESSIONAL DAY SPIN LOGS & ANTI-FRAUD STORAGE
+import { SpinLog } from "@/types/rewards";
+
+const SPIN_LOGS_STORAGE_KEY = "belezia_loreal_spin_logs_v1";
+
+export function generateOfferToken(): string {
+  const num = Math.floor(1000 + Math.random() * 9000);
+  return `BZ-LOREAL-${num}`;
+}
+
+export function getLocalSpinLogs(): SpinLog[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(SPIN_LOGS_STORAGE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error("Failed to load local spin logs:", err);
+    return [];
+  }
+}
+
+export function saveLocalSpinLog(log: SpinLog): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getLocalSpinLogs();
+    const updated = [log, ...current.filter((l) => l.id !== log.id)];
+    localStorage.setItem(SPIN_LOGS_STORAGE_KEY, JSON.stringify(updated.slice(0, 500)));
+  } catch (err) {
+    console.error("Failed to save local spin log:", err);
+  }
+}
+
+export function deleteLocalSpinLog(idOrTokenOrPhone: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getLocalSpinLogs();
+    const clean = idOrTokenOrPhone.trim().toLowerCase();
+    const cleanPhone = cleanPhoneNumber(idOrTokenOrPhone);
+    const updated = current.filter(
+      (l) =>
+        l.id.toLowerCase() !== clean &&
+        (!l.offer_token || l.offer_token.trim().toLowerCase() !== clean) &&
+        (!cleanPhone || !l.phone_number || cleanPhoneNumber(l.phone_number) !== cleanPhone)
+    );
+    localStorage.setItem(SPIN_LOGS_STORAGE_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.error("Failed to delete local spin log:", err);
+  }
+}
+
+export function clearAllLocalSpinLogs(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(SPIN_LOGS_STORAGE_KEY);
+  } catch (err) {
+    console.error("Failed to clear local spin logs:", err);
+  }
+}
+
+export function isPhoneClaimedLocally(phoneNumber: string): boolean {
+  const clean = cleanPhoneNumber(phoneNumber);
+  if (!clean) return false;
+  const logs = getLocalSpinLogs();
+  return logs.some((l) => cleanPhoneNumber(l.phone_number) === clean && l.is_redeemed);
+}
+
+export function isTokenRedeemedLocally(token: string): boolean {
+  if (!token) return false;
+  const cleanToken = token.trim().toLowerCase();
+  const logs = getLocalSpinLogs();
+  return logs.some(
+    (l) => l.offer_token && l.offer_token.trim().toLowerCase() === cleanToken && l.is_redeemed
+  );
+}
+
+export function findLocalOfferById(offerId: string): SpinLog | null {
+  if (!offerId || !offerId.trim()) return null;
+  const q = offerId.trim().toLowerCase();
+  const logs = getLocalSpinLogs();
+  const foundLog = logs.find(
+    (l) =>
+      (l.offer_token && l.offer_token.trim().toLowerCase() === q) ||
+      (l.id && l.id.toLowerCase() === q)
+  );
+  if (foundLog) return foundLog;
+
+  // Also search claim records
+  const claims = getClaimRecords();
+  const foundClaim = claims.find(
+    (c) => c.claimCode && c.claimCode.trim().toLowerCase() === q
+  );
+  if (foundClaim) {
+    return {
+      id: foundClaim.id,
+      offer_token: foundClaim.claimCode,
+      customer_name: foundClaim.customerName || "Customer",
+      phone_number: foundClaim.customerPhone || "Not Provided",
+      won_item: foundClaim.prizeLabel,
+      prize_id: foundClaim.prizeId,
+      is_redeemed: true,
+      redeemed_at: foundClaim.createdAt,
+      created_at: foundClaim.createdAt,
+    };
+  }
+  return null;
 }
 

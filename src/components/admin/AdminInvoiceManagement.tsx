@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useApp } from "@/context/AppContext";
 import { Invoice } from "@/types";
 import { formatCurrency, formatDate, generateWhatsAppReceiptUrl } from "@/lib/utils";
+import { getLorealSpinInviteWhatsAppUrl } from "@/lib/whatsapp";
 import { calculateInvoiceProductSaleTotal } from "@/lib/calculations";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -682,6 +683,23 @@ export function AdminInvoiceManagement() {
                             title="Send WhatsApp Bill / Share PDF & Image"
                           >
                             <MessageCircle className="h-3.5 w-3.5 text-emerald-400 hover:text-white" />
+                          </button>
+
+                          {/* L'ORÉAL DAY SPIN WHEEL INVITE ON WHATSAPP */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const url = getLorealSpinInviteWhatsAppUrl({
+                                customerName: inv.customer_name,
+                                customerPhone: inv.customer_phone,
+                                salonName: settings.salon_name,
+                              });
+                              window.open(url, "_blank", "noopener,noreferrer");
+                            }}
+                            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-purple-600 text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm"
+                            title="Send L'Oréal Spin Wheel Invitation on WhatsApp"
+                          >
+                            <Sparkles className="h-3.5 w-3.5 text-purple-400 hover:text-white" />
                           </button>
 
                           {/* PERMANENT DELETE (ADMIN ONLY) */}

@@ -8,7 +8,6 @@ import {
   Receipt,
   LayoutDashboard,
   Users,
-  Wallet,
   History,
   Settings,
   Sparkles,
@@ -111,10 +110,10 @@ export function Navbar() {
       icon: UserCheck,
     },
     {
-      id: "expenses",
-      label: "Expenses",
-      description: "Salon Expense Tracker",
-      icon: Wallet,
+      id: "lucky_wheel",
+      label: "Lucky Wheel",
+      description: "Spin the Wheel & Reward Claims",
+      icon: Sparkles,
     },
     {
       id: "admin",
@@ -185,10 +184,13 @@ export function Navbar() {
           <button
             onClick={() => setIsSpinWheelOpen(true)}
             className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-pink-500/20 to-purple-500/20 hover:from-amber-500/30 hover:via-pink-500/30 hover:to-purple-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold shadow-sm transition-all cursor-pointer group shrink-0"
-            title="Open Spin the Wheel Reward Game"
+            title="L'Oréal Day Spin & Win (October 31, 2026)"
           >
             <Sparkles className="h-3.5 w-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
-            <span className="hidden sm:inline">Spin & Win</span>
+            <span className="hidden sm:inline">L&apos;Oréal Spin &amp; Win</span>
+            <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 hidden md:inline">
+              Oct 31
+            </span>
           </button>
 
           {/* USER PROFILE CHIP (CLICK TO SWITCH PROFILE / LOGOUT) */}
@@ -267,12 +269,12 @@ export function Navbar() {
                 </div>
                 <div className="text-left">
                   <div className="text-sm font-bold text-amber-300 flex items-center gap-1.5">
-                    <span>Lucky Wheel</span>
+                    <span>L&apos;Oréal Day Spin &amp; Win</span>
                     <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/30">
-                      VIP
+                      Oct 31
                     </span>
                   </div>
-                  <div className="text-[11px] text-zinc-400">Play Lucky Wheel & Unlock Prizes</div>
+                  <div className="text-[11px] text-zinc-400">Hair Consultation &amp; Free Goodie Bag</div>
                 </div>
               </div>
               <ChevronRight className="h-4 w-4 text-amber-400" />

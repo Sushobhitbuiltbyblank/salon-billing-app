@@ -31,57 +31,52 @@ describe("Spin-the-Wheel Dedicated Inventory Pool", () => {
     mockStorage.clear();
   });
 
-  it("should contain the 6 core wheel items with their exact specified initial stock quantities", () => {
-    expect(DEFAULT_WHEEL_INVENTORY).toHaveLength(6);
+  it("should contain the 5 core L'Oréal Day wheel items with 30 initial stock each", () => {
+    expect(DEFAULT_WHEEL_INVENTORY).toHaveLength(5);
 
-    const vipGift = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "Win VIP Gift");
-    expect(vipGift).toBeDefined();
-    expect(vipGift?.quantity).toBe(10);
-    expect(vipGift?.category).toBe("gift");
+    const shampoo = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "Free L'Oréal Shampoo");
+    expect(shampoo).toBeDefined();
+    expect(shampoo?.quantity).toBe(30);
+    expect(shampoo?.category).toBe("gift");
 
-    const hairSpa = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "Free Hair Spa");
-    expect(hairSpa).toBeDefined();
-    expect(hairSpa?.quantity).toBe(30);
-    expect(hairSpa?.category).toBe("free_service");
+    const facewash = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "Free L'Oréal Facewash");
+    expect(facewash).toBeDefined();
+    expect(facewash?.quantity).toBe(30);
+    expect(facewash?.category).toBe("gift");
 
-    const discount20 = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "20% Discount");
-    expect(discount20).toBeDefined();
-    expect(discount20?.quantity).toBe(5);
-    expect(discount20?.category).toBe("discount_coupon");
+    const dtan = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "Free D-Tan Service");
+    expect(dtan).toBeDefined();
+    expect(dtan?.quantity).toBe(30);
+    expect(dtan?.category).toBe("free_service");
 
-    const rupeeOff = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "100 Rupee Off");
-    expect(rupeeOff).toBeDefined();
-    expect(rupeeOff?.quantity).toBe(15);
-    expect(rupeeOff?.category).toBe("offer");
+    const hairCut = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "Free Hair Cut Service");
+    expect(hairCut).toBeDefined();
+    expect(hairCut?.quantity).toBe(30);
+    expect(hairCut?.category).toBe("free_service");
 
-    const detan = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "Free De-Tan");
-    expect(detan).toBeDefined();
-    expect(detan?.quantity).toBe(10);
-    expect(detan?.category).toBe("free_service");
-
-    const discount40 = DEFAULT_WHEEL_INVENTORY.find(
-      (i) => i.title === "40% Discount on Product Purchase of 1000"
+    const hairMask = DEFAULT_WHEEL_INVENTORY.find(
+      (i) => i.title === "Free L'Oréal absolute repair hair mask"
     );
-    expect(discount40).toBeDefined();
-    expect(discount40?.quantity).toBe(10);
-    expect(discount40?.category).toBe("offer");
+    expect(hairMask).toBeDefined();
+    expect(hairMask?.quantity).toBe(30);
+    expect(hairMask?.category).toBe("gift");
   });
 
   it("should correctly persist, load, and decrement wheel inventory items in storage", () => {
-    // Initial fetch should return default 6 items
+    // Initial fetch should return default 5 items
     const initial = Storage.getWheelInventory();
-    expect(initial).toHaveLength(6);
+    expect(initial).toHaveLength(5);
 
-    // Decrement "Win VIP Gift" (initial: 10)
-    const vipGiftId = "00000000-0000-0000-0000-000000000101";
-    const updated = Storage.decrementWheelInventoryStock(vipGiftId);
+    // Decrement "Free L'Oréal Shampoo" (initial: 30)
+    const shampooId = "00000000-0000-0000-0000-000000000201";
+    const updated = Storage.decrementWheelInventoryStock(shampooId);
     expect(updated).toBeDefined();
-    expect(updated?.quantity).toBe(9);
+    expect(updated?.quantity).toBe(29);
 
     // Verify stored inventory has updated count
     const reloaded = Storage.getWheelInventory();
-    const found = reloaded.find((i) => i.id === vipGiftId);
-    expect(found?.quantity).toBe(9);
+    const found = reloaded.find((i) => i.id === shampooId);
+    expect(found?.quantity).toBe(29);
   });
 
   it("should never allow inventory quantity to decrement below zero", () => {

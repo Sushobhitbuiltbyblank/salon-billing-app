@@ -39,7 +39,7 @@ const KEYS = {
   DELETED_INVOICES: `${STORAGE_PREFIX}deleted_invoices`,
   DELETED_CUSTOMERS: `${STORAGE_PREFIX}deleted_customers`,
   STAFF_STATUS_DATE: `${STORAGE_PREFIX}staff_status_date`,
-  WHEEL_INVENTORY: `${STORAGE_PREFIX}wheel_inventory`,
+  WHEEL_INVENTORY: `${STORAGE_PREFIX}wheel_inventory_v2`,
   LAST_SYNC: `${STORAGE_PREFIX}last_sync_timestamp`,
   INITIALIZED: `${STORAGE_PREFIX}full_catalog_v5`,
 };
@@ -1653,9 +1653,21 @@ export const Storage = {
     if (typeof window === "undefined") return DEFAULT_WHEEL_INVENTORY;
     try {
       const raw = localStorage.getItem(KEYS.WHEEL_INVENTORY);
-      if (!raw) return DEFAULT_WHEEL_INVENTORY;
+      if (!raw) {
+        localStorage.setItem(KEYS.WHEEL_INVENTORY, JSON.stringify(DEFAULT_WHEEL_INVENTORY));
+        return DEFAULT_WHEEL_INVENTORY;
+      }
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_WHEEL_INVENTORY;
+      // Migrate legacy inventory (if old items exist or invalid list)
+      if (
+        !Array.isArray(parsed) ||
+        parsed.length === 0 ||
+        parsed.some((i: WheelInventoryItem) => i.id?.startsWith("00000000-0000-0000-0000-00000000010"))
+      ) {
+        localStorage.setItem(KEYS.WHEEL_INVENTORY, JSON.stringify(DEFAULT_WHEEL_INVENTORY));
+        return DEFAULT_WHEEL_INVENTORY;
+      }
+      return parsed;
     } catch {
       return DEFAULT_WHEEL_INVENTORY;
     }

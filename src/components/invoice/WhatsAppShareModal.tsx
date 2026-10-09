@@ -6,7 +6,7 @@ import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } fr
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { QRCodeSVG } from "qrcode.react";
-import html2canvas from "html2canvas";
+import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
 import {
   MessageCircle,
@@ -35,6 +35,10 @@ import {
   generateWhatsAppMessageText,
   getReceiptPublicUrl,
 } from "@/lib/utils";
+import {
+  getLorealSpinInviteWhatsAppUrl,
+  formatLorealSpinInviteWhatsAppMessage,
+} from "@/lib/whatsapp";
 
 export function WhatsAppShareModal() {
   const { whatsAppInvoice, setWhatsAppInvoice, settings, staff } = useApp();
@@ -44,6 +48,7 @@ export function WhatsAppShareModal() {
   const [copiedImage, setCopiedImage] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedLorealInvite, setCopiedLorealInvite] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   if (!whatsAppInvoice) return null;
@@ -275,6 +280,34 @@ export function WhatsAppShareModal() {
     }
   };
 
+  // 11. ACTION: SEND L'ORÉAL DAY SPIN WHEEL INVITE SEPARATELY ON WHATSAPP
+  const handleSendLorealSpin = () => {
+    const url = getLorealSpinInviteWhatsAppUrl({
+      customerName: whatsAppInvoice.customer_name,
+      customerPhone: whatsAppInvoice.customer_phone,
+      salonName: settings.salon_name,
+    });
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  // 12. ACTION: COPY L'ORÉAL DAY SPIN WHEEL INVITE TEXT
+  const handleCopyLorealSpinInvite = async () => {
+    try {
+      const msg = formatLorealSpinInviteWhatsAppMessage({
+        customerName: whatsAppInvoice.customer_name,
+        customerPhone: whatsAppInvoice.customer_phone,
+        salonName: settings.salon_name,
+      });
+      await navigator.clipboard.writeText(msg);
+      setCopiedLorealInvite(true);
+      setTimeout(() => setCopiedLorealInvite(false), 3000);
+      showToast("📋 L'Oréal Spin Wheel invitation message copied to clipboard!");
+    } catch (err) {
+      console.error("Copy invite error:", err);
+    }
+  };
+
+
   return (
     <Dialog open={!!whatsAppInvoice} onOpenChange={(open) => !open && setWhatsAppInvoice(null)} maxWidth="lg">
       <DialogHeader>
@@ -377,6 +410,45 @@ export function WhatsAppShareModal() {
                 </>
               )}
             </Button>
+          </div>
+
+          {/* SEPARATE ACTION: SEND L'ORÉAL DAY SPIN WHEEL INVITE */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/60 via-zinc-900 to-zinc-950 border border-purple-500/40 shadow-xl space-y-3">
+            <div className="flex items-start gap-2.5">
+              <div className="h-8 w-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold shrink-0 mt-0.5 shadow-md shadow-purple-600/30">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span>Send L'Oréal Spin Wheel (Separate Message)</span>
+                  <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded font-mono font-bold">Event Invite</span>
+                </h4>
+                <p className="text-[11px] text-zinc-300 mt-1 leading-relaxed">
+                  Send the L'Oréal Professional Day Spin-the-Wheel link, event date (31 Oct), and terms directly to the customer's WhatsApp separately.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                onClick={handleSendLorealSpin}
+                className="flex-1 h-10 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs shadow-md shadow-purple-600/30 gap-2 cursor-pointer transition-all"
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>Send L'Oréal Spin on WhatsApp</span>
+                <ExternalLink className="h-3.5 w-3.5 opacity-70 ml-auto" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCopyLorealSpinInvite}
+                className="h-10 px-3 rounded-xl border-purple-500/40 text-purple-300 hover:bg-purple-950/40 text-xs font-semibold cursor-pointer"
+                title="Copy L'Oréal invitation text to clipboard"
+              >
+                {copiedLorealInvite ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
           </div>
 
           {/* DIGITAL BILL PUBLIC LINK & MESSAGE HELPER */}
@@ -654,7 +726,7 @@ export function WhatsAppShareModal() {
         </div>
       </div>
 
-      <DialogFooter className="gap-2 border-t border-zinc-800 pt-3">
+      <DialogFooter className="gap-2 border-t border-zinc-800 pt-3 flex-wrap justify-between sm:justify-end">
         <Button
           type="button"
           variant="outline"
@@ -665,12 +737,21 @@ export function WhatsAppShareModal() {
         </Button>
         <Button
           type="button"
+          variant="outline"
+          onClick={handleSendLorealSpin}
+          className="gap-1.5 text-xs text-purple-300 border-purple-500/40 hover:bg-purple-950/40 font-bold cursor-pointer"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+          <span>Send L'Oréal Spin Wheel</span>
+        </Button>
+        <Button
+          type="button"
           onClick={handleSendWhatsApp}
           disabled={isGenerating}
           className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer"
         >
           <MessageCircle className="h-3.5 w-3.5 fill-current" />
-          <span>Send on WhatsApp</span>
+          <span>Send Bill on WhatsApp</span>
         </Button>
       </DialogFooter>
     </Dialog>

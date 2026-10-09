@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="dtanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="50%" stop-color="#6d28d9" />
+      <stop offset="100%" stop-color="#4c1d95" />
+    </linearGradient>
+    <linearGradient id="sunGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#b45309" />
+    </linearGradient>
+  </defs>
+  <!-- Background Glow Circle -->
+  <circle cx="50" cy="50" r="46" fill="#2e1065" opacity="0.4" />
+
+  <!-- Radiance Sun Aura (D-Tan / Anti-Tan Glow) -->
+  <circle cx="50" cy="46" r="28" fill="url(#sunGold)" opacity="0.25" />
+  <g stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" opacity="0.7">
+    <line x1="50" y1="12" x2="50" y2="17" />
+    <line x1="50" y1="75" x2="50" y2="80" />
+    <line x1="16" y1="46" x2="21" y2="46" />
+    <line x1="79" y1="46" x2="84" y2="46" />
+    <line x1="26" y1="22" x2="30" y2="26" />
+    <line x1="70" y1="66" x2="74" y2="70" />
+    <line x1="74" y1="22" x2="70" y2="26" />
+    <line x1="26" y1="70" x2="30" y2="66" />
+  </g>
+
+  <!-- Spa Cosmetic Bowl -->
+  <ellipse cx="50" cy="56" rx="26" ry="12" fill="url(#dtanGrad)" stroke="#c4b5fd" stroke-width="1.5" />
+  <path d="M24 56 Q24 78 50 82 Q76 78 76 56 Z" fill="url(#dtanGrad)" stroke="#a78bfa" stroke-width="1.5" />
+  
+  <!-- Creamy Mask Content in Bowl -->
+  <ellipse cx="50" cy="55" rx="22" ry="8" fill="url(#sunGold)" />
+
+  <!-- Spa Application Brush -->
+  <g transform="rotate(-35, 52, 42)">
+    <rect x="50" y="16" width="5" height="34" rx="2" fill="#d8b4fe" stroke="#6d28d9" stroke-width="1" />
+    <path d="M49 50 L56 50 L57 60 Q52.5 64 48 60 Z" fill="#fef08a" stroke="#d97706" stroke-width="1" />
+  </g>
+
+  <!-- D-TAN Banner Badge -->
+  <rect x="30" y="68" width="40" height="14" rx="4" fill="#ffffff" stroke="#8b5cf6" stroke-width="1.2" />
+  <text x="50" y="78" font-family="sans-serif" font-size="6.5" font-weight="900" text-anchor="middle" fill="#5b21b6">D-TAN</text>
+
+  <!-- Bright Glow Sparkles -->
+  <path d="M68 28 L70 32 L74 33 L70 34 L68 38 L66 34 L62 33 L66 32 Z" fill="#fef08a" />
+</svg>

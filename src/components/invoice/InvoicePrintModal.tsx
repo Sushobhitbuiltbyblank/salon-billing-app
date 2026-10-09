@@ -12,8 +12,10 @@ import {
   ExternalLink,
   Trash2,
   FileEdit,
+  Sparkles,
 } from "lucide-react";
 import { generateWhatsAppReceiptUrl } from "@/lib/utils";
+import { getLorealSpinInviteWhatsAppUrl } from "@/lib/whatsapp";
 
 export function InvoicePrintModal() {
   const {
@@ -216,6 +218,16 @@ export function InvoicePrintModal() {
 
   const whatsappUrl = generateWhatsAppReceiptUrl(printInvoice, settings);
 
+  const handleSendLorealSpin = () => {
+    if (!printInvoice) return;
+    const url = getLorealSpinInviteWhatsAppUrl({
+      customerName: printInvoice.customer_name,
+      customerPhone: printInvoice.customer_phone,
+      salonName: settings.salon_name,
+    });
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <Dialog
       open={Boolean(printInvoice)}
@@ -282,15 +294,28 @@ export function InvoicePrintModal() {
             </button>
           </div>
 
-          {/* WHATSAPP ACTION & DIGITAL RECEIPT SHARING */}
-          <button
-            type="button"
-            onClick={() => setWhatsAppInvoice(printInvoice)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-colors cursor-pointer"
-          >
-            <MessageCircle className="h-4 w-4 text-emerald-400" />
-            <span>Send on WhatsApp (PDF / Image)</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* WHATSAPP ACTION & DIGITAL RECEIPT SHARING */}
+            <button
+              type="button"
+              onClick={() => setWhatsAppInvoice(printInvoice)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-colors cursor-pointer"
+            >
+              <MessageCircle className="h-4 w-4 text-emerald-400" />
+              <span>Send on WhatsApp (PDF / Image)</span>
+            </button>
+
+            {/* SEPARATE L'ORÉAL DAY SPIN WHEEL INVITE */}
+            <button
+              type="button"
+              onClick={handleSendLorealSpin}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-colors cursor-pointer shadow-sm"
+              title="Send L'Oréal Professional Day Spin the Wheel invitation & link separately on WhatsApp"
+            >
+              <Sparkles className="h-4 w-4 text-purple-400" />
+              <span>Send L'Oréal Spin Wheel</span>
+            </button>
+          </div>
         </div>
 
         {/* PRINTABLE RECEIPT PREVIEW CONTAINER */}
@@ -312,7 +337,17 @@ export function InvoicePrintModal() {
             </Button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={handleSendLorealSpin}
+              className="gap-1.5 text-xs text-purple-300 border-purple-500/40 hover:bg-purple-950/30"
+              title="Send L'Oréal Professional Day Spin the Wheel link & event invitation to client on WhatsApp"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+              Send L'Oréal Spin
+            </Button>
+
             <Button
               variant="outline"
               onClick={() => {

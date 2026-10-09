@@ -22,52 +22,44 @@ export interface WheelInventoryItem {
 
 export const DEFAULT_WHEEL_INVENTORY: WheelInventoryItem[] = [
   {
-    id: "00000000-0000-0000-0000-000000000101",
-    title: "Win VIP Gift",
+    id: "00000000-0000-0000-0000-000000000201",
+    title: "Free L'Oréal Shampoo",
     category: "gift",
-    quantity: 10,
+    quantity: 30,
     is_active: true,
-    color: "#f43f5e",
+    color: "#3b82f6", // Blue
   },
   {
-    id: "00000000-0000-0000-0000-000000000102",
-    title: "Free Hair Spa",
+    id: "00000000-0000-0000-0000-000000000202",
+    title: "Free L'Oréal Facewash",
+    category: "gift",
+    quantity: 30,
+    is_active: true,
+    color: "#06b6d4", // Cyan
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000203",
+    title: "Free D-Tan Service",
     category: "free_service",
     quantity: 30,
     is_active: true,
-    color: "#3b82f6",
+    color: "#8b5cf6", // Purple
   },
   {
-    id: "00000000-0000-0000-0000-000000000103",
-    title: "20% Discount",
-    category: "discount_coupon",
-    quantity: 5,
-    is_active: true,
-    color: "#ec4899",
-  },
-  {
-    id: "00000000-0000-0000-0000-000000000104",
-    title: "100 Rupee Off",
-    category: "offer",
-    quantity: 15,
-    is_active: true,
-    color: "#10b981",
-  },
-  {
-    id: "00000000-0000-0000-0000-000000000105",
-    title: "Free De-Tan",
+    id: "00000000-0000-0000-0000-000000000204",
+    title: "Free Hair Cut Service",
     category: "free_service",
-    quantity: 10,
+    quantity: 30,
     is_active: true,
-    color: "#8b5cf6",
+    color: "#ec4899", // Pink
   },
   {
-    id: "00000000-0000-0000-0000-000000000106",
-    title: "40% Discount on Product Purchase of 1000",
-    category: "offer",
-    quantity: 10,
+    id: "00000000-0000-0000-0000-000000000205",
+    title: "Free L'Oréal absolute repair hair mask",
+    category: "gift",
+    quantity: 30,
     is_active: true,
-    color: "#f59e0b",
+    color: "#10b981", // Emerald
   },
 ];
 
@@ -105,101 +97,77 @@ export interface SpinClaimRecord {
   createdAt: string;
 }
 
+export interface SpinLog {
+  id: string;
+  offer_token?: string;
+  customer_name?: string;
+  phone_number: string;
+  won_item: string;
+  prize_id?: string;
+  is_redeemed: boolean;
+  redeemed_at?: string;
+  created_at: string;
+}
+
 export const DEFAULT_PRIZES: RewardPrize[] = [
   {
-    id: "prize-detan",
-    label: "Free De-Tan Glow",
-    shortLabel: "Free De-Tan",
+    id: "prize-loreal-shampoo",
+    label: "Free L'Oréal Shampoo",
+    shortLabel: "L'Oréal Shampoo",
+    type: "product_gift",
+    value: 650,
+    color: "#3b82f6", // Blue
+    textColor: "#ffffff",
+    iconName: "Gift",
+    description: "Complimentary bottle of L'Oréal Professionnel Shampoo (300ml)",
+    requiresInventoryDeduction: true,
+  },
+  {
+    id: "prize-loreal-facewash",
+    label: "Free L'Oréal Facewash",
+    shortLabel: "L'Oréal Facewash",
+    type: "product_gift",
+    value: 450,
+    color: "#06b6d4", // Cyan
+    textColor: "#ffffff",
+    iconName: "Droplet",
+    description: "Complimentary salon-grade L'Oréal Facewash cleanser",
+    requiresInventoryDeduction: true,
+  },
+  {
+    id: "prize-dtan-service",
+    label: "Free D-Tan Service",
+    shortLabel: "D-Tan Service",
     type: "service",
     value: 500,
     color: "#8b5cf6", // Purple
     textColor: "#ffffff",
     iconName: "Sparkles",
-    description: "Complimentary face & neck De-Tan glow treatment",
-    requiresInventoryDeduction: false,
-  },
-  {
-    id: "prize-disc-20",
-    label: "20% Off Next Bill",
-    shortLabel: "20% Discount",
-    type: "discount_percent",
-    value: 20,
-    color: "#ec4899", // Pink
-    textColor: "#ffffff",
-    iconName: "Percent",
-    description: "Flat 20% discount applied to your total salon billing",
-    requiresInventoryDeduction: false,
-  },
-  {
-    id: "prize-hair-spa",
-    label: "Free Hair Spa",
-    shortLabel: "Free Spa",
-    type: "service",
-    value: 800,
-    color: "#3b82f6", // Blue
-    textColor: "#ffffff",
-    iconName: "Droplet",
-    description: "Deep conditioning Loreal Professional Hair Spa",
-    requiresInventoryDeduction: false,
-  },
-  {
-    id: "prize-voucher-200",
-    label: "₹200 Salon Voucher",
-    shortLabel: "₹200 Off",
-    type: "discount_flat",
-    value: 200,
-    color: "#10b981", // Emerald
-    textColor: "#ffffff",
-    iconName: "Gift",
-    description: "Flat ₹200 off on any service or product purchase",
-    requiresInventoryDeduction: false,
-  },
-  {
-    id: "prize-product-gift",
-    label: "Luxury Styling Product",
-    shortLabel: "Product Gift",
-    type: "product_gift",
-    value: 450,
-    color: "#f59e0b", // Amber
-    textColor: "#000000",
-    iconName: "Package",
-    description: "Complimentary salon-grade styling serum or wax product",
+    description: "Complimentary face & neck D-Tan brightening glow treatment",
     requiresInventoryDeduction: true,
   },
   {
-    id: "prize-disc-10",
-    label: "10% Off Any Service",
-    shortLabel: "10% Discount",
-    type: "discount_percent",
-    value: 10,
-    color: "#6366f1", // Indigo
-    textColor: "#ffffff",
-    iconName: "Tag",
-    description: "10% instant discount on any hair or skin service",
-    requiresInventoryDeduction: false,
-  },
-  {
-    id: "prize-beard-trim",
-    label: "Free Beard Grooming",
-    shortLabel: "Free Grooming",
+    id: "prize-hair-cut-service",
+    label: "Free Hair Cut Service",
+    shortLabel: "Hair Cut Service",
     type: "service",
-    value: 250,
-    color: "#06b6d4", // Cyan
+    value: 500,
+    color: "#ec4899", // Pink
     textColor: "#ffffff",
     iconName: "Scissors",
-    description: "Precision razor styling & beard trim by senior stylist",
-    requiresInventoryDeduction: false,
+    description: "Precision hair styling & cut by senior stylist",
+    requiresInventoryDeduction: true,
   },
   {
-    id: "prize-vip-hamper",
-    label: "VIP Beauty Hamper",
-    shortLabel: "VIP Gift",
+    id: "prize-loreal-mask",
+    label: "Free L'Oréal absolute repair hair mask",
+    shortLabel: "L'Oréal Repair Mask",
     type: "product_gift",
-    value: 650,
-    color: "#f43f5e", // Rose
+    value: 850,
+    color: "#10b981", // Emerald
     textColor: "#ffffff",
-    iconName: "Crown",
-    description: "Deluxe travel haircare & skincare kit gift",
+    iconName: "Package",
+    description: "Luxury L'Oréal Professionnel Absolut Repair deep conditioning hair mask",
     requiresInventoryDeduction: true,
   },
 ];

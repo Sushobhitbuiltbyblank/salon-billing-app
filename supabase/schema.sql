@@ -342,4 +342,20 @@ INSERT INTO staff (id, name, role, commission_rate, status, color, notes) VALUES
 ('11111111-1111-1111-1111-111111111105', 'Sitara', 'Beautician Stylist', 15.00, 'active', '#f59e0b', 'Beautician Stylist')
 ON CONFLICT (id) DO NOTHING;
 
+-- 5. L'Oréal Professional Day Event Spin Logs & Anti-Fraud Security
+CREATE TABLE IF NOT EXISTS spin_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  offer_token TEXT UNIQUE,
+  customer_name TEXT,
+  phone_number TEXT NOT NULL,
+  won_item TEXT NOT NULL,
+  prize_id TEXT,
+  is_redeemed BOOLEAN NOT NULL DEFAULT false,
+  redeemed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
+CREATE INDEX IF NOT EXISTS idx_spin_logs_offer_token ON spin_logs (offer_token);
+CREATE INDEX IF NOT EXISTS idx_spin_logs_phone_number ON spin_logs (phone_number);
+CREATE INDEX IF NOT EXISTS idx_spin_logs_is_redeemed ON spin_logs (is_redeemed);
+CREATE INDEX IF NOT EXISTS idx_spin_logs_created_at ON spin_logs (created_at DESC);

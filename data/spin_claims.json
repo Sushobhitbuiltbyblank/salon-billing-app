@@ -1,0 +1,46 @@
+[
+  {
+    "id": "claim-1791574371763",
+    "claimCode": "BZ-LOREAL-2523",
+    "prizeId": "00000000-0000-0000-0000-000000000204",
+    "prizeLabel": "Free Hair Cut Service",
+    "prizeType": "service",
+    "wasVerified": false,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-09T19:32:51.763Z"
+  },
+  {
+    "id": "claim-1791575066688",
+    "claimCode": "BZ-LOREAL-1070",
+    "prizeId": "00000000-0000-0000-0000-000000000203",
+    "prizeLabel": "Free D-Tan Service",
+    "prizeType": "service",
+    "customerName": "Sobit",
+    "customerPhone": "6969696966",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-09T19:44:26.688Z"
+  },
+  {
+    "id": "claim-1791575209043",
+    "claimCode": "BZ-LOREAL-4007",
+    "prizeId": "00000000-0000-0000-0000-000000000203",
+    "prizeLabel": "Free D-Tan Service",
+    "prizeType": "service",
+    "wasVerified": false,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-09T19:46:49.043Z"
+  },
+  {
+    "id": "claim-1791574423449",
+    "claimCode": "BZ-LOREAL-6756",
+    "prizeId": "00000000-0000-0000-0000-000000000203",
+    "prizeLabel": "Free D-Tan Service",
+    "prizeType": "service",
+    "customerName": "Riya",
+    "customerPhone": "8989898989",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-09T19:33:43.449Z"
+  }
+]

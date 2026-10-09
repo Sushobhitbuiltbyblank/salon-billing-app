@@ -31,23 +31,23 @@ describe("Spin-the-Wheel Rewards Engine", () => {
     mockStorage.clear();
   });
 
-  it("should have 8 curated Belezia prizes with appropriate configuration", () => {
-    expect(DEFAULT_PRIZES).toHaveLength(8);
+  it("should have 5 curated L'Oréal Day prizes with appropriate configuration", () => {
+    expect(DEFAULT_PRIZES).toHaveLength(5);
 
-    const detan = DEFAULT_PRIZES.find((p) => p.id === "prize-detan");
-    expect(detan).toBeDefined();
-    expect(detan?.type).toBe("service");
-    expect(detan?.shortLabel).toBe("Free De-Tan");
+    const shampoo = DEFAULT_PRIZES.find((p) => p.id === "prize-loreal-shampoo");
+    expect(shampoo).toBeDefined();
+    expect(shampoo?.type).toBe("product_gift");
+    expect(shampoo?.label).toBe("Free L'Oréal Shampoo");
 
-    const discount20 = DEFAULT_PRIZES.find((p) => p.id === "prize-disc-20");
-    expect(discount20).toBeDefined();
-    expect(discount20?.type).toBe("discount_percent");
-    expect(discount20?.value).toBe(20);
+    const dtan = DEFAULT_PRIZES.find((p) => p.id === "prize-dtan-service");
+    expect(dtan).toBeDefined();
+    expect(dtan?.type).toBe("service");
+    expect(dtan?.label).toBe("Free D-Tan Service");
 
-    const productGift = DEFAULT_PRIZES.find((p) => p.id === "prize-product-gift");
-    expect(productGift).toBeDefined();
-    expect(productGift?.type).toBe("product_gift");
-    expect(productGift?.requiresInventoryDeduction).toBe(true);
+    const mask = DEFAULT_PRIZES.find((p) => p.id === "prize-loreal-mask");
+    expect(mask).toBeDefined();
+    expect(mask?.type).toBe("product_gift");
+    expect(mask?.requiresInventoryDeduction).toBe(true);
   });
 
   it("should generate valid claim codes matching BZ-SPIN-XXXX format", () => {

@@ -13,8 +13,26 @@ import {
   SalonSettings,
   Staff,
 } from "@/types";
-import { WheelInventoryItem } from "@/types/rewards";
+import { WheelInventoryItem, SpinLog } from "@/types/rewards";
 import { ServerDailySalesRow } from "./salesAnalytics";
+import { generateUUID } from "./utils";
+import {
+  isPhoneClaimedLocally,
+  isTokenRedeemedLocally,
+  getLocalSpinLogs,
+  saveLocalSpinLog,
+  generateOfferToken,
+  findLocalOfferById,
+  deleteClaimRecord,
+  clearAllClaimRecords,
+  deleteLocalSpinLog,
+  clearAllLocalSpinLogs,
+  checkPhoneHasClaimedServer,
+  verifyOfferOnServer,
+  deleteServerClaimRecord,
+  clearAllServerClaimRecords,
+} from "./rewardStorage";
+import { cleanPhoneNumber, SALON_EVENT_DATE, SALON_EVENT_VENUE, LOREAL_EVENT_TERMS_SHORT } from "./whatsapp";
 
 export const isValidUUID = (str?: string | null): boolean =>
   Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
@@ -1587,6 +1605,275 @@ export const SupabaseSync = {
     }
   },
 
+  // 12. L'OREAL PROFESSIONAL DAY SPIN LOGS & ANTI-FRAUD
+  async checkPhoneHasClaimed(phoneNumber: string): Promise<boolean> {
+    const clean = cleanPhoneNumber(phoneNumber);
+    if (!clean) return false;
+
+    // Check local storage first
+    if (isPhoneClaimedLocally(clean)) return true;
+
+    // Check centralized server store
+    try {
+      const serverClaimed = await checkPhoneHasClaimedServer(clean);
+      if (serverClaimed) return true;
+    } catch {}
+
+    if (!isSupabaseConfigured() || !supabase) return false;
+    try {
+      // Query database for phone match
+      const { data, error } = await supabase
+        .from("spin_logs")
+        .select("id, phone_number, is_redeemed")
+        .ilike("phone_number", `%${clean}%`)
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        return true;
+      }
+      return false;
+    } catch {
+      return isPhoneClaimedLocally(clean);
+    }
+  },
+
+  async validateOfferToken(
+    token: string
+  ): Promise<{ valid: boolean; isRedeemed: boolean; record?: SpinLog | null }> {
+    if (!token || !token.trim()) {
+      return { valid: false, isRedeemed: false, record: null };
+    }
+    const cleanToken = token.trim();
+
+    // Check local storage first
+    if (isTokenRedeemedLocally(cleanToken)) {
+      return { valid: true, isRedeemed: true };
+    }
+
+    if (!isSupabaseConfigured() || !supabase) {
+      return { valid: true, isRedeemed: isTokenRedeemedLocally(cleanToken) };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("spin_logs")
+        .select("*")
+        .eq("offer_token", cleanToken)
+        .single();
+
+      if (error || !data) {
+        // Token not found yet in redeemed list: it is an unused valid invitation token
+        return { valid: true, isRedeemed: false, record: null };
+      }
+
+      return {
+        valid: true,
+        isRedeemed: Boolean(data.is_redeemed),
+        record: data as SpinLog,
+      };
+    } catch {
+      return { valid: true, isRedeemed: isTokenRedeemedLocally(cleanToken) };
+    }
+  },
+
+  async recordSpinLog(logData: {
+    offer_token?: string;
+    customer_name?: string;
+    phone_number: string;
+    won_item: string;
+    prize_id?: string;
+    is_redeemed?: boolean;
+  }): Promise<SpinLog> {
+    const cleanPhone = cleanPhoneNumber(logData.phone_number);
+    const token = logData.offer_token?.trim() || generateOfferToken();
+    const id = generateUUID();
+    const now = new Date().toISOString();
+
+    const record: SpinLog = {
+      id,
+      offer_token: token,
+      customer_name: logData.customer_name?.trim() || "Guest Customer",
+      phone_number: cleanPhone,
+      won_item: logData.won_item,
+      prize_id: logData.prize_id,
+      is_redeemed: logData.is_redeemed !== undefined ? logData.is_redeemed : true,
+      redeemed_at: now,
+      created_at: now,
+    };
+
+    // Save locally
+    saveLocalSpinLog(record);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase.from("spin_logs").upsert(record).select().single();
+        if (!error && data) {
+          saveLocalSpinLog(data as SpinLog);
+          return data as SpinLog;
+        } else if (error) {
+          console.warn("Supabase spin_logs insert warning:", error.message);
+        }
+      } catch (err) {
+        console.warn("Supabase spin_logs exception:", err);
+      }
+    }
+
+    return record;
+  },
+
+  async getSpinLogs(): Promise<SpinLog[]> {
+    if (!isSupabaseConfigured() || !supabase) return getLocalSpinLogs();
+    try {
+      const { data, error } = await supabase
+        .from("spin_logs")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (!error && data) {
+        return data as SpinLog[];
+      }
+      return getLocalSpinLogs();
+    } catch {
+      return getLocalSpinLogs();
+    }
+  },
+
+  async verifyOfferById(offerId: string): Promise<{
+    isValid: boolean;
+    offerDetails?: {
+      id: string;
+      offerToken: string;
+      customerName: string;
+      phoneNumber: string;
+      wonItem: string;
+      prizeId?: string;
+      isRedeemed: boolean;
+      redeemedAt?: string;
+      createdAt: string;
+      eventDate: string;
+      terms: string;
+      venue: string;
+    } | null;
+    error?: string;
+  }> {
+    if (!offerId || !offerId.trim()) {
+      return { isValid: false, error: "Please enter an Offer ID to verify." };
+    }
+
+    const cleanId = offerId.trim();
+
+    // Check Supabase if configured
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("spin_logs")
+          .select("*")
+          .ilike("offer_token", cleanId)
+          .single();
+
+        if (!error && data) {
+          return {
+            isValid: true,
+            offerDetails: {
+              id: data.id,
+              offerToken: data.offer_token,
+              customerName: data.customer_name || "Guest Customer",
+              phoneNumber: data.phone_number || "Not Provided",
+              wonItem: data.won_item,
+              prizeId: data.prize_id,
+              isRedeemed: Boolean(data.is_redeemed),
+              redeemedAt: data.redeemed_at || data.created_at,
+              createdAt: data.created_at,
+              eventDate: SALON_EVENT_DATE,
+              terms: LOREAL_EVENT_TERMS_SHORT,
+              venue: SALON_EVENT_VENUE,
+            },
+          };
+        }
+      } catch (err) {
+        console.warn("Supabase verifyOfferById exception:", err);
+      }
+    }
+
+    // Fallback to local storage records
+    const localRecord = findLocalOfferById(cleanId);
+    if (localRecord) {
+      return {
+        isValid: true,
+        offerDetails: {
+          id: localRecord.id,
+          offerToken: localRecord.offer_token || cleanId,
+          customerName: localRecord.customer_name || "Guest Customer",
+          phoneNumber: localRecord.phone_number || "Not Provided",
+          wonItem: localRecord.won_item,
+          prizeId: localRecord.prize_id,
+          isRedeemed: Boolean(localRecord.is_redeemed),
+          redeemedAt: localRecord.redeemed_at || localRecord.created_at,
+          createdAt: localRecord.created_at,
+          eventDate: SALON_EVENT_DATE,
+          terms: LOREAL_EVENT_TERMS_SHORT,
+          venue: SALON_EVENT_VENUE,
+        },
+      };
+    }
+
+    // Fallback to server API (shared across devices)
+    try {
+      const serverResult = await verifyOfferOnServer(cleanId);
+      if (serverResult && serverResult.isValid && serverResult.offerDetails) {
+        return serverResult;
+      }
+    } catch {}
+
+    return {
+      isValid: false,
+      error: `No offer record found matching Unique ID "${cleanId}". Please check the ID or confirm customer completed spin.`,
+    };
+  },
+
+  async deleteSpinLog(idOrToken: string, phone?: string): Promise<boolean> {
+    deleteClaimRecord(idOrToken, idOrToken, phone);
+    deleteLocalSpinLog(idOrToken);
+    if (phone) deleteLocalSpinLog(phone);
+    deleteServerClaimRecord(idOrToken, idOrToken, phone).catch(() => {});
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        if (isValidUUID(idOrToken)) {
+          await supabase.from("spin_logs").delete().eq("id", idOrToken);
+        } else {
+          await supabase.from("spin_logs").delete().ilike("offer_token", idOrToken);
+        }
+
+        if (phone) {
+          const clean = cleanPhoneNumber(phone);
+          if (clean) {
+            await supabase.from("spin_logs").delete().ilike("phone_number", `%${clean}%`);
+          }
+        }
+        return true;
+      } catch (err) {
+        console.warn("Error deleting spin log from Supabase:", err);
+      }
+    }
+    return true;
+  },
+
+  async clearAllSpinLogs(): Promise<boolean> {
+    clearAllClaimRecords();
+    clearAllLocalSpinLogs();
+    clearAllServerClaimRecords().catch(() => {});
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from("spin_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        return true;
+      } catch (err) {
+        console.warn("Error clearing spin_logs from Supabase:", err);
+      }
+    }
+    return true;
+  },
+
   // 11. SUBSCRIBE TO REALTIME BROADCASTS
   subscribeToRealtimeUpdates(onUpdate: () => void) {
     if (!isSupabaseConfigured() || !supabase) return () => {};
@@ -1602,6 +1889,7 @@ export const SupabaseSync = {
       .on("postgres_changes", { event: "*", schema: "public", table: "app_users" }, onUpdate)
       .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, onUpdate)
       .on("postgres_changes", { event: "*", schema: "public", table: "wheel_inventory" }, onUpdate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "spin_logs" }, onUpdate)
       .subscribe();
 
     return () => {

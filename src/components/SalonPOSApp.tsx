@@ -7,7 +7,6 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { BillingPos } from "@/components/billing/BillingPos";
 import { SalesOverview } from "@/components/dashboard/SalesOverview";
 import { StaffPerformance } from "@/components/dashboard/StaffPerformance";
-import { ExpenseManager } from "@/components/dashboard/ExpenseManager";
 import { RecentInvoices } from "@/components/dashboard/RecentInvoices";
 import { CustomerDirectory } from "@/components/customer/CustomerDirectory";
 import { AdminPortal } from "@/components/admin/AdminPortal";
@@ -16,6 +15,7 @@ import { EditInvoiceModal } from "@/components/invoice/EditInvoiceModal";
 import { WhatsAppShareModal } from "@/components/invoice/WhatsAppShareModal";
 import { LoginModal } from "@/components/auth/LoginModal";
 import { SpinWheelModal } from "@/components/rewards/SpinWheelModal";
+import { SpinTheWheel } from "@/components/rewards/SpinTheWheel";
 import { Scissors } from "lucide-react";
 
 function MainContent() {
@@ -33,7 +33,11 @@ function MainContent() {
       {activeTab === "customers" && <CustomerDirectory />}
       {activeTab === "dashboard" && <SalesOverview />}
       {activeTab === "staff" && <StaffPerformance />}
-      {activeTab === "expenses" && <ExpenseManager />}
+      {activeTab === "lucky_wheel" && (
+        <div className="py-2">
+          <SpinTheWheel isModal={false} />
+        </div>
+      )}
       {activeTab === "history" && <RecentInvoices />}
       {(activeTab === "admin" || activeTab === "settings") && <AdminPortal />}
     </main>

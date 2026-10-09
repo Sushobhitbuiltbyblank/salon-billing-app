@@ -19,7 +19,7 @@ export type PaymentMode = 'cash' | 'card' | 'upi' | 'split';
 export type InvoiceStatus = 'paid' | 'pending' | 'void';
 export type DiscountType = 'flat' | 'percentage';
 export type UserRole = 'admin' | 'receptionist';
-export type AppTab = 'pos' | 'customers' | 'dashboard' | 'staff' | 'expenses' | 'history' | 'admin' | 'settings';
+export type AppTab = 'pos' | 'customers' | 'dashboard' | 'staff' | 'expenses' | 'history' | 'admin' | 'settings' | 'lucky_wheel';
 
 export interface AppUser {
   id: string;

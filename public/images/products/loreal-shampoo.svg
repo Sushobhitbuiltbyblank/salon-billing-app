@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="shampooGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="50%" stop-color="#1d4ed8" />
+      <stop offset="100%" stop-color="#1e3a8a" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <linearGradient id="capGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f3f4f6" />
+      <stop offset="50%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#9ca3af" />
+    </linearGradient>
+  </defs>
+  <!-- Background Glow Circle -->
+  <circle cx="50" cy="50" r="46" fill="#1e1b4b" opacity="0.4" />
+  
+  <!-- Bottle Cap & Pump -->
+  <rect x="44" y="10" width="12" height="8" rx="2" fill="url(#goldGrad)" />
+  <path d="M48 6 L52 6 L52 10 L48 10 Z" fill="#9ca3af" />
+  <path d="M42 4 C42 2, 58 2, 58 4 L56 6 L44 6 Z" fill="url(#capGrad)" />
+
+  <!-- Bottle Neck -->
+  <path d="M42 18 L58 18 L62 25 L38 25 Z" fill="url(#goldGrad)" />
+
+  <!-- Bottle Body -->
+  <path d="M36 25 Q32 45 34 82 Q34 88 40 88 L60 88 Q66 88 66 82 Q68 45 64 25 Z" fill="url(#shampooGrad)" stroke="url(#goldGrad)" stroke-width="1.5" />
+
+  <!-- Bottle Highlight -->
+  <path d="M38 30 Q35 50 37 80" stroke="rgba(255,255,255,0.45)" stroke-width="2" stroke-linecap="round" fill="none" />
+
+  <!-- L'Oréal Label -->
+  <rect x="40" y="42" width="20" height="26" rx="2" fill="#ffffff" />
+  <rect x="41" y="43" width="18" height="2" fill="#d97706" />
+  <text x="50" y="52" font-family="sans-serif" font-size="5" font-weight="900" text-anchor="middle" fill="#111827">L'ORÉAL</text>
+  <text x="50" y="57" font-family="sans-serif" font-size="3" font-weight="700" text-anchor="middle" fill="#2563eb">SHAMPOO</text>
+  <text x="50" y="63" font-family="sans-serif" font-size="2.2" font-weight="600" text-anchor="middle" fill="#6b7280">EXPERT CARE</text>
+
+  <!-- Sparkle Accents -->
+  <path d="M72 32 L74 36 L78 37 L74 38 L72 42 L70 38 L66 37 L70 36 Z" fill="#fbbf24" opacity="0.9" />
+  <circle cx="28" cy="62" r="2" fill="#60a5fa" opacity="0.8" />
+  <circle cx="73" cy="70" r="1.5" fill="#fbbf24" opacity="0.8" />
+</svg>

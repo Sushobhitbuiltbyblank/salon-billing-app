@@ -3,48 +3,19 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Sparkles,
-  Percent,
-  Droplet,
-  Gift,
-  Package,
-  Tag,
-  Scissors,
-  Crown,
-  Lock,
-  Unlock,
-  CheckCircle2,
   ExternalLink,
   Volume2,
   VolumeX,
   RotateCcw,
   Check,
-  Share2,
   Copy,
-  ChevronRight,
-  ShoppingBag,
-  Star,
-  QrCode,
-  ArrowRight,
+  User,
+  Phone,
+  ShieldAlert,
+  FileDown,
+  AlertTriangle,
+  X,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
-
-function InstagramIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
-    </svg>
-  );
-}
 import confetti from "canvas-confetti";
 import { useApp } from "@/context/AppContext";
 import {
@@ -57,27 +28,87 @@ import {
 import {
   playTickSound,
   playWinFanfare,
-  playUnlockSound,
   getSoundMuted,
   setSoundMuted,
   initAudioContext,
 } from "@/lib/audioEffects";
-import { generateClaimCode, saveClaimRecord, getActivePrizes } from "@/lib/rewardStorage";
+import {
+  saveClaimRecord,
+  getClaimRecords,
+  syncClaimToServer,
+  generateOfferToken,
+  getOfferProductImage,
+} from "@/lib/rewardStorage";
+import { OfferVoucherCard } from "./OfferVoucherCard";
+import {
+  getSalonBookingWhatsAppUrl,
+  LOREAL_EVENT_TERMS,
+  cleanPhoneNumber,
+} from "@/lib/whatsapp";
 
 interface SpinTheWheelProps {
   onClose?: () => void;
   isModal?: boolean;
+  initialToken?: string;
+  initialName?: string;
+  initialPhone?: string;
+  isExternalLink?: boolean;
 }
 
-export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
+// Helper to wrap offer text into multiple lines without cutting or using ellipsis (...)
+function splitTitleIntoLines(title: string): string[] {
+  const clean = (title || "").trim();
+  const lower = clean.toLowerCase();
+
+  // Optimized line splits for the 5 official event offers
+  if (lower.includes("shampoo")) {
+    return ["Free L'Oréal", "Shampoo"];
+  }
+  if (lower.includes("facewash")) {
+    return ["Free L'Oréal", "Facewash"];
+  }
+  if (lower.includes("d-tan") || lower.includes("de-tan")) {
+    return ["Free D-Tan", "Service"];
+  }
+  if (lower.includes("hair cut") || lower.includes("haircut")) {
+    return ["Free Hair Cut", "Service"];
+  }
+  if (lower.includes("mask") || lower.includes("repair")) {
+    return ["Free L'Oréal", "Absolut Repair", "Hair Mask"];
+  }
+
+  // General fallback: wrap by word boundaries, never truncate with '...'
+  if (clean.length <= 11) return [clean];
+  const words = clean.split(" ");
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (!current) {
+      current = word;
+    } else if ((current + " " + word).length <= 12) {
+      current += " " + word;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+export function SpinTheWheel({
+  onClose,
+  isModal = false,
+  initialToken = "",
+  initialName = "",
+  initialPhone = "",
+  isExternalLink = false,
+}: SpinTheWheelProps) {
   const {
-    settings,
-    catalog,
-    saveCatalogItem,
-    addDraftItem,
-    draftItems,
     wheelInventory,
-    decrementWheelItemQuantity,
+    checkPhoneHasClaimed,
+    validateOfferToken,
+    recordSpinLog,
   } = useApp();
 
   const [gameState, setGameState] = useState<SpinGameState>("IDLE");
@@ -85,20 +116,85 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
   const [winningPrize, setWinningPrize] = useState<RewardPrize | null>(null);
   const [claimCode, setClaimCode] = useState<string>("");
   const [isMuted, setIsMutedState] = useState<boolean>(false);
+  const [mounted, setMounted] = useState<boolean>(false);
 
-  // Verification Gate Steps
-  const [googleRated, setGoogleRated] = useState<boolean>(false);
-  const [instaFollowed, setInstaFollowed] = useState<boolean>(false);
-  const [wasSkipped, setWasSkipped] = useState<boolean>(false);
-
-  // Front Desk Claim state
-  const [isClaimed, setIsClaimed] = useState<boolean>(false);
+  // Customer Form & Voucher State
+  const [customerName, setCustomerName] = useState<string>(initialName);
+  const [customerPhone, setCustomerPhone] = useState<string>(initialPhone);
+  const [offerToken, setOfferToken] = useState<string>(initialToken);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  const [isTokenExpired, setIsTokenExpired] = useState<boolean>(false);
+  const [showVoucherModal, setShowVoucherModal] = useState<boolean>(false);
+  const [isFormSubmitted, setIsFormSubmitted] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
-  const [stockDeductedMessage, setStockDeductedMessage] = useState<string | null>(null);
 
   // Physics animation refs
   const animationFrameRef = useRef<number | null>(null);
   const lastTickAngleRef = useRef<number>(0);
+
+  // Validate single-use link / token on mount
+  useEffect(() => {
+    if (initialToken) {
+      setOfferToken(initialToken);
+      validateOfferToken(initialToken).then((res) => {
+        if (res.isRedeemed) {
+          setIsTokenExpired(true);
+          setTokenError(
+            "⚠️ This invite link has already been used and redeemed! Unique links are single-use only. Contact Belezia Salon at +91-7290828680."
+          );
+        }
+      });
+    }
+  }, [initialToken, validateOfferToken]);
+
+  // For public links: restore won state if previously spun and sync local records to server
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        // Sync any pending local claims to central server
+        const localClaims = getClaimRecords();
+        localClaims.forEach((c) => {
+          syncClaimToServer(c).catch(() => {});
+        });
+
+        // Restore won state if session exists
+        const saved = sessionStorage.getItem("belezia_spin_won_state");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.winningPrize) {
+            setWinningPrize(parsed.winningPrize);
+            if (parsed.claimCode) setClaimCode(parsed.claimCode);
+            if (parsed.customerName) setCustomerName(parsed.customerName);
+            if (parsed.customerPhone) setCustomerPhone(parsed.customerPhone);
+            if (parsed.isFormSubmitted) setIsFormSubmitted(true);
+            setGameState("VERIFIED_AND_REVEALED");
+
+            // Also make sure session state is persisted to server
+            if (parsed.claimCode) {
+              const sessionClaim: SpinClaimRecord = {
+                id: `claim-${Date.now()}`,
+                claimCode: parsed.claimCode,
+                prizeId: parsed.winningPrize.id,
+                prizeLabel: parsed.winningPrize.label,
+                prizeType: parsed.winningPrize.type,
+                customerName: parsed.customerName || undefined,
+                customerPhone: cleanPhoneNumber(parsed.customerPhone) || undefined,
+                wasVerified: Boolean(parsed.isFormSubmitted),
+                inventoryDeducted: false,
+                createdAt: new Date().toISOString(),
+              };
+              saveClaimRecord(sessionClaim);
+              syncClaimToServer(sessionClaim).catch(() => {});
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [isModal]);
 
   // Map dedicated wheelInventory items to prize slices if configured
   const prizes: RewardPrize[] = useMemo(() => {
@@ -106,7 +202,7 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
       return wheelInventory.map((item) => ({
         id: item.id,
         label: item.title,
-        shortLabel: item.title.length > 18 ? item.title.slice(0, 16) + "..." : item.title,
+        shortLabel: item.title,
         type:
           item.category === "free_service"
             ? ("service" as PrizeType)
@@ -118,7 +214,7 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
         textColor: "#ffffff",
         iconName: item.category === "free_service" ? "Scissors" : item.category === "gift" ? "Gift" : "Tag",
         description: `${item.title} (${item.category.replace("_", " ")}) - Stock: ${item.quantity}`,
-        requiresInventoryDeduction: true,
+        requiresInventoryDeduction: false,
       }));
     }
     return DEFAULT_PRIZES;
@@ -127,8 +223,9 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
   const numSlices = prizes.length;
   const sliceAngle = 360 / numSlices;
 
-  // Initialize mute state
+  // Initialize mounted and mute state
   useEffect(() => {
+    setMounted(true);
     setIsMutedState(getSoundMuted());
   }, []);
 
@@ -138,32 +235,30 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
     setSoundMuted(next);
   };
 
-  // Easing function: Ease-Out Quint (super realistic fast spin then gradual deceleration)
+  // Easing function: Ease-Out Quint
   const easeOutQuint = (t: number): number => {
     return 1 - Math.pow(1 - t, 5);
   };
 
-  // Launch Spin
-  const spinWheel = useCallback(() => {
+  // Launch Spin (Screen 1 Action)
+  const spinWheel = useCallback(async () => {
     if (gameState === "SPINNING") return;
+    if (isTokenExpired) return;
 
     // Unlock Web Audio context on user gesture
     initAudioContext();
 
     setGameState("SPINNING");
-    setGoogleRated(false);
-    setInstaFollowed(false);
-    setWasSkipped(false);
-    setIsClaimed(false);
-    setStockDeductedMessage(null);
+    setPhoneError(null);
 
     // Pick in-stock active prize index if available, otherwise random
-    const inStockIndices = wheelInventory && wheelInventory.length > 0
-      ? wheelInventory
-          .map((item, idx) => ({ idx, available: item.is_active && item.quantity > 0 }))
-          .filter((i) => i.available)
-          .map((i) => i.idx)
-      : [];
+    const inStockIndices =
+      wheelInventory && wheelInventory.length > 0
+        ? wheelInventory
+            .map((item, idx) => ({ idx, available: item.is_active && item.quantity > 0 }))
+            .filter((i) => i.available)
+            .map((i) => i.idx)
+        : [];
 
     const targetIndex =
       inStockIndices.length > 0
@@ -173,11 +268,6 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
     const selectedPrize = prizes[targetIndex];
     setWinningPrize(selectedPrize);
 
-    // Calculate rotation:
-    // To land targetIndex under top pointer (0 deg / 12 o'clock):
-    // Slice i spans from i*sliceAngle to (i+1)*sliceAngle.
-    // Center of slice i is (i + 0.5) * sliceAngle.
-    // Normalized rotation needed is (360 - centerOfSlice) % 360.
     const sliceCenter = (targetIndex + 0.5) * sliceAngle;
     const targetRemainder = (360 - sliceCenter) % 360;
 
@@ -205,7 +295,6 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
       // Trigger flapper tick sound as pegs pass
       const angleSinceLastTick = currentRot - lastTickAngleRef.current;
       if (angleSinceLastTick >= sliceAngle) {
-        // Pitch decreases as wheel decelerates
         const speedRatio = Math.max(0.4, 1 - progress);
         playTickSound(speedRatio);
         lastTickAngleRef.current = currentRot;
@@ -214,19 +303,68 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
-        // Spin finished! Land on prize.
+        // Spin finished! Direct transition to prize reveal & form screen
         setCurrentRotation(totalRotationTarget);
-        setGameState("WON_PENDING_VERIFICATION");
-        const newCode = generateClaimCode();
+        setGameState("VERIFIED_AND_REVEALED");
+        const newCode = offerToken || generateOfferToken();
         setClaimCode(newCode);
 
-        // Immediate celebratory initial win cue
+        // Immediate audit record saved to storage and centralized server
+        const initialRecord: SpinClaimRecord = {
+          id: `claim-${Date.now()}`,
+          claimCode: newCode,
+          prizeId: selectedPrize.id,
+          prizeLabel: selectedPrize.label,
+          prizeType: selectedPrize.type,
+          customerName: customerName.trim() || undefined,
+          customerPhone: cleanPhoneNumber(customerPhone) || undefined,
+          wasVerified: false,
+          inventoryDeducted: false,
+          createdAt: new Date().toISOString(),
+        };
+        saveClaimRecord(initialRecord);
+        syncClaimToServer(initialRecord).catch(() => {});
+
+        // Immediate celebratory sound & confetti
         playWinFanfare();
+        confetti({
+          particleCount: 130,
+          spread: 90,
+          origin: { y: 0.55 },
+          colors: ["#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ffffff"],
+        });
+
+        // For public links, lock in won state to sessionStorage so user cannot refresh to spin again
+        if (!isModal && typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem(
+              "belezia_spin_won_state",
+              JSON.stringify({
+                winningPrize: selectedPrize,
+                claimCode: newCode,
+                customerName: customerName.trim(),
+                customerPhone,
+                isFormSubmitted: false,
+              })
+            );
+          } catch {
+            // ignore
+          }
+        }
       }
     };
 
     animationFrameRef.current = requestAnimationFrame(animate);
-  }, [gameState, currentRotation, numSlices, sliceAngle, prizes]);
+  }, [
+    gameState,
+    isTokenExpired,
+    currentRotation,
+    numSlices,
+    sliceAngle,
+    prizes,
+    wheelInventory,
+    offerToken,
+  ]);
 
   // Clean up animation on unmount
   useEffect(() => {
@@ -237,106 +375,85 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
     };
   }, []);
 
-  // Unlock and Reveal Prize
-  const handleRevealPrize = (skipped = false) => {
-    setWasSkipped(skipped);
-    setGameState("VERIFIED_AND_REVEALED");
-    playUnlockSound();
-
-    // Secondary victory fanfare and confetti celebration
-    setTimeout(() => {
-      playWinFanfare();
-      // Confetti burst
-      confetti({
-        particleCount: 130,
-        spread: 90,
-        origin: { y: 0.55 },
-        colors: ["#8b5cf6", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ffffff"],
-      });
-    }, 150);
-
-    // Save claim record
-    if (winningPrize) {
-      const record: SpinClaimRecord = {
-        id: `claim-${Date.now()}`,
-        claimCode: claimCode || generateClaimCode(),
-        prizeId: winningPrize.id,
-        prizeLabel: winningPrize.label,
-        prizeType: winningPrize.type,
-        wasVerified: !skipped,
-        inventoryDeducted: false,
-        createdAt: new Date().toISOString(),
-      };
-      saveClaimRecord(record);
-    }
-  };
-
-  // Check if both steps completed
-  useEffect(() => {
-    if (gameState === "WON_PENDING_VERIFICATION" && googleRated && instaFollowed) {
-      handleRevealPrize(false);
-    }
-  }, [googleRated, instaFollowed, gameState]);
-
-  // Front Desk Claim & Inventory Stock Deduct
-  const handleClaimReward = async () => {
-    if (!winningPrize || isClaimed) return;
-
-    let stockMsg = "Reward successfully claimed!";
-
-    // Automatically decrement quantity in wheel_inventory pool (Supabase + Local)
-    const updatedWheelItem = await decrementWheelItemQuantity(winningPrize.id);
-    if (updatedWheelItem) {
-      stockMsg = `✅ Redeemed "${winningPrize.label}". Remaining Pool Stock: ${updatedWheelItem.quantity} (Synced to Supabase wheel_inventory)`;
-    } else {
-      stockMsg = `✅ Redeemed "${winningPrize.label}" (Recorded in salon database)`;
+  // Form Submission & Voucher Generation (Screen 2 Action)
+  const handleGenerateAndDownloadVoucher = async () => {
+    if (!customerName || !customerName.trim()) {
+      setPhoneError("Please enter your full name to download your voucher.");
+      return;
     }
 
-    setIsClaimed(true);
-    setStockDeductedMessage(stockMsg);
+    const cleanPhone = cleanPhoneNumber(customerPhone);
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      setPhoneError("Please enter a valid 10-digit WhatsApp number to download your voucher.");
+      return;
+    }
 
-    // Update claim record in local storage
-    const record: SpinClaimRecord = {
-      id: `claim-${Date.now()}`,
-      claimCode,
-      prizeId: winningPrize.id,
-      prizeLabel: winningPrize.label,
-      prizeType: winningPrize.type,
-      wasVerified: !wasSkipped,
-      inventoryDeducted: true,
-      createdAt: new Date().toISOString(),
-    };
-    saveClaimRecord(record);
-  };
-
-  // Apply discount or complimentary service directly to POS draft
-  const handleApplyToPOS = () => {
-    if (!winningPrize) return;
-
-    if (winningPrize.type === "service") {
-      // Find matching service in catalog
-      const service = catalog.find(
-        (c) =>
-          c.type === "service" &&
-          (c.name.toLowerCase().includes("detan") ||
-            c.name.toLowerCase().includes("spa") ||
-            c.name.toLowerCase().includes("shave"))
-      );
-      if (service) {
-        addDraftItem({
-          ...service,
-          price: 0, // Complimentary 100% discount
-        });
-        setStockDeductedMessage(`Applied complimentary "${service.name}" (₹0) to active POS draft!`);
-      } else {
-        setStockDeductedMessage(`Please add the service to bill with 100% discount using claim code: ${claimCode}`);
+    setIsSubmitting(true);
+    try {
+      const hasClaimed = await checkPhoneHasClaimed(cleanPhone);
+      if (hasClaimed) {
+        setPhoneError(
+          `⚠️ This phone number (+91 ${cleanPhone}) has already claimed an offer for L'Oréal Professional Day! Each customer can only claim one offer.`
+        );
+        return;
       }
-    } else if (winningPrize.type === "discount_percent" || winningPrize.type === "discount_flat") {
-      setStockDeductedMessage(
-        `Applied ${winningPrize.value}${winningPrize.type === "discount_percent" ? "%" : "₹"} discount code: ${claimCode}`
-      );
+
+      setPhoneError(null);
+      const finalOfferId = offerToken || claimCode || generateOfferToken();
+      setClaimCode(finalOfferId);
+
+      // Save claim record and audit log in spin_logs
+      if (winningPrize) {
+        const record: SpinClaimRecord = {
+          id: `claim-${Date.now()}`,
+          claimCode: finalOfferId,
+          prizeId: winningPrize.id,
+          prizeLabel: winningPrize.label,
+          prizeType: winningPrize.type,
+          customerName: customerName.trim() || undefined,
+          customerPhone: cleanPhone,
+          wasVerified: true,
+          inventoryDeducted: false,
+          createdAt: new Date().toISOString(),
+        };
+        saveClaimRecord(record);
+        await syncClaimToServer(record).catch(() => {});
+
+        await recordSpinLog({
+          offer_token: finalOfferId,
+          customer_name: customerName.trim() || "Valued Guest",
+          phone_number: cleanPhone,
+          won_item: winningPrize.label,
+          prize_id: winningPrize.id,
+          is_redeemed: true,
+        });
+      }
+
+      setIsFormSubmitted(true);
+      setShowVoucherModal(true);
+
+      // Update sessionStorage with submitted status
+      if (!isModal && typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem(
+            "belezia_spin_won_state",
+            JSON.stringify({
+              winningPrize,
+              claimCode: finalOfferId,
+              customerName: customerName.trim(),
+              customerPhone: cleanPhone,
+              isFormSubmitted: true,
+            })
+          );
+        } catch {
+          // ignore
+        }
+      }
+    } catch (err) {
+      console.error("Error generating offer voucher:", err);
+    } finally {
+      setIsSubmitting(false);
     }
-    setIsClaimed(true);
   };
 
   const handleCopyCode = () => {
@@ -347,27 +464,29 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
     }
   };
 
+  // WhatsApp click-to-chat help option
   const handleShareWhatsApp = () => {
     if (!winningPrize || !claimCode) return;
-    const text = encodeURIComponent(
-      `🎉 Congratulations! You won *${winningPrize.label}* at Belezia Salon Laxmi Nagar!\n\n` +
-      `🎟️ Claim Code: *${claimCode}*\n` +
-      `📌 Valid on your next salon visit.\n` +
-      `📍 Shop 14-16, Main Market, Laxmi Nagar, New Delhi\n` +
-      `📞 +91 98765 43210\n\nThank you for choosing Belezia Salon! ✨`
-    );
-    window.open(`https://wa.me/?text=${text}`, "_blank");
+    const cleanPhone = cleanPhoneNumber(customerPhone);
+    const url = getSalonBookingWhatsAppUrl({
+      customerName: customerName || "Valued Customer",
+      customerPhone: cleanPhone,
+      wonItem: winningPrize.label,
+      offerId: claimCode,
+      eventDate: "31st October (10 AM – 9 PM)",
+      salonName: "Belezia Salon, Laxmi Nagar, Delhi",
+    });
+    window.open(url, "_blank");
   };
 
+  // Reset to Screen 1
   const handleResetSpin = () => {
     setGameState("IDLE");
     setWinningPrize(null);
     setClaimCode("");
-    setGoogleRated(false);
-    setInstaFollowed(false);
-    setWasSkipped(false);
-    setIsClaimed(false);
-    setStockDeductedMessage(null);
+    setIsFormSubmitted(false);
+    setShowVoucherModal(false);
+    setPhoneError(null);
   };
 
   // Render SVG Slice paths for wheel
@@ -379,7 +498,6 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
       const startDeg = index * sliceAngle;
       const endDeg = (index + 1) * sliceAngle;
 
-      // Polar to cartesian (offset by -90 so 0 deg starts at top center)
       const startRad = ((startDeg - 90) * Math.PI) / 180;
       const endRad = ((endDeg - 90) * Math.PI) / 180;
 
@@ -390,15 +508,21 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
 
       const pathData = `M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 0 1 ${x2} ${y2} Z`;
 
-      // Text rotation angle
       const textAngle = startDeg + sliceAngle / 2;
       const textRad = ((textAngle - 90) * Math.PI) / 180;
-      const textX = center + radius * 0.65 * Math.cos(textRad);
-      const textY = center + radius * 0.65 * Math.sin(textRad);
 
-      // Icon coords
-      const iconX = center + radius * 0.85 * Math.cos(textRad);
-      const iconY = center + radius * 0.85 * Math.sin(textRad);
+      // Dummy product image badge coordinates (at 75% radius)
+      const imgRadius = radius * 0.75;
+      const imgX = center + imgRadius * Math.cos(textRad);
+      const imgY = center + imgRadius * Math.sin(textRad);
+      const imgSize = 34;
+      const productImgUrl = getOfferProductImage(prize.label || prize.shortLabel);
+
+      // Multi-line text coordinates (at 48% radius)
+      const textRadius = radius * 0.48;
+      const textX = center + textRadius * Math.cos(textRad);
+      const textY = center + textRadius * Math.sin(textRad);
+      const lines = splitTitleIntoLines(prize.label || prize.shortLabel);
 
       return (
         <g key={prize.id} className="cursor-pointer">
@@ -411,93 +535,193 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
             className="transition-colors hover:brightness-110"
           />
           {/* Slice border highlight */}
-          <line
-            x1={center}
-            y1={center}
-            x2={x1}
-            y2={y1}
-            stroke="rgba(255,255,255,0.25)"
-            strokeWidth="1.5"
+          <path
+            d={pathData}
+            fill="none"
+            stroke="rgba(255,255,255,0.18)"
+            strokeWidth="1"
           />
 
-          {/* Peg on outer rim */}
+          {/* Product image badge */}
+          <g transform={`translate(${imgX - imgSize / 2}, ${imgY - imgSize / 2})`}>
+            <defs>
+              <clipPath id={`wheel-badge-clip-${prize.id}`}>
+                <circle cx={imgSize / 2} cy={imgSize / 2} r={imgSize / 2 - 1.5} />
+              </clipPath>
+            </defs>
+            <circle
+              cx={imgSize / 2}
+              cy={imgSize / 2}
+              r={imgSize / 2}
+              fill="#ffffff"
+              stroke="#fbbf24"
+              strokeWidth="2"
+              className="drop-shadow-md"
+            />
+            <image
+              href={productImgUrl}
+              x={0}
+              y={0}
+              width={imgSize}
+              height={imgSize}
+              preserveAspectRatio="xMidYMid slice"
+              clipPath={`url(#wheel-badge-clip-${prize.id})`}
+            />
+          </g>
+
+          {/* Multi-line Offer Label */}
+          <g
+            transform={`translate(${textX}, ${textY}) rotate(${
+              textAngle > 90 && textAngle < 270 ? textAngle + 180 : textAngle
+            })`}
+          >
+            <text
+              textAnchor="middle"
+              dominantBaseline="middle"
+              className="fill-white font-extrabold select-none filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
+              style={{
+                fontSize: lines.length >= 3 ? "10px" : "11px",
+                letterSpacing: "0.02em",
+              }}
+            >
+              {lines.map((line, lIdx) => {
+                const totalLines = lines.length;
+                const lineHeight = lines.length >= 3 ? 12 : 13;
+                const offset = (lIdx - (totalLines - 1) / 2) * lineHeight;
+                return (
+                  <tspan
+                    key={lIdx}
+                    x={0}
+                    dy={lIdx === 0 ? offset : lineHeight}
+                    className={lIdx === 0 ? "fill-amber-300 font-black" : "fill-white"}
+                  >
+                    {line}
+                  </tspan>
+                );
+              })}
+            </text>
+          </g>
+
+          {/* Golden perimeter peg */}
           <circle
             cx={x1}
             cy={y1}
             r="3.5"
-            fill="#fbbf24"
-            stroke="#78350f"
+            fill="#f59e0b"
+            stroke="#ffffff"
             strokeWidth="1"
+            className="filter drop-shadow-[0_0_2px_rgba(245,158,11,0.8)]"
           />
-
-          {/* Label Text */}
-          <text
-            x={textX}
-            y={textY}
-            fill={prize.textColor || "#ffffff"}
-            fontSize="12.5"
-            fontWeight="bold"
-            textAnchor="middle"
-            dominantBaseline="middle"
-            transform={`rotate(${textAngle}, ${textX}, ${textY})`}
-            className="select-none tracking-tight font-sans drop-shadow-md"
-          >
-            {prize.shortLabel}
-          </text>
         </g>
       );
     });
   };
 
-  const isPendingVerification = gameState === "WON_PENDING_VERIFICATION";
   const isVerifiedAndRevealed = gameState === "VERIFIED_AND_REVEALED";
+
+  if (!mounted) {
+    return (
+      <div className="relative w-full max-w-4xl mx-auto flex flex-col items-center justify-center p-6 select-none animate-pulse">
+        <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 p-0.5 shadow-lg shadow-purple-600/30 mb-4">
+          <div className="h-full w-full bg-zinc-950 rounded-[10px] flex items-center justify-center">
+            <Sparkles className="h-5 w-5 text-amber-400 animate-spin" />
+          </div>
+        </div>
+        <div className="relative w-[300px] h-[300px] sm:w-[380px] sm:h-[380px] rounded-full border-4 border-zinc-850 bg-zinc-900/60 flex items-center justify-center">
+          <span className="text-xs font-mono text-zinc-500">Loading Lucky Wheel...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full max-w-4xl mx-auto flex flex-col items-center justify-center p-3 sm:p-6 select-none">
       {/* HEADER WITH SALON BRANDING & MUTE TOGGLE */}
-      <div className="w-full flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 p-0.5 shadow-lg shadow-purple-600/30">
-            <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-zinc-950">
-              <Sparkles className="h-4 w-4 text-amber-400 animate-spin-slow" />
+      {isModal ? (
+        <div className="w-full flex items-center justify-between mb-3 sm:mb-4 gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 p-0.5 shadow-lg shadow-purple-600/30 shrink-0">
+              <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-zinc-950">
+                <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 animate-spin-slow" />
+              </div>
+            </div>
+            <div className="flex-1 min-w-0 flex flex-col justify-center">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 className="text-xs sm:text-base font-extrabold text-white tracking-tight leading-tight">
+                  Belezia × L’Oréal Professionnel
+                </h2>
+                <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-pink-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+                  Hair Consultation Day
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-xs text-zinc-400 flex items-center gap-x-1.5 gap-y-0.5 flex-wrap mt-0.5 leading-snug">
+                <span className="text-purple-300 font-semibold">Saturday, October 31, 2026</span>
+                <span className="text-zinc-600">•</span>
+                <span>Laxmi Nagar</span>
+                <span className="text-zinc-600">•</span>
+                <span className="text-emerald-400 font-bold">100% Free Consult</span>
+              </p>
             </div>
           </div>
-          <div>
-            <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight flex items-center gap-1.5">
-              <span>Belezia Lucky Wheel</span>
-              <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-pink-500/20 text-amber-300 border border-amber-500/30">
-                VIP Rewards
-              </span>
-            </h2>
-            <p className="text-xs text-zinc-400 hidden sm:block">
-              Spin to unlock exclusive salon services, discounts, and luxury gifts!
-            </p>
+
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <a
+              href="/spin"
+              target="_blank"
+              rel="noreferrer"
+              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+              title="Open Fullscreen Tablet Kiosk Mode (/spin)"
+            >
+              <ExternalLink className="h-3 w-3 text-purple-400" />
+              <span>Kiosk Mode</span>
+            </a>
+            <button
+              onClick={handleToggleMute}
+              aria-label={isMuted ? "Unmute Sound" : "Mute Sound"}
+              className="flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+              title={isMuted ? "Unmute Sound" : "Mute Sound"}
+            >
+              {isMuted ? <VolumeX className="h-4 w-4 text-rose-400" /> : <Volume2 className="h-4 w-4 text-purple-400" />}
+            </button>
+            {isModal && onClose && (
+              <button
+                onClick={onClose}
+                aria-label="Close Spin Wheel Modal"
+                className="flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
+      ) : (
+        /* ON STANDALONE /SPIN PAGE: Sleek Title & Sound Control Bar */
+        <div className="w-full flex items-center justify-between mb-2 sm:mb-4 px-1 gap-2">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="text-xs sm:text-sm font-extrabold text-amber-300 tracking-wide uppercase leading-tight">
+              Spin The Lucky Wheel
+            </span>
+            <span className="text-[10px] text-zinc-400 leading-tight">
+              • Guaranteed L&apos;Oréal Professionnel Goodies
+            </span>
+          </div>
 
-        <div className="flex items-center gap-2">
-          {/* MUTE / UNMUTE BUTTON */}
           <button
             onClick={handleToggleMute}
             aria-label={isMuted ? "Unmute Sound" : "Mute Sound"}
-            className="flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
             title={isMuted ? "Unmute Sound" : "Mute Sound"}
           >
             {isMuted ? <VolumeX className="h-4 w-4 text-rose-400" /> : <Volume2 className="h-4 w-4 text-purple-400" />}
           </button>
-
-          {isModal && onClose && (
-            <button
-              onClick={onClose}
-              className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
-            >
-              Close
-            </button>
-          )}
         </div>
-      </div>
+      )}
 
-      {/* WHEEL CONTAINER */}
+      {/* ========================================================================= */}
+      {/* 1. SCREEN 1: SPIN THE WHEEL */}
+      {/* ========================================================================= */}
       <div className="relative flex flex-col items-center justify-center my-2 sm:my-4">
         {/* TOP POINTER / FLAPPER INDICATOR */}
         <div className="absolute -top-3 z-30 flex flex-col items-center pointer-events-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">
@@ -556,316 +780,231 @@ export function SpinTheWheel({ onClose, isModal = false }: SpinTheWheelProps) {
           </div>
         </div>
 
+        {/* SECURITY & TOKEN ALERTS */}
+        {tokenError && (
+          <div className="mt-3 max-w-md w-full p-3 rounded-2xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs font-bold text-center flex items-center justify-center gap-2 shadow-lg">
+            <ShieldAlert className="h-4 w-4 text-rose-400 shrink-0" />
+            <span>{tokenError}</span>
+          </div>
+        )}
+
         {/* HELPER TEXT UNDER WHEEL */}
-        <div className="mt-4 text-center">
+        <div className="mt-3 text-center">
           {gameState === "IDLE" && (
             <p className="text-xs text-zinc-400 animate-pulse">
-              👉 Tap <span className="text-amber-400 font-bold">SPIN</span> to try your luck today!
+              👉 Tap <span className="text-amber-400 font-bold">SPIN</span> to reveal your guaranteed reward!
             </p>
           )}
           {gameState === "SPINNING" && (
             <p className="text-xs text-purple-300 font-semibold animate-pulse">
-              🎰 Good luck! Wheel is spinning...
+              🎰 Revealing your L&apos;Oréal Day reward...
             </p>
           )}
         </div>
       </div>
 
+      {/* L'OREAL PROFESSIONAL DAY CAMPAIGN BANNER / DETAIL DISCUSSION BOX BELOW WHEEL */}
+      <div className="w-full mt-2 mb-3 p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/60 via-zinc-900 to-pink-950/60 border border-amber-500/30 text-center space-y-1.5 shadow-lg">
+        <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm font-extrabold text-amber-200">
+          <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+          <span>Belezia Salon is partnering with L’Oréal Professionnel to bring you an exclusive Hair Consultation Event!</span>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-zinc-300">
+          <span className="text-pink-300 font-bold">🎁 Entry Bonus: Absolute Free L&apos;Oréal Goodie Bag for every consultation</span>
+          <span className="hidden sm:inline">•</span>
+          <span className="text-emerald-300 font-semibold">💰 Entry &amp; Consult: 100% FREE</span>
+          <span className="hidden sm:inline">•</span>
+          <span className="text-purple-300 font-medium">🔬 Micro-analysis &amp; Color Mapping by Corporate Experts</span>
+        </div>
+        <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-[11px] font-semibold leading-relaxed flex items-center justify-center gap-1.5 text-left sm:text-center">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+          <span>{LOREAL_EVENT_TERMS}</span>
+        </div>
+      </div>
+
       {/* ========================================================================= */}
-      {/* 2. BACKGROUND BLUR & VERIFICATION GATE OVERLAY */}
+      {/* 2. SCREEN 2: WINNER FORM & OFFER VOUCHER DOWNLOAD PAGE */}
       {/* ========================================================================= */}
-      {(isPendingVerification || isVerifiedAndRevealed) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-xl animate-in fade-in duration-300 overflow-y-auto">
-          <div className="relative w-full max-w-lg my-auto rounded-3xl bg-zinc-950 border border-zinc-800/80 shadow-2xl p-5 sm:p-7 overflow-hidden text-center">
+      {isVerifiedAndRevealed && winningPrize && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300 overflow-y-auto">
+          <div className="relative w-full max-w-lg my-auto rounded-3xl bg-zinc-950 border border-zinc-800/80 shadow-2xl p-5 sm:p-7 overflow-hidden text-center space-y-4">
             {/* AMBIENT GRADIENT BLOB */}
             <div className="absolute -top-24 -left-24 w-48 h-48 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-pink-600/20 rounded-full blur-3xl pointer-events-none" />
 
-            {/* STAGE A: WON PENDING VERIFICATION (THE GATE) */}
-            {isPendingVerification && (
-              <div className="space-y-4">
-                {/* MYSTERY LOCKED PRIZE CARD */}
-                <div className="relative overflow-hidden p-4 rounded-2xl bg-zinc-900/90 border border-amber-500/30 shadow-lg">
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/10 via-amber-500/10 to-pink-600/10 animate-pulse" />
-                  <div className="relative flex flex-col items-center justify-center gap-1.5">
-                    <div className="h-11 w-11 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner animate-bounce">
-                      <Lock className="h-5 w-5" />
-                    </div>
-                    <div className="text-base sm:text-lg font-black text-white tracking-tight flex items-center gap-1.5">
-                      <span>Prize Won!</span>
-                      <span className="blur-sm select-none font-mono text-amber-300 bg-amber-400/20 px-2 py-0.5 rounded">
-                        ██████████
-                      </span>
-                    </div>
-                    <p className="text-xs text-zinc-300 max-w-sm">
-                      Complete 2 quick steps below to unlock and reveal your mystery salon prize!
-                    </p>
-                  </div>
+            {/* CONGRATULATIONS BADGE */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-extrabold tracking-wide">
+              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+              <span>CONGRATULATIONS! YOU WON</span>
+            </div>
+
+            {/* WON PRIZE SHOWCASE */}
+            <div
+              className="p-5 rounded-2xl border text-center shadow-xl relative overflow-hidden"
+              style={{
+                backgroundColor: `${winningPrize.color}15`,
+                borderColor: `${winningPrize.color}50`,
+              }}
+            >
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="h-36 w-36 sm:h-44 sm:w-44 rounded-3xl flex items-center justify-center p-3 bg-white border-2 border-amber-500/50 shadow-2xl mb-2 overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={getOfferProductImage(winningPrize.label)}
+                    alt={winningPrize.label}
+                    className="h-full w-full object-contain filter drop-shadow-md"
+                  />
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                  {winningPrize.label}
+                </h3>
+                <p className="text-xs sm:text-sm text-zinc-300 max-w-md">
+                  {winningPrize.description}
+                </p>
+              </div>
+
+              {/* MANDATORY DISCLAIMER */}
+              <div className="mt-4 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[11px] font-bold text-left flex items-start gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <span>{LOREAL_EVENT_TERMS}</span>
+              </div>
+            </div>
+
+            {/* FORM TO FILL: NAME AND NUMBER */}
+            {!isFormSubmitted ? (
+              <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 text-left space-y-3 shadow-lg">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-xs font-black uppercase tracking-wider text-white">
+                    Enter Details to Download Voucher
+                  </span>
+                  <span className="text-[10px] font-mono text-amber-400 font-bold">
+                    1 Offer / Number
+                  </span>
                 </div>
 
-                {/* VERIFICATION STEPS */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-                  {/* STEP 1: GOOGLE REVIEWS */}
-                  <div
-                    className={`p-3.5 rounded-2xl border transition-all ${
-                      googleRated
-                        ? "bg-emerald-950/30 border-emerald-500/40"
-                        : "bg-zinc-900/80 border-zinc-800 hover:border-zinc-700"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
-                        <span className="text-xs font-bold text-white">1. Google Review</span>
-                      </div>
-                      {googleRated && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
-                    </div>
-
-                    <div className="flex flex-col items-center bg-zinc-950/80 p-2 rounded-xl border border-zinc-800/80 mb-2">
-                      <QRCodeSVG
-                        value={settings.google_review_url || "https://g.page/r/CbGd_cwnL9zrEBM/review"}
-                        size={84}
-                        level="M"
-                        className="rounded"
+                <div className="space-y-2.5">
+                  <div>
+                    <label className="block text-[10px] font-mono uppercase text-zinc-400 mb-1 font-bold">
+                      Your Full Name *
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                      <input
+                        type="text"
+                        value={customerName}
+                        onChange={(e) => {
+                          setCustomerName(e.target.value);
+                          setPhoneError(null);
+                        }}
+                        placeholder="e.g. Priya Sharma"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-2.5 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 transition-colors"
+                        required
                       />
-                      <span className="text-[10px] text-zinc-400 mt-1 font-mono">Scan to Rate Us</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <a
-                        href={settings.google_review_url || "https://g.page/r/CbGd_cwnL9zrEBM/review"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-bold transition-colors"
-                      >
-                        <span>Open Review Link</span>
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                      <button
-                        onClick={() => setGoogleRated(!googleRated)}
-                        className={`w-full py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                          googleRated
-                            ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30"
-                            : "bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30"
-                        }`}
-                      >
-                        {googleRated ? (
-                          <>
-                            <Check className="h-3.5 w-3.5" />
-                            <span>Rated & Verified</span>
-                          </>
-                        ) : (
-                          <span>I Left a Review ✓</span>
-                        )}
-                      </button>
                     </div>
                   </div>
 
-                  {/* STEP 2: INSTAGRAM */}
-                  <div
-                    className={`p-3.5 rounded-2xl border transition-all ${
-                      instaFollowed
-                        ? "bg-emerald-950/30 border-emerald-500/40"
-                        : "bg-zinc-900/80 border-zinc-800 hover:border-zinc-700"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <InstagramIcon className="h-4 w-4 text-pink-400" />
-                        <span className="text-xs font-bold text-white">2. Instagram Follow</span>
-                      </div>
-                      {instaFollowed && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
-                    </div>
-
-                    <div className="flex flex-col items-center bg-zinc-950/80 p-2 rounded-xl border border-zinc-800/80 mb-2">
-                      <QRCodeSVG
-                        value={
-                          settings.instagram_url ||
-                          "https://www.instagram.com/beleziasalonlaxminagar?igsi=MTI0ZG85dGRvdTl6aQ%3D%3D&utm_source=qr"
-                        }
-                        size={84}
-                        level="M"
-                        className="rounded"
+                  <div>
+                    <label className="block text-[10px] font-mono uppercase text-zinc-400 mb-1 font-bold">
+                      WhatsApp Number *
+                    </label>
+                    <div className="relative">
+                      <Phone className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                      <input
+                        type="tel"
+                        value={customerPhone}
+                        onChange={(e) => {
+                          setCustomerPhone(e.target.value);
+                          setPhoneError(null);
+                        }}
+                        placeholder="10-digit mobile number"
+                        maxLength={10}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-2.5 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 transition-colors"
                       />
-                      <span className="text-[10px] text-zinc-400 mt-1 font-mono">@BeleziaSalon</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <a
-                        href={
-                          settings.instagram_url ||
-                          "https://www.instagram.com/beleziasalonlaxminagar?igsi=MTI0ZG85dGRvdTl6aQ%3D%3D&utm_source=qr"
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-bold transition-colors"
-                      >
-                        <span>Open Instagram</span>
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                      <button
-                        onClick={() => setInstaFollowed(!instaFollowed)}
-                        className={`w-full py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                          instaFollowed
-                            ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30"
-                            : "bg-pink-600/20 hover:bg-pink-600/30 text-pink-300 border border-pink-500/30"
-                        }`}
-                      >
-                        {instaFollowed ? (
-                          <>
-                            <Check className="h-3.5 w-3.5" />
-                            <span>Followed & Verified</span>
-                          </>
-                        ) : (
-                          <span>I Followed ✓</span>
-                        )}
-                      </button>
                     </div>
                   </div>
                 </div>
 
-                {/* BOTTOM ACTIONS: UNLOCK (IF BOTH COMPLETE) & CLEAR SKIP BUTTON */}
-                <div className="pt-2 flex flex-col gap-2">
-                  {googleRated && instaFollowed ? (
-                    <button
-                      onClick={() => handleRevealPrize(false)}
-                      className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 text-white font-extrabold text-sm shadow-xl shadow-purple-600/30 hover:brightness-110 active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-2 animate-pulse"
-                    >
-                      <Unlock className="h-4 w-4" />
-                      <span>Unlock My Reward Now!</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleRevealPrize(true)}
-                      className="w-full py-2.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1"
-                    >
-                      <span>Skip Verification & Claim Prize Directly</span>
-                      <ArrowRight className="h-3 w-3" />
-                    </button>
-                  )}
+                {phoneError && (
+                  <div className="p-2.5 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs font-semibold flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                    <span>{phoneError}</span>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleGenerateAndDownloadVoucher}
+                  disabled={isSubmitting}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 active:scale-98 text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <FileDown className="h-4 w-4" />
+                  <span>
+                    {isSubmitting ? "Generating Voucher..." : "Download Voucher Image (.jpg)"}
+                  </span>
+                </button>
+              </div>
+            ) : (
+              /* ALREADY SUBMITTED: FRONT DESK OFFER ID & RE-DOWNLOAD BUTTON */
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between gap-2 max-w-sm mx-auto">
+                  <div className="text-left">
+                    <div className="text-[9px] uppercase font-mono tracking-widest text-zinc-500">
+                      Front Desk Offer ID
+                    </div>
+                    <div className="text-base sm:text-lg font-mono font-black text-amber-400 tracking-wider">
+                      {claimCode}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCopyCode}
+                    className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedCode ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedCode ? "Copied" : "Copy"}</span>
+                  </button>
                 </div>
+
+                <button
+                  onClick={() => setShowVoucherModal(true)}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 active:scale-98 text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <FileDown className="h-4 w-4" />
+                  <span>Download Voucher Image (.jpg)</span>
+                </button>
               </div>
             )}
 
-            {/* STAGE B: VERIFIED AND REVEALED (THE REVEAL) */}
-            {isVerifiedAndRevealed && winningPrize && (
-              <div className="space-y-4 animate-in zoom-in-95 duration-300">
-                {/* UNMASKED CELEBRATION BADGE */}
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-extrabold tracking-wide">
-                  <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                  <span>{wasSkipped ? "REWARD UNLOCKED" : "VERIFIED & UNLOCKED"}</span>
-                </div>
-
-                {/* REVEALED PRIZE SHOWCASE */}
-                <div
-                  className="p-5 rounded-2xl border text-center shadow-xl relative overflow-hidden"
-                  style={{
-                    backgroundColor: `${winningPrize.color}15`,
-                    borderColor: `${winningPrize.color}50`,
-                  }}
+            {/* IN-STORE POS MODAL ACTIONS ONLY */}
+            {isModal && (
+              <div className="pt-1">
+                <button
+                  onClick={handleResetSpin}
+                  className="w-full py-2.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  <div className="flex flex-col items-center gap-1.5">
-                    <div
-                      className="h-14 w-14 rounded-2xl flex items-center justify-center text-white shadow-lg mb-1"
-                      style={{ backgroundColor: winningPrize.color }}
-                    >
-                      <Gift className="h-7 w-7" />
-                    </div>
-                    <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                      {winningPrize.label}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-zinc-300 max-w-md">
-                      {winningPrize.description}
-                    </p>
-                  </div>
-
-                  {/* CLAIM CODE BOX */}
-                  <div className="mt-4 p-3 rounded-xl bg-zinc-950/80 border border-zinc-800 flex items-center justify-between gap-2 max-w-xs mx-auto">
-                    <div className="text-left">
-                      <div className="text-[9px] uppercase font-mono tracking-widest text-zinc-500">
-                        Front Desk Claim Code
-                      </div>
-                      <div className="text-base sm:text-lg font-mono font-black text-amber-400 tracking-wider">
-                        {claimCode}
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleCopyCode}
-                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedCode ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                      <span>{copiedCode ? "Copied" : "Copy"}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* STOCK / CLAIM STATUS NOTIFICATION */}
-                {stockDeductedMessage && (
-                  <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs font-semibold text-left">
-                    {stockDeductedMessage}
-                  </div>
-                )}
-
-                {/* FRONT DESK ACTIONS */}
-                <div className="space-y-2 pt-1">
-                  {!isClaimed ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <button
-                        onClick={handleClaimReward}
-                        className="py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                      >
-                        <Check className="h-4 w-4" />
-                        <span>Claim & Deduct Stock</span>
-                      </button>
-
-                      <button
-                        onClick={handleApplyToPOS}
-                        className="py-2.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                      >
-                        <ShoppingBag className="h-4 w-4 text-amber-400" />
-                        <span>Apply to Current POS Cart</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="py-2 px-3 rounded-xl bg-emerald-900/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span>Prize Marked Claimed by Reception Desk</span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={handleShareWhatsApp}
-                      className="flex-1 py-2 px-3 rounded-xl bg-[#25D366]/20 hover:bg-[#25D366]/30 border border-[#25D366]/40 text-[#25D366] text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <Share2 className="h-3.5 w-3.5" />
-                      <span>WhatsApp Reward</span>
-                    </button>
-
-                    <button
-                      onClick={handleResetSpin}
-                      className="py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5 text-purple-400" />
-                      <span>Spin Again</span>
-                    </button>
-                  </div>
-                </div>
-
-                {isModal && onClose && (
-                  <div className="pt-2">
-                    <button
-                      onClick={onClose}
-                      className="w-full py-2 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      Done & Return to Billing
-                    </button>
-                  </div>
-                )}
+                  <RotateCcw className="h-3.5 w-3.5 text-purple-400" />
+                  <span>Spin Again</span>
+                </button>
               </div>
             )}
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. DOWNLOADABLE SHAREABLE OFFER VOUCHER CARD MODAL */}
+      {/* ========================================================================= */}
+      {showVoucherModal && winningPrize && (
+        <OfferVoucherCard
+          showModalWrapper={true}
+          onClose={() => setShowVoucherModal(false)}
+          customerName={customerName || "Valued Guest"}
+          customerPhone={customerPhone}
+          wonItem={winningPrize.label}
+          offerId={claimCode || offerToken || "BZ-LOREAL-OFFER"}
+          eventDate="31st October"
+          eventTime="10:00 AM – 9:00 PM"
+          salonName="Belezia Salon"
+          salonAddress="Laxmi Nagar, Delhi"
+        />
       )}
     </div>
   );
