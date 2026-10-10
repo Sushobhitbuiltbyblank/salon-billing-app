@@ -183,7 +183,24 @@ export async function POST(request: Request) {
           success: false,
           error: "Customer full name and 10-digit WhatsApp number are required to create an offer claim.",
         },
-        { status: 400 }
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    // Anti-fraud: strictly prevent duplicate claims for the same phone number
+    const existingClaims = await loadCloudClaims();
+    const existingForPhone = existingClaims.find(
+      (c) => c.customerPhone && cleanPhoneNumber(c.customerPhone) === cleanPhone
+    );
+
+    if (existingForPhone) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `⚠️ Already claimed! Phone number +91 ${cleanPhone} already claimed offer "${existingForPhone.prizeLabel}" (${existingForPhone.claimCode}). Each customer can only claim once.`,
+          claim: existingForPhone,
+        },
+        { status: 409, headers: NO_CACHE_HEADERS }
       );
     }
 

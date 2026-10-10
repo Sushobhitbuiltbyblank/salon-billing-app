@@ -64,6 +64,7 @@ export function sanitizeClaims(claims: any[]): SpinClaimRecord[] {
       Boolean(c.claimCode && String(c.claimCode).trim())
   );
 
+  const seenPhones = new Set<string>();
   const seenCodes = new Set<string>();
   const seenIds = new Set<string>();
   const deduped: SpinClaimRecord[] = [];
@@ -71,11 +72,22 @@ export function sanitizeClaims(claims: any[]): SpinClaimRecord[] {
   for (const c of valid) {
     const idKey = String(c.id || "").trim();
     const codeKey = String(c.claimCode || "").trim().toLowerCase();
+    const cleanPhone = cleanPhoneNumber(String(c.customerPhone || ""));
+
+    // Anti-duplicate: Enforce single claim per phone number, claimCode, and ID
     if (idKey && seenIds.has(idKey)) continue;
     if (codeKey && seenCodes.has(codeKey)) continue;
+    if (cleanPhone && cleanPhone.length === 10 && seenPhones.has(cleanPhone)) continue;
+
     if (idKey) seenIds.add(idKey);
     if (codeKey) seenCodes.add(codeKey);
-    deduped.push(c as SpinClaimRecord);
+    if (cleanPhone && cleanPhone.length === 10) seenPhones.add(cleanPhone);
+
+    deduped.push({
+      ...c,
+      customerPhone: cleanPhone || c.customerPhone,
+      customerName: String(c.customerName).trim(),
+    } as SpinClaimRecord);
   }
 
   return deduped;
@@ -216,9 +228,8 @@ export async function loadCloudClaims(): Promise<SpinClaimRecord[]> {
   // 1. Supabase is the central source of truth across all devices
   if (isSupabaseConfigured() && supabase) {
     const systemData = await getSupabaseSystemData();
-    // NEVER merge stale disk cache into Supabase data!
-    // Whatever is in Supabase is the single source of truth.
-    // If an item was deleted on any device, it is gone from Supabase and stays gone.
+    // Persist sanitized/deduplicated claims back to Supabase and disk cache
+    saveSupabaseSystemData({ claims: systemData.claims }).catch(() => {});
     safeWriteJson(LOCAL_CLAIMS_FILE, TMP_CLAIMS_FILE, systemData.claims).catch(() => {});
     return systemData.claims;
   }
@@ -248,6 +259,17 @@ export async function addCloudClaim(newClaim: SpinClaimRecord): Promise<SpinClai
   const cleanPhone = cleanPhoneNumber(newClaim.customerPhone || "");
   const cleanName = (newClaim.customerName || "").trim();
 
+  // Strictly reject duplicate claims for the same phone number
+  if (cleanPhone && cleanPhone.length === 10) {
+    const existing = currentClaims.find(
+      (c) => c.customerPhone && cleanPhoneNumber(c.customerPhone) === cleanPhone
+    );
+    if (existing) {
+      console.warn(`[AntiDuplicate] Rejected duplicate claim for ${cleanPhone}. Existing: ${existing.claimCode}`);
+      return currentClaims;
+    }
+  }
+
   const updatedClaim: SpinClaimRecord = {
     ...newClaim,
     customerName: cleanName,
@@ -259,7 +281,8 @@ export async function addCloudClaim(newClaim: SpinClaimRecord): Promise<SpinClai
     ...currentClaims.filter(
       (c) =>
         c.id !== updatedClaim.id &&
-        c.claimCode.trim().toLowerCase() !== updatedClaim.claimCode.trim().toLowerCase()
+        c.claimCode.trim().toLowerCase() !== updatedClaim.claimCode.trim().toLowerCase() &&
+        (!cleanPhone || !c.customerPhone || cleanPhoneNumber(c.customerPhone) !== cleanPhone)
     ),
   ];
 
