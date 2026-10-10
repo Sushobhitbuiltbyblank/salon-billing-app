@@ -48,6 +48,13 @@ export default function SalonPOSApp() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hostname = window.location.hostname || "";
+      if (hostname.includes("belezia-offers") || hostname.includes("offers.belezia")) {
+        window.location.replace("/spin" + window.location.search);
+        return;
+      }
+    }
     setMounted(true);
   }, []);
 
