@@ -823,6 +823,7 @@ export function AdminPortal() {
           { id: "staff", label: "Staff & Commissions", icon: Users, count: staff.length },
           { id: "catalog", label: "Services & Products", icon: Package, count: catalog.length },
           { id: "categories", label: "Categories", icon: Layers, count: categories.length },
+          { id: "rewards", label: "Spin Wheel & Claim History", icon: Gift },
           ...(currentUser?.role === "admin"
             ? [
                 { id: "users", label: "Receptionists & PINs", icon: KeyRound, count: users.length },

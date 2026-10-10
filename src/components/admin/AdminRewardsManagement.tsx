@@ -160,24 +160,24 @@ export function AdminRewardsManagement({
 
   // Delete single claim record
   const handleDeleteClaim = async (claim: SpinClaimRecord) => {
-    if (!confirm(`Are you sure you want to delete claim record "${claim.claimCode}" (${claim.customerName || "Customer"})?`)) {
+    if (!confirm(`Are you sure you want to delete claim record "${claim.claimCode}" for ${claim.customerName || "Customer"} (${claim.customerPhone || "no phone"})?\n\nThis will remove the claim and release the customer's phone number so they can spin again.`)) {
       return;
     }
     await deleteClaimRecord(claim.id, claim.claimCode, claim.customerPhone);
     setClaimLogs((prev) => prev.filter((c) => c.id !== claim.id && c.claimCode !== claim.claimCode));
-    refreshClaims();
+    await refreshClaims();
     showToast("🗑️ Claim record deleted successfully!");
   };
 
-  // Delete all dummy/test claims in history
+  // Delete all claims in history
   const handleClearAllClaims = async () => {
-    if (!confirm("⚠️ Are you sure you want to DELETE ALL dummy claim records in history?\n\nThis will clear all test claims from server, local storage and Supabase, and release all test phone numbers so they can spin again.")) {
+    if (!confirm("⚠️ Are you sure you want to DELETE ALL claim history records?\n\nThis will permanently delete all claims from cloud storage and database, and release all phone numbers so they can spin again.")) {
       return;
     }
     await clearAllClaimRecords();
     setClaimLogs([]);
-    refreshClaims();
-    showToast("🗑️ All claim history records deleted successfully!");
+    await refreshClaims();
+    showToast("🗑️ All claim history deleted successfully!");
   };
 
   // Handle Offer Verification by Unique ID
@@ -755,12 +755,12 @@ export function AdminRewardsManagement({
               {isAdmin && claimLogs.length > 0 && (
                 <button
                   onClick={handleClearAllClaims}
-                  className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
-                  title="Delete all dummy/test claims"
+                  className="px-3 py-1.5 rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-500/50 text-rose-300 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 shadow-sm"
+                  title="Delete all claim history records"
                 >
                   <Trash2 className="h-3.5 w-3.5 text-rose-400" />
-                  <span className="hidden sm:inline">Delete All Dummy Claims</span>
-                  <span className="sm:hidden">Clear All</span>
+                  <span className="hidden sm:inline">Delete All Claim History</span>
+                  <span className="sm:hidden">Delete All</span>
                 </button>
               )}
             </div>
@@ -841,10 +841,11 @@ export function AdminRewardsManagement({
                             {isAdmin && (
                               <button
                                 onClick={() => handleDeleteClaim(claim)}
-                                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950 text-zinc-400 hover:text-rose-300 border border-zinc-800 hover:border-rose-500/40 transition-colors cursor-pointer"
+                                className="px-2 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 hover:text-white border border-rose-500/40 transition-colors cursor-pointer flex items-center gap-1 font-bold text-[11px]"
                                 title="Delete this claim record"
                               >
-                                <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+                                <Trash2 className="h-3 w-3 text-rose-400" />
+                                <span>Delete</span>
                               </button>
                             )}
                           </div>
