@@ -119,7 +119,7 @@ export const DEFAULT_PRIZES: RewardPrize[] = [
     color: "#3b82f6", // Blue
     textColor: "#ffffff",
     iconName: "Gift",
-    description: "Complimentary bottle of L'Oréal Professionnel Shampoo (300ml)",
+    description: "Complimentary bottle of L'Oréal Professionnel Shampoo",
     requiresInventoryDeduction: true,
   },
   {
@@ -171,3 +171,18 @@ export const DEFAULT_PRIZES: RewardPrize[] = [
     requiresInventoryDeduction: true,
   },
 ];
+
+/**
+ * Strips product quantities and volumes (e.g., "300ml", "300 ml", "(300ml)", "100g", "250 ml")
+ * from offer names, prize labels, and descriptions.
+ */
+export function removeProductQuantity(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/\s*\(\s*\d+\s*(?:ml|g|gm|kg|l|ltr|liter|litres|oz)\s*\)/gi, "")
+    .replace(/\s+\d+\s*(?:ml|g|gm|kg|ltr|liter|litres|oz)\b/gi, "")
+    .replace(/\b\d+\s*(?:ml|g|gm|kg|ltr|liter|litres|oz)\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+

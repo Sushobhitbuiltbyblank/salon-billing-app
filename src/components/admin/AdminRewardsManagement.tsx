@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
-import { SpinClaimRecord } from "@/types/rewards";
+import { SpinClaimRecord, removeProductQuantity } from "@/types/rewards";
 import { getClaimRecords, getLocalSpinLogs, fetchServerClaimRecords } from "@/lib/rewardStorage";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,11 @@ interface VerificationDetails {
   venue: string;
 }
 
-export function AdminRewardsManagement() {
+interface AdminRewardsManagementProps {
+  initialSubTab?: "verify" | "pool" | "claims" | "gate";
+}
+
+export function AdminRewardsManagement({ initialSubTab = "verify" }: AdminRewardsManagementProps = {}) {
   const {
     settings,
     updateSettings,
@@ -76,8 +80,12 @@ export function AdminRewardsManagement() {
     clearAllClaimRecords,
   } = useApp();
 
-  const [claimLogs, setClaimLogs] = useState<SpinClaimRecord[]>(() => getClaimRecords());
-  const [activeSubTab, setActiveSubTab] = useState<"verify" | "pool" | "claims" | "gate">("verify");
+  const [claimLogs, setClaimLogs] = useState<SpinClaimRecord[]>(() =>
+    getClaimRecords().filter(
+      (c) => Boolean(c.customerName && c.customerName.trim() && c.customerPhone && c.customerPhone.trim())
+    )
+  );
+  const [activeSubTab, setActiveSubTab] = useState<"verify" | "pool" | "claims" | "gate">(initialSubTab);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [searchLog, setSearchLog] = useState("");
 
@@ -112,7 +120,10 @@ export function AdminRewardsManagement() {
     if (showLoadingState) setIsLoadingClaims(true);
     try {
       const records = await fetchServerClaimRecords();
-      setClaimLogs(records);
+      const valid = records.filter(
+        (c) => Boolean(c.customerName && c.customerName.trim() && c.customerPhone && c.customerPhone.trim())
+      );
+      setClaimLogs(valid);
     } catch (err) {
       console.warn("Failed to refresh claims:", err);
     } finally {
@@ -348,34 +359,18 @@ export function AdminRewardsManagement() {
           onClick={() => setActiveSubTab("verify")}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
             activeSubTab === "verify"
-              ? "bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 text-white shadow-md shadow-purple-600/30 font-black"
+              ? "bg-purple-600 text-white shadow-md shadow-purple-600/30 font-black"
               : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
           }`}
         >
           <ShieldCheck className="h-4 w-4 text-amber-300" />
           <span>Verify Unique Offer ID</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/40 text-amber-300 font-bold border border-amber-500/40">
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-amber-300 font-bold border border-zinc-700">
             Live
           </span>
         </button>
 
-        {/* TAB 2: POOL STOCKS */}
-        <button
-          onClick={() => setActiveSubTab("pool")}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-            activeSubTab === "pool"
-              ? "bg-purple-600 text-white shadow-md shadow-purple-600/30 font-black"
-              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
-          }`}
-        >
-          <Layers className="h-4 w-4 text-amber-400" />
-          <span>Manage Pool Stocks</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-amber-300 font-bold border border-zinc-700">
-            {wheelInventory?.length || 6}
-          </span>
-        </button>
-
-        {/* TAB 3: CLAIMS HISTORY */}
+        {/* TAB 2: CLAIMS HISTORY */}
         <button
           onClick={() => setActiveSubTab("claims")}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
@@ -391,7 +386,7 @@ export function AdminRewardsManagement() {
           </span>
         </button>
 
-        {/* TAB 4: VERIFICATION GATE */}
+        {/* TAB 3: VERIFICATION GATE */}
         <button
           onClick={() => setActiveSubTab("gate")}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
@@ -402,6 +397,22 @@ export function AdminRewardsManagement() {
         >
           <QrCode className="h-4 w-4" />
           <span>Verification Gate QR &amp; URLs</span>
+        </button>
+
+        {/* TAB 4: POOL STOCKS (LAST POSITION) */}
+        <button
+          onClick={() => setActiveSubTab("pool")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+            activeSubTab === "pool"
+              ? "bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 text-white shadow-md shadow-purple-600/30 font-black"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+          }`}
+        >
+          <Layers className="h-4 w-4 text-amber-400" />
+          <span>Manage Pool Stocks</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-black/40 text-amber-300 font-bold border border-amber-500/40">
+            {wheelInventory?.length || 6}
+          </span>
         </button>
       </div>
 
@@ -555,7 +566,7 @@ export function AdminRewardsManagement() {
                           Won Reward
                         </div>
                         <div className="text-xl font-black text-white uppercase tracking-tight">
-                          {verificationResult.offerDetails.wonItem}
+                          {removeProductQuantity(verificationResult.offerDetails.wonItem)}
                         </div>
                       </div>
                     </div>
@@ -786,7 +797,7 @@ export function AdminRewardsManagement() {
                             </div>
                           )}
                         </td>
-                        <td className="p-3 font-bold text-white">{claim.prizeLabel}</td>
+                        <td className="p-3 font-bold text-white">{removeProductQuantity(claim.prizeLabel)}</td>
                         <td className="p-3 uppercase font-mono text-[10px] text-zinc-400">
                           {claim.prizeType}
                         </td>

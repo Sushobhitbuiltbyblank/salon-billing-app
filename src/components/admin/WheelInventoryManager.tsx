@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
-import { WheelInventoryItem, WheelItemCategory, DEFAULT_WHEEL_INVENTORY } from "@/types/rewards";
+import { WheelInventoryItem, WheelItemCategory, DEFAULT_WHEEL_INVENTORY, removeProductQuantity } from "@/types/rewards";
 import { generateUUID } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -179,7 +179,7 @@ export function WheelInventoryManager({ standalone = false }: WheelInventoryMana
 
     const itemToSave: WheelInventoryItem = {
       id: editingItem?.id || modalForm.id || generateUUID(),
-      title: modalForm.title.trim(),
+      title: removeProductQuantity(modalForm.title.trim()),
       category: modalForm.category,
       quantity: Math.max(0, modalForm.quantity || 0),
       is_active: modalForm.is_active,
@@ -534,7 +534,7 @@ export function WheelInventoryManager({ standalone = false }: WheelInventoryMana
                           </div>
                           <div>
                             <div className="font-bold text-white text-sm tracking-tight flex items-center gap-1.5">
-                              <span>{item.title}</span>
+                              <span>{removeProductQuantity(item.title)}</span>
                               {isOutOfStock && (
                                 <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-400 font-bold border border-rose-500/30">
                                   Out of Stock

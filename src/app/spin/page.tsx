@@ -1,11 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AppProvider } from "@/context/AppContext";
 import { SpinTheWheel } from "@/components/rewards/SpinTheWheel";
-import { Scissors, ArrowLeft, Maximize2, Minimize2, Sparkles, Calendar, MapPin } from "lucide-react";
+import { Scissors, Maximize2, Minimize2, Sparkles, Calendar, MapPin } from "lucide-react";
 import { SALON_BOOKING_WHATSAPP } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
@@ -83,36 +82,24 @@ function SpinPageContent() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {!isExternal && (
-              <button
-                onClick={toggleFullscreen}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
-                title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen Tablet Mode"}
-              >
-                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                <span>{isFullscreen ? "Exit Fullscreen" : "Tablet Mode"}</span>
-              </button>
-            )}
+            <button
+              onClick={toggleFullscreen}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+              title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen Tablet Mode"}
+            >
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              <span>{isFullscreen ? "Exit Fullscreen" : "Tablet Mode"}</span>
+            </button>
 
-            {!isExternal ? (
-              <Link
-                href="/"
-                className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors shadow-md shadow-purple-600/30 cursor-pointer"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Back to POS</span>
-                <span className="sm:hidden">POS</span>
-              </Link>
-            ) : (
-              <a
-                href={`https://wa.me/917290828680`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#25D366]/20 hover:bg-[#25D366]/30 border border-[#25D366]/40 text-[#25D366] text-xs font-bold transition-colors cursor-pointer whitespace-nowrap"
-              >
-                <span>Help</span>
-              </a>
-            )}
+            <a
+              href={`https://wa.me/917290828680?text=Hi%20Belezia%20Salon,%20I%20have%20a%20question%20about%20the%20L'Or%C3%A9al%20Lucky%20Wheel%20Offer!`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#25D366]/20 hover:bg-[#25D366]/30 border border-[#25D366]/40 text-[#25D366] text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shadow-sm"
+              title="Need Help? Chat on WhatsApp"
+            >
+              <span>Salon Help</span>
+            </a>
           </div>
         </div>
       </header>

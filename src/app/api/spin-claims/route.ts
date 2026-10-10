@@ -8,12 +8,15 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 const DATA_DIR = path.join(process.cwd(), "data");
 const CLAIMS_FILE = path.join(DATA_DIR, "spin_claims.json");
 
-// Helper to load claims from disk
+// Helper to load claims from disk (filtering out incomplete claims without name/phone)
 async function loadClaimsFromFile(): Promise<SpinClaimRecord[]> {
   try {
     const content = await fs.readFile(CLAIMS_FILE, "utf-8");
     const parsed = JSON.parse(content);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (c) => Boolean(c.customerName && c.customerName.trim() && c.customerPhone && c.customerPhone.trim())
+    );
   } catch {
     return [];
   }
@@ -41,10 +44,15 @@ export async function GET(request: Request) {
     // 1. Phone number claim check
     if (checkPhone) {
       const cleanPhone = cleanPhoneNumber(checkPhone);
-      const hasClaimed = claims.some(
+      const match = claims.find(
         (c) => c.customerPhone && cleanPhoneNumber(c.customerPhone) === cleanPhone
       );
-      return NextResponse.json({ hasClaimed, phone: cleanPhone });
+      const hasClaimed = Boolean(match);
+      return NextResponse.json({
+        hasClaimed,
+        phone: cleanPhone,
+        claim: match || null,
+      });
     }
 
     // 2. Offer verification check
@@ -108,14 +116,28 @@ export async function POST(request: Request) {
       );
     }
 
+    const cleanName = body.customerName ? String(body.customerName).trim() : "";
+    const cleanPhone = body.customerPhone ? cleanPhoneNumber(String(body.customerPhone)) : "";
+
+    // Strictly enforce: customer who does not fill name and number must NOT be created/saved in history
+    if (!cleanName || !cleanPhone || cleanPhone.length !== 10) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Customer full name and 10-digit WhatsApp number are required to create an offer claim.",
+        },
+        { status: 400 }
+      );
+    }
+
     const newClaim: SpinClaimRecord = {
       id: body.id || `claim-${Date.now()}`,
       claimCode: body.claimCode,
       prizeId: body.prizeId || "prize-custom",
       prizeLabel: body.prizeLabel,
       prizeType: body.prizeType || "product_gift",
-      customerName: body.customerName ? String(body.customerName).trim() : undefined,
-      customerPhone: body.customerPhone ? cleanPhoneNumber(String(body.customerPhone)) : undefined,
+      customerName: cleanName,
+      customerPhone: cleanPhone,
       wasVerified: body.wasVerified !== undefined ? Boolean(body.wasVerified) : true,
       inventoryDeducted: Boolean(body.inventoryDeducted),
       createdAt: body.createdAt || new Date().toISOString(),

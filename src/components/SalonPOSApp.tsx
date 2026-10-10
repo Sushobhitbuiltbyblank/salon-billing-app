@@ -15,7 +15,7 @@ import { EditInvoiceModal } from "@/components/invoice/EditInvoiceModal";
 import { WhatsAppShareModal } from "@/components/invoice/WhatsAppShareModal";
 import { LoginModal } from "@/components/auth/LoginModal";
 import { SpinWheelModal } from "@/components/rewards/SpinWheelModal";
-import { SpinTheWheel } from "@/components/rewards/SpinTheWheel";
+import { AdminRewardsManagement } from "@/components/admin/AdminRewardsManagement";
 import { Scissors } from "lucide-react";
 
 function MainContent() {
@@ -35,7 +35,7 @@ function MainContent() {
       {activeTab === "staff" && <StaffPerformance />}
       {activeTab === "lucky_wheel" && (
         <div className="py-2">
-          <SpinTheWheel isModal={false} />
+          <AdminRewardsManagement initialSubTab="verify" />
         </div>
       )}
       {activeTab === "history" && <RecentInvoices />}

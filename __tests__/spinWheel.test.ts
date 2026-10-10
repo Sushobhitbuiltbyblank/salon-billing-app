@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { DEFAULT_PRIZES, SpinClaimRecord } from "@/types/rewards";
+import { DEFAULT_PRIZES, SpinClaimRecord, removeProductQuantity } from "@/types/rewards";
 import { generateClaimCode, getClaimRecords, saveClaimRecord } from "@/lib/rewardStorage";
 
 class LocalStorageMock {
@@ -58,7 +58,7 @@ describe("Spin-the-Wheel Rewards Engine", () => {
     expect(code2).toMatch(/^BZ-SPIN-\d{4}$/);
   });
 
-  it("should properly persist and retrieve claim records in storage", () => {
+  it("should properly persist and retrieve claim records with customer details in storage", () => {
     expect(getClaimRecords()).toEqual([]);
 
     const record: SpinClaimRecord = {
@@ -67,6 +67,8 @@ describe("Spin-the-Wheel Rewards Engine", () => {
       prizeId: "prize-detan",
       prizeLabel: "Free De-Tan Glow",
       prizeType: "service",
+      customerName: "Rohan Verma",
+      customerPhone: "9876543210",
       wasVerified: true,
       inventoryDeducted: false,
       createdAt: new Date().toISOString(),
@@ -77,7 +79,23 @@ describe("Spin-the-Wheel Rewards Engine", () => {
     const stored = getClaimRecords();
     expect(stored).toHaveLength(1);
     expect(stored[0].claimCode).toBe("BZ-SPIN-9999");
+    expect(stored[0].customerName).toBe("Rohan Verma");
+    expect(stored[0].customerPhone).toBe("9876543210");
     expect(stored[0].wasVerified).toBe(true);
+
+    // Unsubmitted claim without customer details should NOT be saved
+    const incompleteRecord: SpinClaimRecord = {
+      id: "claim-test-unsubmitted",
+      claimCode: "BZ-SPIN-0000",
+      prizeId: "prize-detan",
+      prizeLabel: "Free De-Tan Glow",
+      prizeType: "service",
+      wasVerified: false,
+      inventoryDeducted: false,
+      createdAt: new Date().toISOString(),
+    };
+    saveClaimRecord(incompleteRecord);
+    expect(getClaimRecords()).toHaveLength(1);
   });
 
   it("should correctly calculate inventory stock decrement for physical product claims", () => {
@@ -97,5 +115,12 @@ describe("Spin-the-Wheel Rewards Engine", () => {
     const zeroProduct = { ...mockProduct, stock_qty: 0 };
     const zeroStock = Math.max(0, (zeroProduct.stock_qty ?? 0) - 1);
     expect(zeroStock).toBe(0);
+  });
+
+  it("should strip product quantities (ml, gm, etc.) from reward labels", () => {
+    expect(removeProductQuantity("Free L'Oréal Shampoo (300ml)")).toBe("Free L'Oréal Shampoo");
+    expect(removeProductQuantity("L'Oréal Hair Mask 500 ml")).toBe("L'Oréal Hair Mask");
+    expect(removeProductQuantity("Face Wash 150g")).toBe("Face Wash");
+    expect(removeProductQuantity("Free D-Tan Service")).toBe("Free D-Tan Service");
   });
 });

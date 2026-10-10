@@ -112,7 +112,7 @@ export function Navbar() {
     {
       id: "lucky_wheel",
       label: "Lucky Wheel",
-      description: "Spin the Wheel & Reward Claims",
+      description: "Manage Wheel Prizes, Stock & Claims",
       icon: Sparkles,
     },
     {

@@ -1610,31 +1610,42 @@ export const SupabaseSync = {
     const clean = cleanPhoneNumber(phoneNumber);
     if (!clean) return false;
 
-    // Check local storage first
-    if (isPhoneClaimedLocally(clean)) return true;
-
-    // Check centralized server store
+    // Check centralized server store first (the true source of truth across all devices)
     try {
-      const serverClaimed = await checkPhoneHasClaimedServer(clean);
-      if (serverClaimed) return true;
-    } catch {}
-
-    if (!isSupabaseConfigured() || !supabase) return false;
-    try {
-      // Query database for phone match
-      const { data, error } = await supabase
-        .from("spin_logs")
-        .select("id, phone_number, is_redeemed")
-        .ilike("phone_number", `%${clean}%`)
-        .limit(1);
-
-      if (!error && data && data.length > 0) {
-        return true;
+      const serverResult = await checkPhoneHasClaimedServer(clean);
+      if (serverResult.checked) {
+        if (serverResult.hasClaimed) {
+          return true;
+        } else {
+          // Server explicitly confirms this phone has NOT claimed (or claim was cleared/deleted)
+          // Clean up any stale local logs so customer/developer can proceed with claim
+          deleteLocalSpinLog(clean);
+          deleteClaimRecord(clean, undefined, clean);
+          return false;
+        }
       }
-      return false;
-    } catch {
-      return isPhoneClaimedLocally(clean);
+    } catch (err) {
+      console.warn("Could not reach spin-claims server:", err);
     }
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("spin_logs")
+          .select("id, phone_number, is_redeemed")
+          .ilike("phone_number", `%${clean}%`)
+          .limit(1);
+
+        if (!error && data && data.length > 0) {
+          return true;
+        }
+      } catch {
+        // Table may not exist in remote database
+      }
+    }
+
+    // Fall back to local check only if offline / server unreachable
+    return isPhoneClaimedLocally(clean);
   },
 
   async validateOfferToken(

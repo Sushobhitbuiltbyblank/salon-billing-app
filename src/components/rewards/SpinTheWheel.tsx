@@ -13,8 +13,10 @@ import {
   Phone,
   ShieldAlert,
   FileDown,
+  Download,
   AlertTriangle,
   X,
+  ArrowLeft,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useApp } from "@/context/AppContext";
@@ -24,6 +26,7 @@ import {
   SpinGameState,
   SpinClaimRecord,
   PrizeType,
+  removeProductQuantity,
 } from "@/types/rewards";
 import {
   playTickSound,
@@ -31,6 +34,7 @@ import {
   getSoundMuted,
   setSoundMuted,
   initAudioContext,
+  unlockAudio,
 } from "@/lib/audioEffects";
 import {
   saveClaimRecord,
@@ -38,10 +42,12 @@ import {
   syncClaimToServer,
   generateOfferToken,
   getOfferProductImage,
+  checkPhoneHasClaimedServer,
+  findLocalOfferById,
+  fetchServerClaimRecords,
 } from "@/lib/rewardStorage";
 import { OfferVoucherCard } from "./OfferVoucherCard";
 import {
-  getSalonBookingWhatsAppUrl,
   LOREAL_EVENT_TERMS,
   cleanPhoneNumber,
 } from "@/lib/whatsapp";
@@ -57,7 +63,7 @@ interface SpinTheWheelProps {
 
 // Helper to wrap offer text into multiple lines without cutting or using ellipsis (...)
 function splitTitleIntoLines(title: string): string[] {
-  const clean = (title || "").trim();
+  const clean = removeProductQuantity(title || "").trim();
   const lower = clean.toLowerCase();
 
   // Optimized line splits for the 5 official event offers
@@ -149,16 +155,17 @@ export function SpinTheWheel({
     }
   }, [initialToken, validateOfferToken]);
 
-  // For public links: restore won state if previously spun and sync local records to server
+  // For public links: synchronize claims with server and restore won state only if valid
   useEffect(() => {
     if (typeof window !== "undefined") {
-      try {
-        // Sync any pending local claims to central server
-        const localClaims = getClaimRecords();
-        localClaims.forEach((c) => {
-          syncClaimToServer(c).catch(() => {});
-        });
+      // Sync local storage with central server (clears stale local records if server was reset)
+      fetchServerClaimRecords().then((serverClaims) => {
+        if (!serverClaims || serverClaims.length === 0) {
+          sessionStorage.removeItem("belezia_spin_won_state");
+        }
+      }).catch(() => {});
 
+      try {
         // Restore won state if session exists
         const saved = sessionStorage.getItem("belezia_spin_won_state");
         if (saved) {
@@ -170,24 +177,6 @@ export function SpinTheWheel({
             if (parsed.customerPhone) setCustomerPhone(parsed.customerPhone);
             if (parsed.isFormSubmitted) setIsFormSubmitted(true);
             setGameState("VERIFIED_AND_REVEALED");
-
-            // Also make sure session state is persisted to server
-            if (parsed.claimCode) {
-              const sessionClaim: SpinClaimRecord = {
-                id: `claim-${Date.now()}`,
-                claimCode: parsed.claimCode,
-                prizeId: parsed.winningPrize.id,
-                prizeLabel: parsed.winningPrize.label,
-                prizeType: parsed.winningPrize.type,
-                customerName: parsed.customerName || undefined,
-                customerPhone: cleanPhoneNumber(parsed.customerPhone) || undefined,
-                wasVerified: Boolean(parsed.isFormSubmitted),
-                inventoryDeducted: false,
-                createdAt: new Date().toISOString(),
-              };
-              saveClaimRecord(sessionClaim);
-              syncClaimToServer(sessionClaim).catch(() => {});
-            }
           }
         }
       } catch {
@@ -199,23 +188,40 @@ export function SpinTheWheel({
   // Map dedicated wheelInventory items to prize slices if configured
   const prizes: RewardPrize[] = useMemo(() => {
     if (wheelInventory && wheelInventory.length > 0) {
-      return wheelInventory.map((item) => ({
-        id: item.id,
-        label: item.title,
-        shortLabel: item.title,
-        type:
-          item.category === "free_service"
-            ? ("service" as PrizeType)
-            : item.category === "gift"
-            ? ("product_gift" as PrizeType)
-            : ("discount_percent" as PrizeType),
-        value: 0,
-        color: item.color || "#8b5cf6",
-        textColor: "#ffffff",
-        iconName: item.category === "free_service" ? "Scissors" : item.category === "gift" ? "Gift" : "Tag",
-        description: `${item.title} (${item.category.replace("_", " ")}) - Stock: ${item.quantity}`,
-        requiresInventoryDeduction: false,
-      }));
+      return wheelInventory.map((item) => {
+        const cleanTitle = removeProductQuantity(item.title);
+        const matchingDefault = DEFAULT_PRIZES.find(
+          (p) =>
+            p.label.toLowerCase() === cleanTitle.toLowerCase() ||
+            p.shortLabel.toLowerCase() === cleanTitle.toLowerCase() ||
+            cleanTitle.toLowerCase().includes(p.shortLabel.toLowerCase())
+        );
+
+        return {
+          id: item.id,
+          label: cleanTitle,
+          shortLabel: cleanTitle,
+          type:
+            item.category === "free_service"
+              ? ("service" as PrizeType)
+              : item.category === "gift"
+              ? ("product_gift" as PrizeType)
+              : ("discount_percent" as PrizeType),
+          value: 0,
+          color: item.color || "#8b5cf6",
+          textColor: "#ffffff",
+          iconName:
+            item.category === "free_service"
+              ? "Scissors"
+              : item.category === "gift"
+              ? "Gift"
+              : "Tag",
+          description:
+            removeProductQuantity(matchingDefault?.description || "") ||
+            `Complimentary ${cleanTitle} for L'Oréal Consultation Day`,
+          requiresInventoryDeduction: false,
+        };
+      });
     }
     return DEFAULT_PRIZES;
   }, [wheelInventory]);
@@ -245,8 +251,9 @@ export function SpinTheWheel({
     if (gameState === "SPINNING") return;
     if (isTokenExpired) return;
 
-    // Unlock Web Audio context on user gesture
-    initAudioContext();
+    // Unlock Web Audio context on user gesture immediately & play tactile tap tick
+    unlockAudio();
+    playTickSound(1.2);
 
     setGameState("SPINNING");
     setPhoneError(null);
@@ -309,21 +316,8 @@ export function SpinTheWheel({
         const newCode = offerToken || generateOfferToken();
         setClaimCode(newCode);
 
-        // Immediate audit record saved to storage and centralized server
-        const initialRecord: SpinClaimRecord = {
-          id: `claim-${Date.now()}`,
-          claimCode: newCode,
-          prizeId: selectedPrize.id,
-          prizeLabel: selectedPrize.label,
-          prizeType: selectedPrize.type,
-          customerName: customerName.trim() || undefined,
-          customerPhone: cleanPhoneNumber(customerPhone) || undefined,
-          wasVerified: false,
-          inventoryDeducted: false,
-          createdAt: new Date().toISOString(),
-        };
-        saveClaimRecord(initialRecord);
-        syncClaimToServer(initialRecord).catch(() => {});
+        // DO NOT save to history or server here.
+        // Record is created and saved ONLY when user submits name and WhatsApp number on the form screen.
 
         // Immediate celebratory sound & confetti
         playWinFanfare();
@@ -392,9 +386,27 @@ export function SpinTheWheel({
     try {
       const hasClaimed = await checkPhoneHasClaimed(cleanPhone);
       if (hasClaimed) {
-        setPhoneError(
-          `⚠️ This phone number (+91 ${cleanPhone}) has already claimed an offer for L'Oréal Professional Day! Each customer can only claim one offer.`
-        );
+        // If already claimed, retrieve existing voucher details so customer can view/download
+        const serverCheck = await checkPhoneHasClaimedServer(cleanPhone);
+        const existing = (serverCheck.claim || findLocalOfferById(cleanPhone)) as any;
+        if (existing) {
+          const code = existing.claimCode || existing.offer_token;
+          const prizeName = existing.prizeLabel || existing.won_item || "Offer";
+          if (code) {
+            setClaimCode(code);
+            setIsFormSubmitted(true);
+          }
+          setPhoneError(
+            `⚠️ This phone number (+91 ${cleanPhone}) already claimed "${removeProductQuantity(
+              prizeName
+            )}"! You can view and download your voucher below.`
+          );
+        } else {
+          setPhoneError(
+            `⚠️ This phone number (+91 ${cleanPhone}) has already claimed an offer for L'Oréal Professional Day! Each customer can only claim one offer.`
+          );
+        }
+        setIsSubmitting(false);
         return;
       }
 
@@ -464,20 +476,6 @@ export function SpinTheWheel({
     }
   };
 
-  // WhatsApp click-to-chat help option
-  const handleShareWhatsApp = () => {
-    if (!winningPrize || !claimCode) return;
-    const cleanPhone = cleanPhoneNumber(customerPhone);
-    const url = getSalonBookingWhatsAppUrl({
-      customerName: customerName || "Valued Customer",
-      customerPhone: cleanPhone,
-      wonItem: winningPrize.label,
-      offerId: claimCode,
-      eventDate: "31st October (10 AM – 9 PM)",
-      salonName: "Belezia Salon, Laxmi Nagar, Delhi",
-    });
-    window.open(url, "_blank");
-  };
 
   // Reset to Screen 1
   const handleResetSpin = () => {
@@ -636,93 +634,63 @@ export function SpinTheWheel({
 
   return (
     <div className="relative w-full max-w-4xl mx-auto flex flex-col items-center justify-center p-3 sm:p-6 select-none">
-      {/* HEADER WITH SALON BRANDING & MUTE TOGGLE */}
-      {isModal ? (
-        <div className="w-full flex items-center justify-between mb-3 sm:mb-4 gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 p-0.5 shadow-lg shadow-purple-600/30 shrink-0">
-              <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-zinc-950">
-                <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 animate-spin-slow" />
-              </div>
-            </div>
-            <div className="flex-1 min-w-0 flex flex-col justify-center">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h2 className="text-xs sm:text-base font-extrabold text-white tracking-tight leading-tight">
-                  Belezia × L’Oréal Professionnel
-                </h2>
-                <span className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-pink-500/20 text-amber-300 border border-amber-500/30 shrink-0">
-                  Hair Consultation Day
-                </span>
-              </div>
-              <p className="text-[10px] sm:text-xs text-zinc-400 flex items-center gap-x-1.5 gap-y-0.5 flex-wrap mt-0.5 leading-snug">
-                <span className="text-purple-300 font-semibold">Saturday, October 31, 2026</span>
-                <span className="text-zinc-600">•</span>
-                <span>Laxmi Nagar</span>
-                <span className="text-zinc-600">•</span>
-                <span className="text-emerald-400 font-bold">100% Free Consult</span>
-              </p>
-            </div>
+      {/* ========================================================================= */}
+      {/* 1. EVENT DETAILS (ON TOP) */}
+      {/* ========================================================================= */}
+      <div className="w-full max-w-2xl mb-1 sm:mb-3 p-2.5 sm:p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/70 via-zinc-900/90 to-pink-950/70 border border-amber-500/30 text-center space-y-1.5 shadow-lg">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex-1 flex items-center justify-center gap-1.5 text-xs sm:text-sm font-extrabold text-amber-200">
+            <Sparkles className="h-4 w-4 text-amber-400 shrink-0 animate-spin-slow" />
+            <span>Belezia Salon × L’Oréal Professionnel Hair Consultation Event</span>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <a
-              href="/spin"
-              target="_blank"
-              rel="noreferrer"
-              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
-              title="Open Fullscreen Tablet Kiosk Mode (/spin)"
-            >
-              <ExternalLink className="h-3 w-3 text-purple-400" />
-              <span>Kiosk Mode</span>
-            </a>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isModal && (
+              <a
+                href="/spin"
+                target="_blank"
+                rel="noreferrer"
+                className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-[11px] font-bold transition-colors cursor-pointer"
+                title="Open Fullscreen Tablet Mode (/spin)"
+              >
+                <ExternalLink className="h-3 w-3 text-purple-400" />
+                <span>Kiosk</span>
+              </a>
+            )}
             <button
               onClick={handleToggleMute}
               aria-label={isMuted ? "Unmute Sound" : "Mute Sound"}
-              className="flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+              className="flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
               title={isMuted ? "Unmute Sound" : "Mute Sound"}
             >
-              {isMuted ? <VolumeX className="h-4 w-4 text-rose-400" /> : <Volume2 className="h-4 w-4 text-purple-400" />}
+              {isMuted ? <VolumeX className="h-3.5 w-3.5 text-rose-400" /> : <Volume2 className="h-3.5 w-3.5 text-purple-400" />}
             </button>
             {isModal && onClose && (
               <button
                 onClick={onClose}
                 aria-label="Close Spin Wheel Modal"
-                className="flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+                className="flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
                 title="Close"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
         </div>
-      ) : (
-        /* ON STANDALONE /SPIN PAGE: Sleek Title & Sound Control Bar */
-        <div className="w-full flex items-center justify-between mb-2 sm:mb-4 px-1 gap-2">
-          <div className="flex items-center gap-2 flex-wrap min-w-0">
-            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <span className="text-xs sm:text-sm font-extrabold text-amber-300 tracking-wide uppercase leading-tight">
-              Spin The Lucky Wheel
-            </span>
-            <span className="text-[10px] text-zinc-400 leading-tight">
-              • Guaranteed L&apos;Oréal Professionnel Goodies
-            </span>
-          </div>
 
-          <button
-            onClick={handleToggleMute}
-            aria-label={isMuted ? "Unmute Sound" : "Mute Sound"}
-            className="flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
-            title={isMuted ? "Unmute Sound" : "Mute Sound"}
-          >
-            {isMuted ? <VolumeX className="h-4 w-4 text-rose-400" /> : <Volume2 className="h-4 w-4 text-purple-400" />}
-          </button>
+        <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-0.5 text-[10px] sm:text-[11px] text-zinc-300">
+          <span className="text-pink-300 font-bold">🎁 Free L&apos;Oréal Goodie Bag for every consultation</span>
+          <span className="hidden sm:inline text-zinc-600">•</span>
+          <span className="text-emerald-300 font-semibold">💰 100% Free Consult</span>
+          <span className="hidden sm:inline text-zinc-600">•</span>
+          <span className="text-purple-300 font-medium">🔬 Micro-analysis &amp; Color Mapping by Experts</span>
         </div>
-      )}
+      </div>
 
       {/* ========================================================================= */}
-      {/* 1. SCREEN 1: SPIN THE WHEEL */}
+      {/* 2. SCREEN 1: SPIN THE WHEEL (IN MID) */}
       {/* ========================================================================= */}
-      <div className="relative flex flex-col items-center justify-center my-2 sm:my-4">
+      <div className="relative flex flex-col items-center justify-center my-1 sm:my-3">
         {/* TOP POINTER / FLAPPER INDICATOR */}
         <div className="absolute -top-3 z-30 flex flex-col items-center pointer-events-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]">
           <div className="w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[30px] border-t-amber-400 filter drop-shadow-[0_2px_4px_rgba(245,158,11,0.6)]" />
@@ -736,7 +704,7 @@ export function SpinTheWheel({
           }`}
         >
           {/* WHEEL SVG */}
-          <div className="relative w-[320px] h-[320px] sm:w-[410px] sm:h-[410px] rounded-full overflow-hidden bg-zinc-950 border-4 border-zinc-900 shadow-inner">
+          <div className="relative w-[275px] h-[275px] sm:w-[370px] sm:h-[370px] rounded-full overflow-hidden bg-zinc-950 border-4 border-zinc-900 shadow-inner">
             <svg
               viewBox="0 0 400 400"
               className="w-full h-full"
@@ -753,9 +721,17 @@ export function SpinTheWheel({
             <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
               <button
                 onClick={spinWheel}
+                onPointerDown={() => {
+                  unlockAudio();
+                  playTickSound(1.2);
+                }}
+                onTouchStart={() => {
+                  unlockAudio();
+                  playTickSound(1.2);
+                }}
                 disabled={gameState === "SPINNING"}
                 aria-label="Spin the wheel"
-                className={`relative group flex flex-col items-center justify-center h-20 w-20 sm:h-24 sm:w-24 rounded-full border-4 border-amber-400/90 shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all duration-300 cursor-pointer ${
+                className={`relative group flex flex-col items-center justify-center h-18 w-18 sm:h-22 sm:w-22 rounded-full border-4 border-amber-400/90 shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all duration-300 cursor-pointer ${
                   gameState === "SPINNING"
                     ? "bg-zinc-900 cursor-not-allowed opacity-90 scale-95"
                     : "bg-gradient-to-b from-amber-400 via-amber-500 to-amber-600 hover:scale-105 active:scale-95"
@@ -789,7 +765,7 @@ export function SpinTheWheel({
         )}
 
         {/* HELPER TEXT UNDER WHEEL */}
-        <div className="mt-3 text-center">
+        <div className="mt-2.5 text-center">
           {gameState === "IDLE" && (
             <p className="text-xs text-zinc-400 animate-pulse">
               👉 Tap <span className="text-amber-400 font-bold">SPIN</span> to reveal your guaranteed reward!
@@ -803,88 +779,115 @@ export function SpinTheWheel({
         </div>
       </div>
 
-      {/* L'OREAL PROFESSIONAL DAY CAMPAIGN BANNER / DETAIL DISCUSSION BOX BELOW WHEEL */}
-      <div className="w-full mt-2 mb-3 p-3 sm:p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/60 via-zinc-900 to-pink-950/60 border border-amber-500/30 text-center space-y-1.5 shadow-lg">
-        <div className="flex items-center justify-center gap-1.5 text-xs sm:text-sm font-extrabold text-amber-200">
-          <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-          <span>Belezia Salon is partnering with L’Oréal Professionnel to bring you an exclusive Hair Consultation Event!</span>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-zinc-300">
-          <span className="text-pink-300 font-bold">🎁 Entry Bonus: Absolute Free L&apos;Oréal Goodie Bag for every consultation</span>
-          <span className="hidden sm:inline">•</span>
-          <span className="text-emerald-300 font-semibold">💰 Entry &amp; Consult: 100% FREE</span>
-          <span className="hidden sm:inline">•</span>
-          <span className="text-purple-300 font-medium">🔬 Micro-analysis &amp; Color Mapping by Corporate Experts</span>
-        </div>
-        <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-[11px] font-semibold leading-relaxed flex items-center justify-center gap-1.5 text-left sm:text-center">
-          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-          <span>{LOREAL_EVENT_TERMS}</span>
-        </div>
+      {/* ========================================================================= */}
+      {/* 3. ONLY DISCLAIMER (AT BOTTOM) */}
+      {/* ========================================================================= */}
+      <div className="w-full max-w-xl mt-2 sm:mt-3 p-2 sm:p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-[10px] sm:text-[11px] font-medium leading-relaxed flex items-center justify-center gap-1.5 text-center shadow-sm">
+        <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+        <span>{LOREAL_EVENT_TERMS}</span>
       </div>
 
       {/* ========================================================================= */}
       {/* 2. SCREEN 2: WINNER FORM & OFFER VOUCHER DOWNLOAD PAGE */}
       {/* ========================================================================= */}
       {isVerifiedAndRevealed && winningPrize && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300 overflow-y-auto">
-          <div className="relative w-full max-w-lg my-auto rounded-3xl bg-zinc-950 border border-zinc-800/80 shadow-2xl p-5 sm:p-7 overflow-hidden text-center space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-300 overflow-y-auto">
+          <div className="relative w-full max-w-sm sm:max-w-md my-auto rounded-2xl sm:rounded-3xl bg-zinc-950 border border-zinc-800/90 shadow-2xl p-3.5 sm:p-5 overflow-hidden text-center space-y-2.5 sm:space-y-3 max-h-[92vh] overflow-y-auto">
             {/* AMBIENT GRADIENT BLOB */}
-            <div className="absolute -top-24 -left-24 w-48 h-48 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-pink-600/20 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -top-24 -left-24 w-40 h-40 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-24 -right-24 w-40 h-40 bg-pink-600/15 rounded-full blur-3xl pointer-events-none" />
 
-            {/* CONGRATULATIONS BADGE */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-extrabold tracking-wide">
-              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-              <span>CONGRATULATIONS! YOU WON</span>
-            </div>
+            {/* TOP BAR: BACK BUTTON (ONLY WHEN OPENED FROM APP, NOT FOR LINK) + CONGRATS + CLOSE */}
+            <div className="flex items-center justify-between gap-2 relative z-10">
+              {/* Back button to go back to previous screen (the wheel), visible when open from app */}
+              {(isModal || (!isExternalLink && onClose)) ? (
+                <button
+                  type="button"
+                  onClick={handleResetSpin}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
+                  title="Go back to wheel"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Back</span>
+                </button>
+              ) : (
+                <div className="w-12 shrink-0" />
+              )}
 
-            {/* WON PRIZE SHOWCASE */}
-            <div
-              className="p-5 rounded-2xl border text-center shadow-xl relative overflow-hidden"
-              style={{
-                backgroundColor: `${winningPrize.color}15`,
-                borderColor: `${winningPrize.color}50`,
-              }}
-            >
-              <div className="flex flex-col items-center gap-1.5">
-                <div className="h-36 w-36 sm:h-44 sm:w-44 rounded-3xl flex items-center justify-center p-3 bg-white border-2 border-amber-500/50 shadow-2xl mb-2 overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={getOfferProductImage(winningPrize.label)}
-                    alt={winningPrize.label}
-                    className="h-full w-full object-contain filter drop-shadow-md"
-                  />
-                </div>
-                <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                  {winningPrize.label}
-                </h3>
-                <p className="text-xs sm:text-sm text-zinc-300 max-w-md">
-                  {winningPrize.description}
-                </p>
+              {/* CONGRATULATIONS BADGE */}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] font-extrabold tracking-wide">
+                <Sparkles className="h-3 w-3 text-amber-400" />
+                <span>YOU WON!</span>
               </div>
 
-              {/* MANDATORY DISCLAIMER */}
-              <div className="mt-4 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-[11px] font-bold text-left flex items-start gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-                <span>{LOREAL_EVENT_TERMS}</span>
+              {/* Modal close button if open from app */}
+              {(isModal && onClose) ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors cursor-pointer shrink-0"
+                  title="Close modal"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <div className="w-12 shrink-0" />
+              )}
+            </div>
+
+            {/* WON PRIZE SHOWCASE - COMPACT HORIZONTAL ON MOBILE, NO STOCK OR COUNTS */}
+            <div
+              className="p-3 rounded-2xl border text-left shadow-lg relative overflow-hidden flex items-center gap-3"
+              style={{
+                backgroundColor: `${winningPrize.color}15`,
+                borderColor: `${winningPrize.color}40`,
+              }}
+            >
+              <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl flex items-center justify-center p-1.5 bg-white border border-amber-500/40 shadow-md shrink-0 overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={getOfferProductImage(winningPrize.label)}
+                  alt={winningPrize.label}
+                  className="h-full w-full object-contain filter drop-shadow-sm"
+                />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300 font-bold block mb-0.5">
+                  L&apos;Oréal Day VIP Reward
+                </span>
+                <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight leading-tight line-clamp-1">
+                  {removeProductQuantity(winningPrize.label)}
+                </h3>
+                <p className="text-[11px] text-zinc-300 line-clamp-2 mt-0.5 leading-snug">
+                  {removeProductQuantity((winningPrize.description || "")
+                    .replace(/\s*-\s*Stock:\s*\d+/gi, "")
+                    .replace(/\s*\(Stock:\s*\d+\)/gi, "")
+                    .replace(/Stock:\s*\d+/gi, "")
+                    .replace(/\(\s*free service\s*\)/gi, "")
+                    .replace(/\(\s*gift\s*\)/gi, "")
+                    .replace(/\(\s*offer\s*\)/gi, "")
+                    .trim()) || "Complimentary reward for Consultation Day"}
+                </p>
               </div>
             </div>
 
             {/* FORM TO FILL: NAME AND NUMBER */}
             {!isFormSubmitted ? (
-              <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 text-left space-y-3 shadow-lg">
-                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                  <span className="text-xs font-black uppercase tracking-wider text-white">
-                    Enter Details to Download Voucher
+              <div className="p-3 sm:p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 text-left space-y-2.5 shadow-lg">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-white">
+                    Enter Details to Claim Voucher
                   </span>
-                  <span className="text-[10px] font-mono text-amber-400 font-bold">
-                    1 Offer / Number
+                  <span className="text-[10px] font-mono text-amber-400 font-semibold">
+                    VIP Voucher
                   </span>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="space-y-2">
                   <div>
-                    <label className="block text-[10px] font-mono uppercase text-zinc-400 mb-1 font-bold">
+                    <label className="block text-[9px] font-mono uppercase text-zinc-400 mb-0.5 font-bold">
                       Your Full Name *
                     </label>
                     <div className="relative">
@@ -897,14 +900,14 @@ export function SpinTheWheel({
                           setPhoneError(null);
                         }}
                         placeholder="e.g. Priya Sharma"
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-2.5 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 transition-colors"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 transition-colors"
                         required
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-mono uppercase text-zinc-400 mb-1 font-bold">
+                    <label className="block text-[9px] font-mono uppercase text-zinc-400 mb-0.5 font-bold">
                       WhatsApp Number *
                     </label>
                     <div className="relative">
@@ -918,34 +921,47 @@ export function SpinTheWheel({
                         }}
                         placeholder="10-digit mobile number"
                         maxLength={10}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-2.5 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 transition-colors"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 transition-colors"
                       />
                     </div>
                   </div>
                 </div>
 
                 {phoneError && (
-                  <div className="p-2.5 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs font-semibold flex items-center gap-1.5">
-                    <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
-                    <span>{phoneError}</span>
+                  <div className="p-2.5 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs font-semibold flex flex-col gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                      <span>{phoneError}</span>
+                    </div>
+                    {claimCode && (
+                      <button
+                        type="button"
+                        onClick={() => setShowVoucherModal(true)}
+                        className="py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold text-[11px] transition-colors cursor-pointer self-start flex items-center gap-1 shadow-md"
+                      >
+                        <FileDown className="h-3.5 w-3.5" />
+                        <span>View / Download Voucher ({claimCode})</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
                 <button
+                  type="button"
                   onClick={handleGenerateAndDownloadVoucher}
                   disabled={isSubmitting}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 active:scale-98 text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 active:scale-98 text-white font-extrabold text-xs shadow-lg shadow-purple-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  <FileDown className="h-4 w-4" />
+                  <Sparkles className="h-4 w-4" />
                   <span>
-                    {isSubmitting ? "Generating Voucher..." : "Download Voucher Image (.jpg)"}
+                    {isSubmitting ? "Submitting..." : "Submit"}
                   </span>
                 </button>
               </div>
             ) : (
-              /* ALREADY SUBMITTED: FRONT DESK OFFER ID & RE-DOWNLOAD BUTTON */
-              <div className="space-y-3">
-                <div className="p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between gap-2 max-w-sm mx-auto">
+              /* ALREADY SUBMITTED: FRONT DESK OFFER ID & SHARE / DOWNLOAD BUTTONS */
+              <div className="space-y-2.5">
+                <div className="p-3 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between gap-2 max-w-sm mx-auto">
                   <div className="text-left">
                     <div className="text-[9px] uppercase font-mono tracking-widest text-zinc-500">
                       Front Desk Offer ID
@@ -955,6 +971,7 @@ export function SpinTheWheel({
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={handleCopyCode}
                     className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
                   >
@@ -964,21 +981,23 @@ export function SpinTheWheel({
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => setShowVoucherModal(true)}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 active:scale-98 text-white font-black text-xs sm:text-sm shadow-xl shadow-purple-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-pink-600 to-amber-500 hover:brightness-110 active:scale-98 text-white font-extrabold text-xs shadow-lg shadow-amber-500/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  <FileDown className="h-4 w-4" />
-                  <span>Download Voucher Image (.jpg)</span>
+                  <Download className="h-4 w-4" />
+                  <span>Download / Save Voucher Image</span>
                 </button>
               </div>
             )}
 
             {/* IN-STORE POS MODAL ACTIONS ONLY */}
             {isModal && (
-              <div className="pt-1">
+              <div className="pt-0.5">
                 <button
+                  type="button"
                   onClick={handleResetSpin}
-                  className="w-full py-2.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  className="w-full py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <RotateCcw className="h-3.5 w-3.5 text-purple-400" />
                   <span>Spin Again</span>
@@ -998,7 +1017,7 @@ export function SpinTheWheel({
           onClose={() => setShowVoucherModal(false)}
           customerName={customerName || "Valued Guest"}
           customerPhone={customerPhone}
-          wonItem={winningPrize.label}
+          wonItem={removeProductQuantity(winningPrize.label)}
           offerId={claimCode || offerToken || "BZ-LOREAL-OFFER"}
           eventDate="31st October"
           eventTime="10:00 AM – 9:00 PM"

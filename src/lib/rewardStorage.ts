@@ -54,7 +54,12 @@ export function getClaimRecords(): SpinClaimRecord[] {
   try {
     const raw = localStorage.getItem(CLAIMS_STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const parsed: SpinClaimRecord[] = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Only return claims that have both customer name and phone number
+    return parsed.filter(
+      (c) => Boolean(c.customerName && c.customerName.trim() && c.customerPhone && c.customerPhone.trim())
+    );
   } catch (err) {
     console.error("Failed to load spin claim records:", err);
     return [];
@@ -70,6 +75,10 @@ function getApiUrl(path: string): string {
 
 export async function syncClaimToServer(record: SpinClaimRecord): Promise<boolean> {
   if (typeof window === "undefined" || !window.location?.origin) return false;
+  // NEVER sync or create claims that lack customer name or phone
+  if (!record.customerName || !record.customerName.trim() || !record.customerPhone) {
+    return false;
+  }
   try {
     const res = await fetch(getApiUrl("/api/spin-claims"), {
       method: "POST",
@@ -90,25 +99,20 @@ export async function fetchServerClaimRecords(): Promise<SpinClaimRecord[]> {
     if (!res.ok) return getClaimRecords();
     const data = await res.json();
     if (data && Array.isArray(data.claims)) {
-      const serverClaims: SpinClaimRecord[] = data.claims;
-      const local = getClaimRecords();
-      const map = new Map<string, SpinClaimRecord>();
-      serverClaims.forEach((c) => map.set(c.claimCode || c.id, c));
-      local.forEach((c) => {
-        const key = c.claimCode || c.id;
-        if (!map.has(key)) {
-          map.set(key, c);
-          // Sync missing local claim to server in background
-          syncClaimToServer(c).catch(() => {});
-        }
-      });
-      const unified = Array.from(map.values()).sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      // Only keep records that have both customer name and phone
+      const serverClaims: SpinClaimRecord[] = data.claims.filter(
+        (c: SpinClaimRecord) =>
+          Boolean(c.customerName && c.customerName.trim() && c.customerPhone && c.customerPhone.trim())
       );
+      // The central server is the source of truth!
       try {
-        localStorage.setItem(CLAIMS_STORAGE_KEY, JSON.stringify(unified.slice(0, 100)));
+        localStorage.setItem(CLAIMS_STORAGE_KEY, JSON.stringify(serverClaims.slice(0, 100)));
+        if (serverClaims.length === 0) {
+          clearAllLocalSpinLogs();
+          sessionStorage.removeItem("belezia_spin_won_state");
+        }
       } catch {}
-      return unified;
+      return serverClaims;
     }
     return getClaimRecords();
   } catch (err) {
@@ -149,18 +153,26 @@ export async function clearAllServerClaimRecords(): Promise<boolean> {
   }
 }
 
-export async function checkPhoneHasClaimedServer(phoneNumber: string): Promise<boolean> {
-  if (!phoneNumber || typeof window === "undefined" || !window.location?.origin) return false;
+export async function checkPhoneHasClaimedServer(
+  phoneNumber: string
+): Promise<{ checked: boolean; hasClaimed: boolean; claim?: SpinClaimRecord | null }> {
+  if (!phoneNumber || typeof window === "undefined" || !window.location?.origin) {
+    return { checked: false, hasClaimed: false, claim: null };
+  }
   try {
     const clean = cleanPhoneNumber(phoneNumber);
     const res = await fetch(getApiUrl(`/api/spin-claims?phone=${encodeURIComponent(clean)}`), {
       cache: "no-store",
     });
-    if (!res.ok) return false;
+    if (!res.ok) return { checked: false, hasClaimed: false, claim: null };
     const data = await res.json();
-    return Boolean(data.hasClaimed);
+    return {
+      checked: true,
+      hasClaimed: Boolean(data.hasClaimed),
+      claim: data.claim || null,
+    };
   } catch {
-    return false;
+    return { checked: false, hasClaimed: false, claim: null };
   }
 }
 
@@ -179,6 +191,10 @@ export async function verifyOfferOnServer(offerId: string) {
 
 export function saveClaimRecord(record: SpinClaimRecord): void {
   if (typeof window === "undefined") return;
+  // NEVER save or create claim records if customer has not provided name and phone
+  if (!record.customerName || !record.customerName.trim() || !record.customerPhone || !record.customerPhone.trim()) {
+    return;
+  }
   try {
     const current = getClaimRecords();
     const updated = [record, ...current.filter((c) => c.id !== record.id)];
@@ -194,13 +210,19 @@ export function deleteClaimRecord(idOrCode: string, code?: string, phone?: strin
   if (typeof window === "undefined") return;
   try {
     const current = getClaimRecords();
+    const cleanPhone = phone ? cleanPhoneNumber(phone) : cleanPhoneNumber(idOrCode);
     const updated = current.filter(
-      (c) => c.id !== idOrCode && c.claimCode !== idOrCode && (!code || c.claimCode !== code)
+      (c) =>
+        c.id !== idOrCode &&
+        c.claimCode !== idOrCode &&
+        (!code || c.claimCode !== code) &&
+        (!cleanPhone || !c.customerPhone || cleanPhoneNumber(c.customerPhone) !== cleanPhone)
     );
     localStorage.setItem(CLAIMS_STORAGE_KEY, JSON.stringify(updated));
     deleteLocalSpinLog(idOrCode);
     if (code) deleteLocalSpinLog(code);
     if (phone) deleteLocalSpinLog(phone);
+    if (cleanPhone) deleteLocalSpinLog(cleanPhone);
   } catch (err) {
     console.error("Failed to delete claim record:", err);
   }
