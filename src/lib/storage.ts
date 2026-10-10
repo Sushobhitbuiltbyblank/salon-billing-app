@@ -348,7 +348,7 @@ export function initStorage() {
           const storedUsers = JSON.parse(rawUsers);
           if (Array.isArray(storedUsers)) {
             const filteredUsers = storedUsers
-              .filter((u) => u && typeof u === "object" && (u.id === "usr-admin-01" || u.id === "usr-admin-02" || u.id === "usr-rec-01" || (typeof u.id === "string" && u.id.startsWith("usr-visitor-"))))
+              .filter((u) => u && typeof u === "object" && (u.id === "usr-admin-01" || u.id === "usr-admin-02" || u.id === "usr-rec-01"))
               .map((u) => {
                 if (u.id === "usr-admin-01") {
                   return { ...u, name: "Sushobhit Jain", email: "sushobhit@belezia.com", role: "admin" as const, pin: u.pin || "9999" };

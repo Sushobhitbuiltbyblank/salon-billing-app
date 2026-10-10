@@ -265,13 +265,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       initStorage();
       const resetResult = Storage.checkAndResetDailyStaffStatus();
 
-      const cachedUsers = Storage.getUsers();
+      const cachedUsers = Storage.getUsers().filter(
+        (u) => u && !u.id?.startsWith("usr-visitor-")
+      );
       const cachedCurrent = Storage.getCurrentUser();
-      setUsers(cachedUsers);
-      setCurrentUser(cachedCurrent);
-      if (!cachedCurrent) {
+      if (cachedCurrent && (cachedCurrent.id?.startsWith("usr-visitor-") || (cachedCurrent as any).role === "guest")) {
+        Storage.setCurrentUser(null);
+        setCurrentUser(null);
         setIsAuthModalOpen(true);
+      } else {
+        setCurrentUser(cachedCurrent);
+        if (!cachedCurrent) {
+          setIsAuthModalOpen(true);
+        }
       }
+      setUsers(cachedUsers);
       setSettings(Storage.getSettings());
       setStaff(resetResult.staff);
       setCategories(Storage.getCategories());
@@ -624,7 +632,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 1. Check existing registered staff / users
-    const existingUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
+    const existingUser = users.find(
+      (u) => u.email.toLowerCase() === cleanEmail && !u.id?.startsWith("usr-visitor-")
+    );
     if (existingUser) {
       if (existingUser.pin === cleanPin) {
         setCurrentUser(existingUser);
@@ -636,30 +646,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // 2. Otherwise log in as Visitor / Guest
-    const namePart = cleanEmail.split("@")[0];
-    const visitorName = namePart
-      .replace(/[._-]/g, " ")
-      .split(" ")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ") || "Visitor";
-
-    const visitorUser: AppUser = {
-      id: `usr-visitor-${Date.now()}`,
-      name: visitorName,
-      email: cleanEmail,
-      role: "receptionist",
-      pin: cleanPin,
-      avatar_color: "#10b981", // Emerald green for visitors
-      is_active: true,
-      created_at: new Date().toISOString(),
-    };
-
-    saveUser(visitorUser);
-    setCurrentUser(visitorUser);
-    Storage.setCurrentUser(visitorUser);
-    setIsAuthModalOpen(false);
-    return { success: true };
+    // Guest / visitor registration is strictly disabled
+    return { success: false, error: "Unauthorized account. Guest access is disabled." };
   };
 
   const loginAs = (user: AppUser) => {
