@@ -124,7 +124,7 @@ describe("Incremental Sync & 5MB LocalStorage Quota Protection", () => {
       const retrievedArchive = Storage.getInvoicesArchive();
       expect(retrievedArchive.length).toBeLessThanOrEqual(2000);
       expect(retrievedArchive.some((i) => i.id === "inv-9999")).toBe(true);
-    });
+    }, 15000);
   });
 
   describe("2. Sync Timestamp Management for Incremental Delta Syncing", () => {

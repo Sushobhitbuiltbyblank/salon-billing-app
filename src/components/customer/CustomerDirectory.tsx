@@ -35,6 +35,7 @@ import {
   formatReminderCooldownStatus,
   REMINDER_COOLDOWN_DAYS,
 } from "@/lib/reminderUtils";
+import { getLorealSpinInviteWhatsAppUrl } from "@/lib/whatsapp";
 import {
   UserCheck,
   User,
@@ -297,6 +298,15 @@ export function CustomerDirectory() {
   const handleStartBill = (customer: Customer) => {
     setDraftCustomer(customer);
     setActiveTab("pos");
+  };
+
+  const handleSendLorealOffer = (cust: Customer) => {
+    const url = getLorealSpinInviteWhatsAppUrl({
+      customerName: cust.name,
+      customerPhone: cust.phone,
+      salonName: settings?.salon_name,
+    });
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   // SEND WHATSAPP REMINDER ACTION TRIGGER (Direct API call, with loader and no optimistic cache)
@@ -1256,6 +1266,17 @@ export function CustomerDirectory() {
                     </div>
                   )}
 
+                  {/* SEND L'ORÉAL OFFER ON WHATSAPP */}
+                  <Button
+                    size="sm"
+                    onClick={() => handleSendLorealOffer(cust)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl font-bold text-xs bg-gradient-to-r from-purple-700 via-purple-600 to-indigo-600 hover:from-purple-600 hover:to-indigo-500 text-white shadow-sm shadow-purple-900/30 transition-all cursor-pointer border border-purple-500/30"
+                    title="Send personalized L'Oréal Spin Wheel & consultation invite on WhatsApp"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                    <span>Send L'Oréal Offer</span>
+                  </Button>
+
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5">
                       <Button
@@ -1395,37 +1416,49 @@ export function CustomerDirectory() {
                 </div>
               </div>
 
-              {reminderData.reminderMap.get(selectedHistoryCustomer.id) && (
+              <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto shrink-0">
                 <Button
                   size="sm"
-                  disabled={loadingReminderKey === (selectedHistoryCustomer.id || selectedHistoryCustomer.phone)}
-                  onClick={() => {
-                    const remInfo = reminderData.reminderMap.get(selectedHistoryCustomer.id)!;
-                    handleSendWhatsAppReminder(selectedHistoryCustomer, remInfo);
-                  }}
-                  className={`h-8 px-3 text-xs font-bold flex items-center gap-1.5 rounded-xl cursor-pointer self-start sm:self-auto shrink-0 disabled:opacity-50 ${
-                    isReminderInCooldown(selectedHistoryCustomer.last_reminder_sent_at)
-                      ? "bg-zinc-800 hover:bg-zinc-700 text-emerald-300 border border-emerald-500/40"
-                      : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
-                  }`}
+                  onClick={() => handleSendLorealOffer(selectedHistoryCustomer)}
+                  className="h-8 px-3 text-xs font-bold flex items-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white shadow-sm shadow-purple-600/30 cursor-pointer"
+                  title="Send personalized L'Oréal Spin Wheel & consultation invite on WhatsApp"
                 >
-                  {loadingReminderKey === (selectedHistoryCustomer.id || selectedHistoryCustomer.phone) ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      <span>Saving to DB...</span>
-                    </>
-                  ) : (
-                    <>
-                      <MessageSquare className="h-3.5 w-3.5" />
-                      <span>
-                        {isReminderInCooldown(selectedHistoryCustomer.last_reminder_sent_at)
-                          ? "Resend WhatsApp"
-                          : "Send WhatsApp"}
-                      </span>
-                    </>
-                  )}
+                  <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                  <span>Send L'Oréal Offer</span>
                 </Button>
-              )}
+
+                {reminderData.reminderMap.get(selectedHistoryCustomer.id) && (
+                  <Button
+                    size="sm"
+                    disabled={loadingReminderKey === (selectedHistoryCustomer.id || selectedHistoryCustomer.phone)}
+                    onClick={() => {
+                      const remInfo = reminderData.reminderMap.get(selectedHistoryCustomer.id)!;
+                      handleSendWhatsAppReminder(selectedHistoryCustomer, remInfo);
+                    }}
+                    className={`h-8 px-3 text-xs font-bold flex items-center gap-1.5 rounded-xl cursor-pointer self-start sm:self-auto shrink-0 disabled:opacity-50 ${
+                      isReminderInCooldown(selectedHistoryCustomer.last_reminder_sent_at)
+                        ? "bg-zinc-800 hover:bg-zinc-700 text-emerald-300 border border-emerald-500/40"
+                        : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
+                    }`}
+                  >
+                    {loadingReminderKey === (selectedHistoryCustomer.id || selectedHistoryCustomer.phone) ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Saving to DB...</span>
+                      </>
+                    ) : (
+                      <>
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <span>
+                          {isReminderInCooldown(selectedHistoryCustomer.last_reminder_sent_at)
+                            ? "Resend WhatsApp"
+                            : "Send WhatsApp"}
+                        </span>
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
 
             {selectedHistoryCustomer.reminder_history && selectedHistoryCustomer.reminder_history.length > 0 && (
@@ -1580,21 +1613,32 @@ export function CustomerDirectory() {
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0 flex-wrap justify-between">
             <Button variant="outline" onClick={() => setIsHistoryModalOpen(false)}>
               Close
             </Button>
-            <Button
-              variant="glow"
-              onClick={() => {
-                setIsHistoryModalOpen(false);
-                handleStartBill(selectedHistoryCustomer);
-              }}
-              className="gap-1.5 text-xs font-bold"
-            >
-              <ShoppingCart className="h-4 w-4" />
-              <span>Create New Bill</span>
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() => handleSendLorealOffer(selectedHistoryCustomer)}
+                className="gap-1.5 text-xs text-purple-300 border-purple-500/40 hover:bg-purple-950/30 font-bold"
+                title="Send personalized L'Oréal Spin Wheel & consultation invite on WhatsApp"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                <span>Send L'Oréal Offer</span>
+              </Button>
+              <Button
+                variant="glow"
+                onClick={() => {
+                  setIsHistoryModalOpen(false);
+                  handleStartBill(selectedHistoryCustomer);
+                }}
+                className="gap-1.5 text-xs font-bold"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                <span>Create New Bill</span>
+              </Button>
+            </div>
           </DialogFooter>
         </Dialog>
       )}
