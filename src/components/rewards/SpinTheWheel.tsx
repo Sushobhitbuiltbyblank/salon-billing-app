@@ -651,10 +651,10 @@ export function SpinTheWheel({
                 target="_blank"
                 rel="noreferrer"
                 className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-[11px] font-bold transition-colors cursor-pointer"
-                title="Open Fullscreen Tablet Mode (/spin)"
+                title="Open Customer Link (/spin)"
               >
                 <ExternalLink className="h-3 w-3 text-purple-400" />
-                <span>Kiosk</span>
+                <span>Customer Link</span>
               </a>
             )}
             <button

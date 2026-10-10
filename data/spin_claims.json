@@ -1,1 +1,38 @@
-[]
+[
+  {
+    "id": "claim-1791618782908",
+    "claimCode": "BZ-LOREAL-9325",
+    "prizeId": "00000000-0000-0000-0000-000000000204",
+    "prizeLabel": "Free Hair Cut Service",
+    "prizeType": "service",
+    "customerName": "Vvsbs",
+    "customerPhone": "7078484840",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-10T07:53:02.908Z"
+  },
+  {
+    "id": "claim-1791618746041",
+    "claimCode": "BZ-LOREAL-4715",
+    "prizeId": "00000000-0000-0000-0000-000000000204",
+    "prizeLabel": "Free Hair Cut Service",
+    "prizeType": "service",
+    "customerName": "Aaaa",
+    "customerPhone": "4488484887",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-10T07:52:26.041Z"
+  },
+  {
+    "id": "claim-1791618557517",
+    "claimCode": "BZ-LOREAL-5601",
+    "prizeId": "00000000-0000-0000-0000-000000000202",
+    "prizeLabel": "Free L'Oréal Facewash",
+    "prizeType": "product_gift",
+    "customerName": "Amit",
+    "customerPhone": "1234567890",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-10T07:49:17.517Z"
+  }
+]
