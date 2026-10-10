@@ -65,9 +65,13 @@ interface VerificationDetails {
 
 interface AdminRewardsManagementProps {
   initialSubTab?: "verify" | "pool" | "claims" | "gate";
+  isAdmin?: boolean;
 }
 
-export function AdminRewardsManagement({ initialSubTab = "verify" }: AdminRewardsManagementProps = {}) {
+export function AdminRewardsManagement({
+  initialSubTab = "verify",
+  isAdmin = false,
+}: AdminRewardsManagementProps = {}) {
   const {
     settings,
     updateSettings,
@@ -748,7 +752,7 @@ export function AdminRewardsManagement({ initialSubTab = "verify" }: AdminReward
                 <span className="hidden sm:inline">{isLoadingClaims ? "Refreshing..." : "Refresh"}</span>
               </button>
 
-              {claimLogs.length > 0 && (
+              {isAdmin && claimLogs.length > 0 && (
                 <button
                   onClick={handleClearAllClaims}
                   className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
@@ -834,13 +838,15 @@ export function AdminRewardsManagement({ initialSubTab = "verify" }: AdminReward
                               Verify Details
                             </button>
 
-                            <button
-                              onClick={() => handleDeleteClaim(claim)}
-                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950 text-zinc-400 hover:text-rose-300 border border-zinc-800 hover:border-rose-500/40 transition-colors cursor-pointer"
-                              title="Delete this claim record"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 text-rose-400" />
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeleteClaim(claim)}
+                                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950 text-zinc-400 hover:text-rose-300 border border-zinc-800 hover:border-rose-500/40 transition-colors cursor-pointer"
+                                title="Delete this claim record"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

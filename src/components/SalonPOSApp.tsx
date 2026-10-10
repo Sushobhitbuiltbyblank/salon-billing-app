@@ -35,7 +35,7 @@ function MainContent() {
       {activeTab === "staff" && <StaffPerformance />}
       {activeTab === "lucky_wheel" && (
         <div className="py-2">
-          <AdminRewardsManagement initialSubTab="verify" />
+          <AdminRewardsManagement initialSubTab="verify" isAdmin={false} />
         </div>
       )}
       {activeTab === "history" && <RecentInvoices />}
