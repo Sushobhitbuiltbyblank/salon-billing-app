@@ -31,6 +31,7 @@ import {
   verifyOfferOnServer,
   deleteServerClaimRecord,
   clearAllServerClaimRecords,
+  fetchServerClaimRecords,
 } from "./rewardStorage";
 import { cleanPhoneNumber, SALON_EVENT_DATE, SALON_EVENT_VENUE, LOREAL_EVENT_TERMS_SHORT } from "./whatsapp";
 
@@ -312,7 +313,9 @@ export const SupabaseSync = {
 
           return remoteCatalog;
         })(),
-        customers: (customersRes.data || []).map((cust: any) => this.mapRemoteCustomer(cust)),
+        customers: (customersRes.data || [])
+          .filter((c: any) => c.phone !== "0000000000" && !c.name?.startsWith("__SYSTEM_"))
+          .map((cust: any) => this.mapRemoteCustomer(cust)),
         invoices: (invoicesRes.data || []).map((inv: any) => this.mapRemoteInvoice(inv)),
         expenses: (expensesRes.data || []).map((e: any) => ({
           ...e,
@@ -414,7 +417,9 @@ export const SupabaseSync = {
       return {
         syncTimestamp: nowIso,
         invoices: Array.from(invoiceMap.values()),
-        customers: (customersRes.data || []).map((c: any) => this.mapRemoteCustomer(c)),
+        customers: (customersRes.data || [])
+          .filter((c: any) => c.phone !== "0000000000" && !c.name?.startsWith("__SYSTEM_"))
+          .map((c: any) => this.mapRemoteCustomer(c)),
         expenses: (expensesRes.data || []).map((e: any) => ({
           ...e,
           amount: Number(e.amount) || 0,
@@ -1803,19 +1808,36 @@ export const SupabaseSync = {
   },
 
   async getSpinLogs(): Promise<SpinLog[]> {
-    if (!isSupabaseConfigured() || !supabase) return getLocalSpinLogs();
     try {
-      const { data, error } = await supabase
-        .from("spin_logs")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (!error && data) {
-        return data as SpinLog[];
+      const serverClaims = await fetchServerClaimRecords();
+      if (serverClaims && serverClaims.length > 0) {
+        return serverClaims.map((c) => ({
+          id: c.id,
+          offer_token: c.claimCode,
+          customer_name: c.customerName || "Valued Guest",
+          phone_number: c.customerPhone || "Not Provided",
+          won_item: c.prizeLabel,
+          prize_id: c.prizeId,
+          is_redeemed: true,
+          redeemed_at: c.createdAt,
+          created_at: c.createdAt,
+        }));
       }
-      return getLocalSpinLogs();
-    } catch {
-      return getLocalSpinLogs();
+    } catch {}
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("spin_logs")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (!error && data && data.length > 0) {
+          return data as SpinLog[];
+        }
+      } catch {}
     }
+
+    return getLocalSpinLogs();
   },
 
   async verifyOfferById(offerId: string): Promise<{

@@ -1,36 +1,11 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 import { SpinClaimRecord } from "@/types/rewards";
 import { cleanPhoneNumber, SALON_EVENT_DATE, SALON_EVENT_VENUE, LOREAL_EVENT_TERMS_SHORT } from "@/lib/whatsapp";
-import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
-
-const DATA_DIR = path.join(process.cwd(), "data");
-const CLAIMS_FILE = path.join(DATA_DIR, "spin_claims.json");
-
-// Helper to load claims from disk (filtering out incomplete claims without name/phone)
-async function loadClaimsFromFile(): Promise<SpinClaimRecord[]> {
-  try {
-    const content = await fs.readFile(CLAIMS_FILE, "utf-8");
-    const parsed = JSON.parse(content);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (c) => Boolean(c.customerName && c.customerName.trim() && c.customerPhone && c.customerPhone.trim())
-    );
-  } catch {
-    return [];
-  }
-}
-
-// Helper to save claims to disk safely
-async function saveClaimsToFile(claims: SpinClaimRecord[]): Promise<void> {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(CLAIMS_FILE, JSON.stringify(claims, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to write spin claims to file:", err);
-  }
-}
+import {
+  loadCloudClaims,
+  addCloudClaim,
+  deleteCloudClaim,
+} from "@/lib/spinCloudStore";
 
 // GET: Fetch all claims, or verify a specific claim, or check if phone claimed
 export async function GET(request: Request) {
@@ -39,9 +14,9 @@ export async function GET(request: Request) {
     const verifyCode = searchParams.get("verify") || searchParams.get("code");
     const checkPhone = searchParams.get("phone");
 
-    const claims = await loadClaimsFromFile();
+    const claims = await loadCloudClaims();
 
-    // 1. Phone number claim check
+    // 1. Phone number claim check (anti-fraud: one claim per phone number)
     if (checkPhone) {
       const cleanPhone = cleanPhoneNumber(checkPhone);
       const match = claims.find(
@@ -90,7 +65,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // 3. Return all claims for Admin
+    // 3. Return all claims for Admin Customer Claim History
     return NextResponse.json({
       success: true,
       claims,
@@ -119,7 +94,7 @@ export async function POST(request: Request) {
     const cleanName = body.customerName ? String(body.customerName).trim() : "";
     const cleanPhone = body.customerPhone ? cleanPhoneNumber(String(body.customerPhone)) : "";
 
-    // Strictly enforce: customer who does not fill name and number must NOT be created/saved in history
+    // Strictly enforce: customer who does not fill name and valid 10-digit number must NOT be created/saved
     if (!cleanName || !cleanPhone || cleanPhone.length !== 10) {
       return NextResponse.json(
         {
@@ -143,41 +118,12 @@ export async function POST(request: Request) {
       createdAt: body.createdAt || new Date().toISOString(),
     };
 
-    const currentClaims = await loadClaimsFromFile();
-    // Prepend new claim, removing any duplicate with same ID or claimCode (case-insensitive)
-    const updatedClaims = [
-      newClaim,
-      ...currentClaims.filter(
-        (c) =>
-          c.id !== newClaim.id &&
-          c.claimCode.trim().toLowerCase() !== newClaim.claimCode.trim().toLowerCase()
-      ),
-    ];
-
-    await saveClaimsToFile(updatedClaims);
-
-    // Also attempt Supabase spin_logs insert gracefully if configured
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        await supabase.from("spin_logs").upsert({
-          id: newClaim.id,
-          offer_token: newClaim.claimCode,
-          customer_name: newClaim.customerName || "Valued Guest",
-          phone_number: newClaim.customerPhone || "Not Provided",
-          won_item: newClaim.prizeLabel,
-          prize_id: newClaim.prizeId,
-          is_redeemed: true,
-          redeemed_at: newClaim.createdAt,
-          created_at: newClaim.createdAt,
-        });
-      } catch {
-        // Ignore remote Supabase errors if table does not exist
-      }
-    }
+    const updatedClaims = await addCloudClaim(newClaim);
 
     return NextResponse.json({
       success: true,
       claim: newClaim,
+      count: updatedClaims.length,
     });
   } catch (err) {
     console.error("POST /api/spin-claims error:", err);
@@ -197,49 +143,18 @@ export async function DELETE(request: Request) {
     const claimCode = searchParams.get("code");
     const phone = searchParams.get("phone");
 
-    if (clearAll) {
-      await saveClaimsToFile([]);
-
-      // Also try clearing Supabase if configured
-      if (isSupabaseConfigured() && supabase) {
-        try {
-          await supabase.from("spin_logs").delete().neq("id", "0");
-        } catch {
-          // ignore
-        }
-      }
-
-      return NextResponse.json({ success: true, message: "All claims cleared" });
-    }
-
-    const currentClaims = await loadClaimsFromFile();
-    const cleanPhone = phone ? cleanPhoneNumber(phone) : null;
-
-    const filtered = currentClaims.filter((c) => {
-      if (claimId && c.id === claimId) return false;
-      if (claimCode && c.claimCode.trim().toLowerCase() === claimCode.trim().toLowerCase()) return false;
-      if (cleanPhone && c.customerPhone && cleanPhoneNumber(c.customerPhone) === cleanPhone) return false;
-      return true;
+    const remaining = await deleteCloudClaim({
+      id: claimId,
+      code: claimCode,
+      phone,
+      clearAll,
     });
 
-    await saveClaimsToFile(filtered);
-
-    // Also try deleting from Supabase if configured
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        if (claimCode) {
-          await supabase.from("spin_logs").delete().eq("offer_token", claimCode);
-        } else if (claimId) {
-          await supabase.from("spin_logs").delete().eq("id", claimId);
-        } else if (cleanPhone) {
-          await supabase.from("spin_logs").delete().eq("phone_number", cleanPhone);
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    return NextResponse.json({ success: true, remaining: filtered.length });
+    return NextResponse.json({
+      success: true,
+      message: clearAll ? "All claims cleared" : "Claim deleted",
+      remaining: remaining.length,
+    });
   } catch (err) {
     console.error("DELETE /api/spin-claims error:", err);
     return NextResponse.json(
@@ -248,3 +163,4 @@ export async function DELETE(request: Request) {
     );
   }
 }
+

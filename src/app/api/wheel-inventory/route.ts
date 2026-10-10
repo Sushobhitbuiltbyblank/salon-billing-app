@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 import { WheelInventoryItem, DEFAULT_WHEEL_INVENTORY } from "@/types/rewards";
-import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
+import {
+  loadCloudWheelInventory,
+  saveCloudWheelInventory,
+  sanitizeWheelInventory,
+} from "@/lib/spinCloudStore";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const INVENTORY_FILE = path.join(DATA_DIR, "wheel_inventory.json");
-
-/**
- * Robust check to filter out any variant of facewash / cleanser or legacy ID
- */
 function isFacewashItem(item: { id?: string; title?: string } | null | undefined): boolean {
   if (!item) return false;
   if (
@@ -23,51 +19,10 @@ function isFacewashItem(item: { id?: string; title?: string } | null | undefined
   return clean.includes("facewash") || clean.includes("facecleaner");
 }
 
-/**
- * Filter out facewash and deduplicate items by id
- */
-function sanitizeInventory(items: WheelInventoryItem[]): WheelInventoryItem[] {
-  if (!Array.isArray(items)) return DEFAULT_WHEEL_INVENTORY;
-  const filtered = items.filter((i) => !isFacewashItem(i) && Boolean(i.id && i.title?.trim()));
-  const seenIds = new Set<string>();
-  const deduped: WheelInventoryItem[] = [];
-  for (const it of filtered) {
-    if (!seenIds.has(it.id)) {
-      seenIds.add(it.id);
-      deduped.push(it);
-    }
-  }
-  return deduped.length > 0 ? deduped : DEFAULT_WHEEL_INVENTORY;
-}
-
-// Helper to load inventory from server disk
-async function loadInventoryFromFile(): Promise<WheelInventoryItem[]> {
-  try {
-    const content = await fs.readFile(INVENTORY_FILE, "utf-8");
-    const parsed = JSON.parse(content);
-    return sanitizeInventory(parsed);
-  } catch {
-    // If file doesn't exist yet, initialize with default inventory
-    await saveInventoryToFile(DEFAULT_WHEEL_INVENTORY);
-    return DEFAULT_WHEEL_INVENTORY;
-  }
-}
-
-// Helper to save inventory to server disk safely
-async function saveInventoryToFile(items: WheelInventoryItem[]): Promise<void> {
-  try {
-    const clean = sanitizeInventory(items);
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(INVENTORY_FILE, JSON.stringify(clean, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to write wheel inventory to file:", err);
-  }
-}
-
 // GET: Fetch current wheel pool stocks inventory (central source of truth across all devices)
 export async function GET() {
   try {
-    const items = await loadInventoryFromFile();
+    const items = await loadCloudWheelInventory();
     return NextResponse.json({ success: true, items, count: items.length });
   } catch (err) {
     console.error("GET /api/wheel-inventory error:", err);
@@ -85,21 +40,9 @@ export async function POST(request: Request) {
 
     // 1. Bulk replace (e.g. reset to default or batch update)
     if (Array.isArray(body.items)) {
-      const sanitized = sanitizeInventory(body.items);
-      await saveInventoryToFile(sanitized);
-
-      // Best effort remote sync if Supabase table exists
-      if (isSupabaseConfigured() && supabase) {
-        try {
-          for (const it of sanitized) {
-            await supabase.from("wheel_inventory").upsert(it);
-          }
-        } catch {
-          // ignore remote table schema errors
-        }
-      }
-
-      return NextResponse.json({ success: true, items: sanitized });
+      const sanitized = sanitizeWheelInventory(body.items);
+      const saved = await saveCloudWheelInventory(sanitized);
+      return NextResponse.json({ success: true, items: saved });
     }
 
     // 2. Single item upsert
@@ -107,11 +50,11 @@ export async function POST(request: Request) {
       const target: WheelInventoryItem = body.item;
       if (isFacewashItem(target)) {
         // Reject saving facewash
-        const current = await loadInventoryFromFile();
+        const current = await loadCloudWheelInventory();
         return NextResponse.json({ success: true, items: current });
       }
 
-      const current = await loadInventoryFromFile();
+      const current = await loadCloudWheelInventory();
       const idx = current.findIndex((i) => i.id === target.id);
       if (idx >= 0) {
         current[idx] = { ...current[idx], ...target };
@@ -119,16 +62,8 @@ export async function POST(request: Request) {
         current.push(target);
       }
 
-      const sanitized = sanitizeInventory(current);
-      await saveInventoryToFile(sanitized);
-
-      if (isSupabaseConfigured() && supabase) {
-        try {
-          await supabase.from("wheel_inventory").upsert(target);
-        } catch {}
-      }
-
-      return NextResponse.json({ success: true, items: sanitized });
+      const saved = await saveCloudWheelInventory(current);
+      return NextResponse.json({ success: true, items: saved });
     }
 
     return NextResponse.json({ success: false, error: "Invalid payload" }, { status: 400 });
@@ -153,7 +88,7 @@ export async function DELETE(request: Request) {
       } catch {}
     }
 
-    const current = await loadInventoryFromFile();
+    const current = await loadCloudWheelInventory();
     const remaining = current.filter((it) => {
       if (payloadId && it.id === payloadId) return false;
       if (title && it.title.toLowerCase().trim() === title.toLowerCase().trim()) return false;
@@ -161,18 +96,11 @@ export async function DELETE(request: Request) {
       return true;
     });
 
-    await saveInventoryToFile(remaining);
-
-    // Also attempt delete in Supabase if configured
-    if (isSupabaseConfigured() && supabase && payloadId) {
-      try {
-        await supabase.from("wheel_inventory").delete().eq("id", payloadId);
-      } catch {}
-    }
-
-    return NextResponse.json({ success: true, items: remaining, remainingCount: remaining.length });
+    const saved = await saveCloudWheelInventory(remaining);
+    return NextResponse.json({ success: true, items: saved, remainingCount: saved.length });
   } catch (err) {
     console.error("DELETE /api/wheel-inventory error:", err);
     return NextResponse.json({ success: false, error: "Failed to delete item" }, { status: 500 });
   }
 }
+
