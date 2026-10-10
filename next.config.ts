@@ -5,6 +5,14 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
+  async rewrites() {
+    return [
+      { source: "/loreal-event", destination: "/spin" },
+      { source: "/event", destination: "/spin" },
+      { source: "/vip-offer", destination: "/spin" },
+      { source: "/offers", destination: "/spin" },
+    ];
+  },
   // Allows seamless cross-device testing on local Wi-Fi without Next.js dev origin warnings
   allowedDevOrigins: [
     "172.20.10.2",
