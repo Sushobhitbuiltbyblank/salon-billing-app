@@ -1,17 +1,5 @@
 [
   {
-    "id": "claim-1791624841073",
-    "claimCode": "BZ-LOREAL-4483",
-    "prizeId": "00000000-0000-0000-0000-000000000203",
-    "prizeLabel": "Free D-Tan Service",
-    "prizeType": "service",
-    "customerName": "Trma",
-    "customerPhone": "1313131313",
-    "wasVerified": true,
-    "inventoryDeducted": false,
-    "createdAt": "2026-10-10T09:34:01.073Z"
-  },
-  {
     "id": "claim-1791624681820",
     "claimCode": "BZ-LOREAL-9168",
     "prizeId": "00000000-0000-0000-0000-000000000204",

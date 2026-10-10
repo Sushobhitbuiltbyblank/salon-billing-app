@@ -92,11 +92,88 @@ export async function syncClaimToServer(record: SpinClaimRecord): Promise<boolea
   }
 }
 
-export async function fetchServerClaimRecords(): Promise<SpinClaimRecord[]> {
-  if (typeof window === "undefined" || !window.location?.origin) return getClaimRecords();
+export interface PaginatedClaimsResponse {
+  claims: SpinClaimRecord[];
+  total: number;
+  totalClaims: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+export async function fetchServerClaimsPaginated(
+  page: number = 1,
+  limit: number = 10,
+  search: string = ""
+): Promise<PaginatedClaimsResponse> {
+  if (typeof window === "undefined" || !window.location?.origin) {
+    return {
+      claims: [],
+      total: 0,
+      totalClaims: 0,
+      page,
+      limit,
+      totalPages: 1,
+      hasMore: false,
+    };
+  }
   try {
-    const res = await fetch(getApiUrl("/api/spin-claims"), { cache: "no-store" });
-    if (!res.ok) return getClaimRecords();
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+      _t: String(Date.now()),
+    });
+    if (search.trim()) {
+      params.set("search", search.trim());
+    }
+    const res = await fetch(getApiUrl(`/api/spin-claims?${params.toString()}`), {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" },
+    });
+    if (!res.ok) {
+      return {
+        claims: [],
+        total: 0,
+        totalClaims: 0,
+        page,
+        limit,
+        totalPages: 1,
+        hasMore: false,
+      };
+    }
+    const data = await res.json();
+    return {
+      claims: Array.isArray(data.claims) ? data.claims : [],
+      total: data.total ?? (data.claims?.length || 0),
+      totalClaims: data.totalClaims ?? (data.claims?.length || 0),
+      page: data.page ?? page,
+      limit: data.limit ?? limit,
+      totalPages: data.totalPages ?? 1,
+      hasMore: Boolean(data.hasMore),
+    };
+  } catch (err) {
+    console.warn("Failed to fetch paginated claims:", err);
+    return {
+      claims: [],
+      total: 0,
+      totalClaims: 0,
+      page,
+      limit,
+      totalPages: 1,
+      hasMore: false,
+    };
+  }
+}
+
+export async function fetchServerClaimRecords(): Promise<SpinClaimRecord[]> {
+  if (typeof window === "undefined" || !window.location?.origin) return [];
+  try {
+    const res = await fetch(getApiUrl(`/api/spin-claims?_t=${Date.now()}`), {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" },
+    });
+    if (!res.ok) return [];
     const data = await res.json();
     if (data && Array.isArray(data.claims)) {
       // Only keep records that have both customer name and phone
@@ -114,10 +191,10 @@ export async function fetchServerClaimRecords(): Promise<SpinClaimRecord[]> {
       } catch {}
       return serverClaims;
     }
-    return getClaimRecords();
+    return [];
   } catch (err) {
-    console.warn("Failed to fetch spin claims from server, using local:", err);
-    return getClaimRecords();
+    console.warn("Failed to fetch spin claims from server:", err);
+    return [];
   }
 }
 

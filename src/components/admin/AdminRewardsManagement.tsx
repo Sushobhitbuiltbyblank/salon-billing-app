@@ -3,7 +3,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { SpinClaimRecord, removeProductQuantity } from "@/types/rewards";
-import { getClaimRecords, getLocalSpinLogs, fetchServerClaimRecords } from "@/lib/rewardStorage";
+import {
+  getClaimRecords,
+  getLocalSpinLogs,
+  fetchServerClaimRecords,
+  fetchServerClaimsPaginated,
+} from "@/lib/rewardStorage";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +42,8 @@ import {
   ClipboardPaste,
   Trash2,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import { WheelInventoryManager } from "./WheelInventoryManager";
@@ -84,14 +91,17 @@ export function AdminRewardsManagement({
     clearAllClaimRecords,
   } = useApp();
 
-  const [claimLogs, setClaimLogs] = useState<SpinClaimRecord[]>(() =>
-    getClaimRecords().filter(
-      (c) => Boolean(c.customerName && c.customerName.trim() && c.customerPhone && c.customerPhone.trim())
-    )
-  );
+  const [claimLogs, setClaimLogs] = useState<SpinClaimRecord[]>([]);
   const [activeSubTab, setActiveSubTab] = useState<"verify" | "pool" | "claims" | "gate">(initialSubTab);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [searchLog, setSearchLog] = useState("");
+
+  // Pagination state (10 per page as requested)
+  const claimsPerPage = 10;
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalClaimsCount, setTotalClaimsCount] = useState<number>(0);
+  const [totalFilteredCount, setTotalFilteredCount] = useState<number>(0);
 
   // Verification Input & Result State
   const [inputOfferId, setInputOfferId] = useState("");
@@ -120,14 +130,15 @@ export function AdminRewardsManagement({
 
   const [isLoadingClaims, setIsLoadingClaims] = useState(false);
 
-  const refreshClaims = async (showLoadingState = false) => {
+  const refreshClaims = async (page = currentPage, query = searchLog, showLoadingState = false) => {
     if (showLoadingState) setIsLoadingClaims(true);
     try {
-      const records = await fetchServerClaimRecords();
-      const valid = records.filter(
-        (c) => Boolean(c.customerName && c.customerName.trim() && c.customerPhone && c.customerPhone.trim())
-      );
-      setClaimLogs(valid);
+      const result = await fetchServerClaimsPaginated(page, claimsPerPage, query);
+      setClaimLogs(result.claims);
+      setTotalClaimsCount(result.totalClaims);
+      setTotalFilteredCount(result.total);
+      setTotalPages(result.totalPages);
+      setCurrentPage(result.page);
     } catch (err) {
       console.warn("Failed to refresh claims:", err);
     } finally {
@@ -137,26 +148,28 @@ export function AdminRewardsManagement({
 
   // Load latest claims on mount
   useEffect(() => {
-    refreshClaims();
+    refreshClaims(1, "");
     setReviewUrl(settings.google_review_url || "");
     setInstagramUrl(settings.instagram_url || "");
   }, [settings]);
 
-  // Auto-refresh claims when viewing the "claims" tab or when window gets focus
+  // Auto-refresh claims across devices when viewing the "claims" tab or when window gets focus
   useEffect(() => {
     if (activeSubTab === "claims") {
-      refreshClaims();
+      refreshClaims(currentPage, searchLog);
       const interval = setInterval(() => {
-        refreshClaims();
-      }, 4000);
-      const onFocus = () => refreshClaims();
+        if (typeof document !== "undefined" && document.visibilityState === "visible") {
+          refreshClaims(currentPage, searchLog);
+        }
+      }, 5000);
+      const onFocus = () => refreshClaims(currentPage, searchLog);
       window.addEventListener("focus", onFocus);
       return () => {
         clearInterval(interval);
         window.removeEventListener("focus", onFocus);
       };
     }
-  }, [activeSubTab]);
+  }, [activeSubTab, currentPage, searchLog]);
 
   // Delete single claim record
   const handleDeleteClaim = async (claim: SpinClaimRecord) => {
@@ -164,8 +177,9 @@ export function AdminRewardsManagement({
       return;
     }
     await deleteClaimRecord(claim.id, claim.claimCode, claim.customerPhone);
-    setClaimLogs((prev) => prev.filter((c) => c.id !== claim.id && c.claimCode !== claim.claimCode));
-    await refreshClaims();
+    const targetPage = claimLogs.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+    setCurrentPage(targetPage);
+    await refreshClaims(targetPage, searchLog, true);
     showToast("🗑️ Claim record deleted successfully!");
   };
 
@@ -176,7 +190,11 @@ export function AdminRewardsManagement({
     }
     await clearAllClaimRecords();
     setClaimLogs([]);
-    await refreshClaims();
+    setCurrentPage(1);
+    setTotalPages(1);
+    setTotalClaimsCount(0);
+    setTotalFilteredCount(0);
+    await refreshClaims(1, "", true);
     showToast("🗑️ All claim history deleted successfully!");
   };
 
@@ -295,18 +313,8 @@ export function AdminRewardsManagement({
     setTimeout(() => setSaveSuccess(false), 2500);
   };
 
-  // Filtered Claims
-  const filteredClaims = useMemo(() => {
-    if (!searchLog.trim()) return claimLogs;
-    const q = searchLog.toLowerCase();
-    return claimLogs.filter(
-      (c) =>
-        c.claimCode.toLowerCase().includes(q) ||
-        c.prizeLabel.toLowerCase().includes(q) ||
-        (c.customerName && c.customerName.toLowerCase().includes(q)) ||
-        (c.customerPhone && c.customerPhone.includes(q))
-    );
-  }, [claimLogs, searchLog]);
+  // Claims for current page
+  const filteredClaims = claimLogs;
 
   return (
     <div className="space-y-6">
@@ -364,8 +372,8 @@ export function AdminRewardsManagement({
         >
           <Layers className="h-4 w-4" />
           <span>Customer Claim History</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-300">
-            {claimLogs.length}
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-purple-300 font-bold border border-zinc-700">
+            {totalClaimsCount || claimLogs.length}
           </span>
         </button>
 
@@ -716,13 +724,18 @@ export function AdminRewardsManagement({
                   type="text"
                   placeholder="Search code, phone, or name..."
                   value={searchLog}
-                  onChange={(e) => setSearchLog(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSearchLog(val);
+                    setCurrentPage(1);
+                    refreshClaims(1, val);
+                  }}
                   className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
                 />
               </div>
 
               <button
-                onClick={() => refreshClaims(true)}
+                onClick={() => refreshClaims(currentPage, searchLog, true)}
                 disabled={isLoadingClaims}
                 className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 text-zinc-200 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
                 title="Refresh claims from all devices"
@@ -731,7 +744,7 @@ export function AdminRewardsManagement({
                 <span className="hidden sm:inline">{isLoadingClaims ? "Refreshing..." : "Refresh"}</span>
               </button>
 
-              {isAdmin && claimLogs.length > 0 && (
+              {isAdmin && (totalClaimsCount > 0 || claimLogs.length > 0) && (
                 <button
                   onClick={handleClearAllClaims}
                   className="px-3 py-1.5 rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-500/50 text-rose-300 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 shadow-sm"
@@ -748,91 +761,160 @@ export function AdminRewardsManagement({
           {filteredClaims.length === 0 ? (
             <div className="text-center py-12 bg-zinc-900/40 rounded-2xl border border-zinc-800">
               <Gift className="h-10 w-10 text-zinc-600 mx-auto mb-2" />
-              <p className="text-sm font-bold text-zinc-300">No Claim Records Found</p>
-              <p className="text-xs text-zinc-500 mt-0.5">
-                Claims will appear here when customers spin the wheel and unlock rewards.
+              <p className="text-sm font-bold text-zinc-300">
+                {searchLog ? "No Matching Claim Records" : "No Claim Records Found"}
               </p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {searchLog
+                  ? `No offers found matching "${searchLog}". Try clearing your search.`
+                  : "Claims will appear here when customers spin the wheel and unlock rewards."}
+              </p>
+              {searchLog && (
+                <button
+                  onClick={() => {
+                    setSearchLog("");
+                    setCurrentPage(1);
+                    refreshClaims(1, "");
+                  }}
+                  className="mt-3 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-purple-300 font-bold transition-colors cursor-pointer"
+                >
+                  Clear Search Filter
+                </button>
+              )}
             </div>
           ) : (
-            <div className="rounded-2xl border border-zinc-800 overflow-hidden bg-zinc-950">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-900/90 text-zinc-400 uppercase font-mono text-[10px] border-b border-zinc-800">
-                    <tr>
-                      <th className="p-3">Claim Code</th>
-                      <th className="p-3">Customer</th>
-                      <th className="p-3">Prize Won</th>
-                      <th className="p-3">Reward Type</th>
-                      <th className="p-3">Verification</th>
-                      <th className="p-3">Date &amp; Time</th>
-                      <th className="p-3 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800/60">
-                    {filteredClaims.map((claim) => (
-                      <tr key={claim.id} className="hover:bg-zinc-900/40 transition-colors">
-                        <td className="p-3 font-mono font-bold text-amber-400">{claim.claimCode}</td>
-                        <td className="p-3">
-                          <div className="font-bold text-white">{claim.customerName || "Customer"}</div>
-                          {claim.customerPhone && (
-                            <div className="text-[10px] text-zinc-400 font-mono">
-                              {claim.customerPhone}
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-3 font-bold text-white">{removeProductQuantity(claim.prizeLabel)}</td>
-                        <td className="p-3 uppercase font-mono text-[10px] text-zinc-400">
-                          {claim.prizeType}
-                        </td>
-                        <td className="p-3">
-                          {claim.wasVerified ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                              <CheckCircle2 className="h-3 w-3" />
-                              <span>Verified</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 text-[10px]">
-                              <span>Skipped</span>
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-zinc-400 font-mono text-[11px]">
-                          {new Date(claim.createdAt).toLocaleString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => {
-                                setActiveSubTab("verify");
-                                setInputOfferId(claim.claimCode);
-                                handleVerifyOffer(claim.claimCode);
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-[11px] font-bold transition-colors cursor-pointer"
-                            >
-                              Verify Details
-                            </button>
-
-                            {isAdmin && (
-                              <button
-                                onClick={() => handleDeleteClaim(claim)}
-                                className="px-2 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 hover:text-white border border-rose-500/40 transition-colors cursor-pointer flex items-center gap-1 font-bold text-[11px]"
-                                title="Delete this claim record"
-                              >
-                                <Trash2 className="h-3 w-3 text-rose-400" />
-                                <span>Delete</span>
-                              </button>
-                            )}
-                          </div>
-                        </td>
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-zinc-800 overflow-hidden bg-zinc-950">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-zinc-900/90 text-zinc-400 uppercase font-mono text-[10px] border-b border-zinc-800">
+                      <tr>
+                        <th className="p-3">Claim Code</th>
+                        <th className="p-3">Customer</th>
+                        <th className="p-3">Prize Won</th>
+                        <th className="p-3">Reward Type</th>
+                        <th className="p-3">Verification</th>
+                        <th className="p-3">Date &amp; Time</th>
+                        <th className="p-3 text-right">Action</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/60">
+                      {filteredClaims.map((claim) => (
+                        <tr key={claim.id} className="hover:bg-zinc-900/40 transition-colors">
+                          <td className="p-3 font-mono font-bold text-amber-400">{claim.claimCode}</td>
+                          <td className="p-3">
+                            <div className="font-bold text-white">{claim.customerName || "Customer"}</div>
+                            {claim.customerPhone && (
+                              <div className="text-[10px] text-zinc-400 font-mono">
+                                {claim.customerPhone}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3 font-bold text-white">{removeProductQuantity(claim.prizeLabel)}</td>
+                          <td className="p-3 uppercase font-mono text-[10px] text-zinc-400">
+                            {claim.prizeType}
+                          </td>
+                          <td className="p-3">
+                            {claim.wasVerified ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                                <CheckCircle2 className="h-3 w-3" />
+                                <span>Verified</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 text-[10px]">
+                                <span>Skipped</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-zinc-400 font-mono text-[11px]">
+                            {new Date(claim.createdAt).toLocaleString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setActiveSubTab("verify");
+                                  setInputOfferId(claim.claimCode);
+                                  handleVerifyOffer(claim.claimCode);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-[11px] font-bold transition-colors cursor-pointer"
+                              >
+                                Verify Details
+                              </button>
+
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleDeleteClaim(claim)}
+                                  className="px-2 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 hover:text-white border border-rose-500/40 transition-colors cursor-pointer flex items-center gap-1 font-bold text-[11px]"
+                                  title="Delete this claim record"
+                                >
+                                  <Trash2 className="h-3 w-3 text-rose-400" />
+                                  <span>Delete</span>
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* PAGINATION BAR (10 ITEMS PER PAGE) */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-zinc-900/70 rounded-2xl border border-zinc-800 text-xs">
+                <div className="text-zinc-400 font-medium">
+                  Showing{" "}
+                  <span className="font-bold text-white">
+                    {totalFilteredCount === 0 ? 0 : (currentPage - 1) * claimsPerPage + 1}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-bold text-white">
+                    {Math.min(currentPage * claimsPerPage, totalFilteredCount)}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-bold text-white">{totalFilteredCount}</span> records
+                  {searchLog && <span className="text-zinc-500 text-[11px] ml-1.5">(filtered)</span>}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        const p = Math.max(1, currentPage - 1);
+                        setCurrentPage(p);
+                        refreshClaims(p, searchLog, true);
+                      }}
+                      disabled={currentPage <= 1 || isLoadingClaims}
+                      className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-200 hover:text-white font-bold transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                      <span>Prev</span>
+                    </button>
+
+                    <div className="px-3 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 font-mono font-bold text-purple-300">
+                      Page {currentPage} of {totalPages}
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const p = Math.min(totalPages, currentPage + 1);
+                        setCurrentPage(p);
+                        refreshClaims(p, searchLog, true);
+                      }}
+                      disabled={currentPage >= totalPages || isLoadingClaims}
+                      className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-200 hover:text-white font-bold transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <span>Next</span>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -866,17 +948,17 @@ export function AdminRewardsManagement({
               <input
                 type="text"
                 readOnly
-                value={typeof window !== "undefined" ? `${window.location.origin}/spin` : "/spin"}
+                value="https://belezia-offers.vercel.app/spin"
                 className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-amber-300 focus:outline-none select-all"
               />
               <button
                 type="button"
                 onClick={() => {
-                  if (typeof window !== "undefined") {
-                    const url = `${window.location.origin}/spin`;
+                  const url = "https://belezia-offers.vercel.app/spin";
+                  if (typeof navigator !== "undefined" && navigator.clipboard) {
                     navigator.clipboard.writeText(url);
-                    showToast("📋 Spin Wheel link copied to clipboard!");
                   }
+                  showToast("📋 Customer Spin Wheel link copied to clipboard!");
                 }}
                 className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
               >

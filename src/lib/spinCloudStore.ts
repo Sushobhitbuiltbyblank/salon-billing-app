@@ -135,9 +135,11 @@ async function getSupabaseSystemData(): Promise<{
   try {
     const { data, error } = await supabase
       .from("customers")
-      .select("notes")
+      .select("id, name, phone, notes")
       .eq("id", SYSTEM_SPIN_DATA_ID)
       .maybeSingle();
+
+    console.log("[SYSTEM_DATA_READ]", { error: error?.message, hasData: Boolean(data), notesLen: data?.notes?.length });
 
     if (!error && data?.notes) {
       try {
@@ -178,7 +180,9 @@ async function saveSupabaseSystemData(payload: {
       updated_at: new Date().toISOString(),
     });
 
-    const { error } = await supabase.from("customers").upsert(
+    console.log("[SYSTEM_DATA_SAVING]", { claimsCount: claimsToSave.length, notesLen: notesStr.length });
+
+    const { data: upsertData, error } = await supabase.from("customers").upsert(
       {
         id: SYSTEM_SPIN_DATA_ID,
         name: SYSTEM_SPIN_NAME,
@@ -186,7 +190,9 @@ async function saveSupabaseSystemData(payload: {
         notes: notesStr,
       },
       { onConflict: "id" }
-    );
+    ).select();
+
+    console.log("[SYSTEM_DATA_SAVED]", { error: error?.message, upsertData });
 
     if (error) {
       console.warn("Failed to upsert Supabase system spin data:", error.message);
@@ -207,36 +213,19 @@ async function saveSupabaseSystemData(payload: {
  * Load all spin claims from cloud (Supabase), falling back to disk cache if cloud is unavailable.
  */
 export async function loadCloudClaims(): Promise<SpinClaimRecord[]> {
-  // 1. Try Supabase system record
-  const systemData = await getSupabaseSystemData();
-  let cloudClaims = systemData.claims;
+  // 1. Supabase is the central source of truth across all devices
+  if (isSupabaseConfigured() && supabase) {
+    const systemData = await getSupabaseSystemData();
+    // NEVER merge stale disk cache into Supabase data!
+    // Whatever is in Supabase is the single source of truth.
+    // If an item was deleted on any device, it is gone from Supabase and stays gone.
+    safeWriteJson(LOCAL_CLAIMS_FILE, TMP_CLAIMS_FILE, systemData.claims).catch(() => {});
+    return systemData.claims;
+  }
 
-  // 2. Also try local disk / tmp cache
+  // 2. Fallback to local disk only when Supabase is completely unavailable
   const diskData = await safeReadJson(LOCAL_CLAIMS_FILE, TMP_CLAIMS_FILE);
-  const diskClaims = sanitizeClaims(Array.isArray(diskData) ? diskData : []);
-
-  // Merge and deduplicate (cloud is preferred, but include any disk claims not in cloud)
-  const combinedMap = new Map<string, SpinClaimRecord>();
-  for (const c of diskClaims) {
-    if (c.claimCode) combinedMap.set(c.claimCode.toLowerCase(), c);
-  }
-  for (const c of cloudClaims) {
-    if (c.claimCode) combinedMap.set(c.claimCode.toLowerCase(), c);
-  }
-
-  const allClaims = Array.from(combinedMap.values()).sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-
-  // If cloud was missing claims that were on disk, sync them back up to cloud
-  if (cloudClaims.length < allClaims.length && isSupabaseConfigured()) {
-    saveSupabaseSystemData({ claims: allClaims }).catch(() => {});
-  }
-
-  // Update local disk cache
-  safeWriteJson(LOCAL_CLAIMS_FILE, TMP_CLAIMS_FILE, allClaims).catch(() => {});
-
-  return allClaims;
+  return sanitizeClaims(Array.isArray(diskData) ? diskData : []);
 }
 
 /**
@@ -408,6 +397,15 @@ export async function deleteCloudClaim(options: {
     } catch {}
   }
 
+  // Also purge from spin_logs table in Supabase if present
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      if (options.id) await supabase.from("spin_logs").delete().eq("id", options.id);
+      if (cleanCode) await supabase.from("spin_logs").delete().ilike("offer_token", cleanCode);
+      if (phoneToClean) await supabase.from("spin_logs").delete().ilike("phone_number", `%${phoneToClean}%`);
+    } catch {}
+  }
+
   return filtered;
 }
 
@@ -419,19 +417,17 @@ export async function deleteCloudClaim(options: {
  * Load wheel pool stock inventory from cloud, falling back to disk cache or default inventory
  */
 export async function loadCloudWheelInventory(): Promise<WheelInventoryItem[]> {
-  const systemData = await getSupabaseSystemData();
-  if (systemData.wheel_inventory && systemData.wheel_inventory.length > 0) {
-    safeWriteJson(LOCAL_INVENTORY_FILE, TMP_INVENTORY_FILE, systemData.wheel_inventory).catch(() => {});
-    return systemData.wheel_inventory;
+  if (isSupabaseConfigured() && supabase) {
+    const systemData = await getSupabaseSystemData();
+    if (systemData.wheel_inventory && systemData.wheel_inventory.length > 0) {
+      safeWriteJson(LOCAL_INVENTORY_FILE, TMP_INVENTORY_FILE, systemData.wheel_inventory).catch(() => {});
+      return systemData.wheel_inventory;
+    }
   }
 
   const diskData = await safeReadJson(LOCAL_INVENTORY_FILE, TMP_INVENTORY_FILE);
   if (Array.isArray(diskData) && diskData.length > 0) {
-    const clean = sanitizeWheelInventory(diskData);
-    if (isSupabaseConfigured()) {
-      saveSupabaseSystemData({ wheel_inventory: clean }).catch(() => {});
-    }
-    return clean;
+    return sanitizeWheelInventory(diskData);
   }
 
   const initial = sanitizeWheelInventory(DEFAULT_WHEEL_INVENTORY);

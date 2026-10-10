@@ -6,6 +6,15 @@ import {
   sanitizeWheelInventory,
 } from "@/lib/spinCloudStore";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const NO_CACHE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
 function isFacewashItem(item: { id?: string; title?: string } | null | undefined): boolean {
   if (!item) return false;
   if (
@@ -23,12 +32,15 @@ function isFacewashItem(item: { id?: string; title?: string } | null | undefined
 export async function GET() {
   try {
     const items = await loadCloudWheelInventory();
-    return NextResponse.json({ success: true, items, count: items.length });
+    return NextResponse.json(
+      { success: true, items, count: items.length },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err) {
     console.error("GET /api/wheel-inventory error:", err);
     return NextResponse.json(
       { success: false, items: DEFAULT_WHEEL_INVENTORY, count: DEFAULT_WHEEL_INVENTORY.length },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }
@@ -42,7 +54,7 @@ export async function POST(request: Request) {
     if (Array.isArray(body.items)) {
       const sanitized = sanitizeWheelInventory(body.items);
       const saved = await saveCloudWheelInventory(sanitized);
-      return NextResponse.json({ success: true, items: saved });
+      return NextResponse.json({ success: true, items: saved }, { headers: NO_CACHE_HEADERS });
     }
 
     // 2. Single item upsert
@@ -51,7 +63,7 @@ export async function POST(request: Request) {
       if (isFacewashItem(target)) {
         // Reject saving facewash
         const current = await loadCloudWheelInventory();
-        return NextResponse.json({ success: true, items: current });
+        return NextResponse.json({ success: true, items: current }, { headers: NO_CACHE_HEADERS });
       }
 
       const current = await loadCloudWheelInventory();
@@ -63,13 +75,19 @@ export async function POST(request: Request) {
       }
 
       const saved = await saveCloudWheelInventory(current);
-      return NextResponse.json({ success: true, items: saved });
+      return NextResponse.json({ success: true, items: saved }, { headers: NO_CACHE_HEADERS });
     }
 
-    return NextResponse.json({ success: false, error: "Invalid payload" }, { status: 400 });
+    return NextResponse.json(
+      { success: false, error: "Invalid payload" },
+      { status: 400, headers: NO_CACHE_HEADERS }
+    );
   } catch (err) {
     console.error("POST /api/wheel-inventory error:", err);
-    return NextResponse.json({ success: false, error: "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Server error" },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
 
@@ -97,10 +115,16 @@ export async function DELETE(request: Request) {
     });
 
     const saved = await saveCloudWheelInventory(remaining);
-    return NextResponse.json({ success: true, items: saved, remainingCount: saved.length });
+    return NextResponse.json(
+      { success: true, items: saved, remainingCount: saved.length },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err) {
     console.error("DELETE /api/wheel-inventory error:", err);
-    return NextResponse.json({ success: false, error: "Failed to delete item" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: "Failed to delete item" },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
 

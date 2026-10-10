@@ -717,11 +717,11 @@ export function SpinTheWheel({
           <div className="flex items-center gap-1.5 shrink-0">
             {isModal && (
               <a
-                href="/spin"
+                href="https://belezia-offers.vercel.app/spin"
                 target="_blank"
                 rel="noreferrer"
                 className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-[11px] font-bold transition-colors cursor-pointer"
-                title="Open Customer Link (/spin)"
+                title="Open Customer Link (https://belezia-offers.vercel.app/spin)"
               >
                 <ExternalLink className="h-3 w-3 text-purple-400" />
                 <span>Customer Link</span>

@@ -151,6 +151,9 @@ export interface LorealSpinInviteParams {
   salonPhone?: string;
 }
 
+export const CUSTOMER_OFFERS_BASE_URL = "https://belezia-offers.vercel.app";
+export const CUSTOMER_OFFERS_SPIN_URL = "https://belezia-offers.vercel.app/spin";
+
 /**
  * Standard WhatsApp message for inviting a customer to the L'Oréal Day Spin-the-Wheel event
  * Sent separately from the default tax invoice.
@@ -158,9 +161,7 @@ export interface LorealSpinInviteParams {
 export function formatLorealSpinInviteWhatsAppMessage({
   customerName,
   customerPhone,
-  baseUrl = typeof window !== "undefined" && window.location?.origin
-    ? window.location.origin
-    : "https://belezia-salon-billing-app.vercel.app",
+  baseUrl = CUSTOMER_OFFERS_BASE_URL,
   salonName = "Belezia Salon",
   salonVenue = SALON_EVENT_VENUE,
   eventDate = SALON_EVENT_DATE,
