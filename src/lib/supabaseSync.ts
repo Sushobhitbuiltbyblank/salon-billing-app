@@ -347,10 +347,7 @@ export const SupabaseSync = {
           }
           return uniqueList;
         })(),
-        wheelInventory:
-          wheelInventoryRes?.data && wheelInventoryRes.data.length > 0
-            ? (wheelInventoryRes.data as WheelInventoryItem[])
-            : Storage.getWheelInventory(),
+        wheelInventory: (await this.loadWheelInventory()),
       };
     } catch (err) {
       console.warn("Supabase fetch error, falling back to local storage:", err);
@@ -422,7 +419,7 @@ export const SupabaseSync = {
           ...e,
           amount: Number(e.amount) || 0,
         })),
-        wheelInventory: (wheelInventoryRes.data || []) as WheelInventoryItem[],
+        wheelInventory: (await this.loadWheelInventory()),
       };
     } catch (err) {
       console.warn("Supabase incremental fetch warning:", err);
@@ -1531,78 +1528,151 @@ export const SupabaseSync = {
     }
   },
 
-  // 10. WHEEL INVENTORY SYNC
-  async loadWheelInventory(): Promise<WheelInventoryItem[]> {
-    if (!isSupabaseConfigured() || !supabase) return Storage.getWheelInventory();
+  // 10. WHEEL INVENTORY SYNC (CENTRAL SERVER API + SUPABASE FALLBACK)
+  async fetchServerWheelInventory(): Promise<WheelInventoryItem[] | null> {
+    if (typeof window === "undefined") return null;
     try {
-      const { data, error } = await supabase.from("wheel_inventory").select("*").order("created_at");
-      if (error || !data || data.length === 0) {
-        return Storage.getWheelInventory();
+      const res = await fetch("/api/wheel-inventory", { cache: "no-store" });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.items) && json.items.length > 0) {
+          return json.items;
+        }
       }
-      Storage.saveWheelInventory(data);
-      return data;
     } catch {
-      return Storage.getWheelInventory();
+      // offline or server unreachable
     }
+    return null;
   },
 
-  async saveWheelInventoryItem(item: WheelInventoryItem): Promise<WheelInventoryItem | null> {
-    Storage.saveWheelInventoryItem(item);
-    if (!isSupabaseConfigured() || !supabase) return item;
-    try {
-      const { data, error } = await supabase.from("wheel_inventory").upsert(item).select().single();
-      if (error) {
-        console.error("Supabase saveWheelInventoryItem error:", error);
-        return item;
-      }
-      return data;
-    } catch (err) {
-      console.error("Supabase saveWheelInventoryItem exception:", err);
-      return item;
+  async loadWheelInventory(): Promise<WheelInventoryItem[]> {
+    // 1. Fetch from centralized server endpoint first (cross-device source of truth)
+    const serverItems = await this.fetchServerWheelInventory();
+    if (serverItems && serverItems.length > 0) {
+      Storage.saveWheelInventory(serverItems);
+      return serverItems;
     }
+
+    // 2. Try Supabase if configured
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase.from("wheel_inventory").select("*").order("created_at");
+        if (!error && data && data.length > 0) {
+          Storage.saveWheelInventory(data);
+          return data;
+        }
+      } catch {}
+    }
+
+    // 3. Fallback to local storage
+    return Storage.getWheelInventory();
+  },
+
+  async saveWheelInventoryItem(item: WheelInventoryItem): Promise<WheelInventoryItem[]> {
+    Storage.saveWheelInventoryItem(item);
+
+    // Sync to central server
+    if (typeof window !== "undefined") {
+      try {
+        const res = await fetch("/api/wheel-inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ item }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.items) && json.items.length > 0) {
+            Storage.saveWheelInventory(json.items);
+            return json.items;
+          }
+        }
+      } catch {}
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from("wheel_inventory").upsert(item);
+      } catch {}
+    }
+
+    return Storage.getWheelInventory();
+  },
+
+  async saveAllWheelInventory(items: WheelInventoryItem[]): Promise<WheelInventoryItem[]> {
+    Storage.saveWheelInventory(items);
+
+    if (typeof window !== "undefined") {
+      try {
+        const res = await fetch("/api/wheel-inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.items) && json.items.length > 0) {
+            Storage.saveWheelInventory(json.items);
+            return json.items;
+          }
+        }
+      } catch {}
+    }
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        for (const it of items) {
+          await supabase.from("wheel_inventory").upsert(it);
+        }
+      } catch {}
+    }
+
+    return Storage.getWheelInventory();
   },
 
   async decrementWheelInventoryQuantity(itemId: string): Promise<WheelInventoryItem | null> {
     const localUpdated = Storage.decrementWheelInventoryStock(itemId);
-    if (!isSupabaseConfigured() || !supabase) return localUpdated;
-    try {
-      const { data: current, error: fetchErr } = await supabase
-        .from("wheel_inventory")
-        .select("quantity")
-        .eq("id", itemId)
-        .single();
-      if (fetchErr || !current) {
-        if (localUpdated) {
-          await supabase.from("wheel_inventory").upsert(localUpdated);
-        }
-        return localUpdated;
-      }
-      const newQty = Math.max(0, current.quantity - 1);
-      const { data, error } = await supabase
-        .from("wheel_inventory")
-        .update({ quantity: newQty })
-        .eq("id", itemId)
-        .select()
-        .single();
-      if (!error && data) {
-        Storage.saveWheelInventoryItem(data);
-        return data;
-      }
-      return localUpdated;
-    } catch (err) {
-      console.error("Supabase decrementWheelInventoryQuantity error:", err);
-      return localUpdated;
+    if (localUpdated && typeof window !== "undefined") {
+      fetch("/api/wheel-inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item: localUpdated }),
+      }).catch(() => {});
     }
+
+    if (isSupabaseConfigured() && supabase && localUpdated) {
+      try {
+        await supabase.from("wheel_inventory").upsert(localUpdated);
+      } catch {}
+    }
+
+    return localUpdated;
   },
 
-  async deleteWheelInventoryItem(itemId: string): Promise<void> {
+  async deleteWheelInventoryItem(itemId: string): Promise<WheelInventoryItem[]> {
     Storage.deleteWheelInventoryItem(itemId);
-    if (!isSupabaseConfigured() || !supabase) return;
-    try {
-      await supabase.from("wheel_inventory").delete().eq("id", itemId);
-    } catch (err) {
-      console.error("Supabase deleteWheelInventoryItem error:", err);
+
+    if (typeof window !== "undefined") {
+      try {
+        const res = await fetch(`/api/wheel-inventory?id=${encodeURIComponent(itemId)}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.items)) {
+            Storage.saveWheelInventory(json.items);
+            return json.items;
+          }
+        }
+      } catch {}
     }
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from("wheel_inventory").delete().eq("id", itemId);
+      } catch {}
+    }
+
+    return Storage.getWheelInventory();
   },
 
   // 12. L'OREAL PROFESSIONAL DAY SPIN LOGS & ANTI-FRAUD

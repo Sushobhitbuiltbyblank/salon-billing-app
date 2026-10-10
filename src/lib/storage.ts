@@ -1667,10 +1667,14 @@ export const Storage = {
         localStorage.setItem(KEYS.WHEEL_INVENTORY, JSON.stringify(DEFAULT_WHEEL_INVENTORY));
         return DEFAULT_WHEEL_INVENTORY;
       }
-      // Cleanse any legacy facewash items
-      const cleaned = parsed.filter(
-        (i: WheelInventoryItem) => !i.title.toLowerCase().includes("facewash")
-      );
+      // Cleanse any legacy facewash / cleanser items
+      const isFacewash = (i: WheelInventoryItem) => {
+        if (!i) return false;
+        if (i.id === "00000000-0000-0000-0000-000000000202" || i.id === "prize-loreal-facewash" || i.id?.includes("facewash")) return true;
+        const clean = (i.title || "").toLowerCase().replace(/[\s\-_]/g, "");
+        return clean.includes("facewash") || clean.includes("facecleaner");
+      };
+      const cleaned = parsed.filter((i: WheelInventoryItem) => !isFacewash(i));
       if (cleaned.length !== parsed.length) {
         localStorage.setItem(KEYS.WHEEL_INVENTORY, JSON.stringify(cleaned));
       }
@@ -1682,12 +1686,27 @@ export const Storage = {
   saveWheelInventory(items: WheelInventoryItem[]): void {
     if (typeof window === "undefined") return;
     try {
-      localStorage.setItem(KEYS.WHEEL_INVENTORY, JSON.stringify(items));
+      const isFacewash = (i: WheelInventoryItem) => {
+        if (!i) return false;
+        if (i.id === "00000000-0000-0000-0000-000000000202" || i.id === "prize-loreal-facewash" || i.id?.includes("facewash")) return true;
+        const clean = (i.title || "").toLowerCase().replace(/[\s\-_]/g, "");
+        return clean.includes("facewash") || clean.includes("facecleaner");
+      };
+      const cleanItems = (Array.isArray(items) ? items : []).filter((i) => !isFacewash(i));
+      localStorage.setItem(KEYS.WHEEL_INVENTORY, JSON.stringify(cleanItems.length > 0 ? cleanItems : DEFAULT_WHEEL_INVENTORY));
     } catch (e) {
       console.error(e);
     }
   },
   saveWheelInventoryItem(item: WheelInventoryItem): void {
+    const isFacewash = (i: WheelInventoryItem) => {
+      if (!i) return false;
+      if (i.id === "00000000-0000-0000-0000-000000000202" || i.id === "prize-loreal-facewash" || i.id?.includes("facewash")) return true;
+      const clean = (i.title || "").toLowerCase().replace(/[\s\-_]/g, "");
+      return clean.includes("facewash") || clean.includes("facecleaner");
+    };
+    if (isFacewash(item)) return; // Never save facewash item
+
     const list = this.getWheelInventory();
     const idx = list.findIndex((i) => i.id === item.id);
     if (idx >= 0) {

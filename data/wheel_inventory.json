@@ -1,0 +1,34 @@
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000201",
+    "title": "Free L'Oréal Shampoo",
+    "category": "gift",
+    "quantity": 30,
+    "is_active": true,
+    "color": "#3b82f6"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000203",
+    "title": "Free D-Tan Service",
+    "category": "free_service",
+    "quantity": 30,
+    "is_active": true,
+    "color": "#8b5cf6"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000204",
+    "title": "Free Hair Cut Service",
+    "category": "free_service",
+    "quantity": 30,
+    "is_active": true,
+    "color": "#ec4899"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000205",
+    "title": "Free L'Oréal absolute repair hair mask",
+    "category": "gift",
+    "quantity": 30,
+    "is_active": true,
+    "color": "#10b981"
+  }
+]

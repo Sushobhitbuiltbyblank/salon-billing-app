@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
 import { WheelInventoryItem, WheelItemCategory, DEFAULT_WHEEL_INVENTORY, removeProductQuantity } from "@/types/rewards";
@@ -67,9 +67,16 @@ export function WheelInventoryManager({ standalone = false }: WheelInventoryMana
     wheelInventory,
     saveWheelInventoryItem,
     deleteWheelInventoryItem,
+    resetWheelInventory,
     settings,
     setIsSpinWheelOpen,
+    refreshData,
   } = useApp();
+
+  // Fresh load from server when viewing pool inventory
+  useEffect(() => {
+    refreshData?.();
+  }, [refreshData]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<"all" | WheelItemCategory>("all");
@@ -112,6 +119,16 @@ export function WheelInventoryManager({ standalone = false }: WheelInventoryMana
   // Filtered list
   const filteredItems = useMemo(() => {
     return wheelInventory.filter((item) => {
+      // Guarantee facewash is never displayed
+      const clean = (item.title || "").toLowerCase().replace(/[\s\-_]/g, "");
+      if (
+        clean.includes("facewash") ||
+        clean.includes("facecleaner") ||
+        item.id === "00000000-0000-0000-0000-000000000202" ||
+        item.id === "prize-loreal-facewash"
+      ) {
+        return false;
+      }
       if (selectedCategory !== "all" && item.category !== selectedCategory) return false;
       if (statusFilter === "active" && !item.is_active) return false;
       if (statusFilter === "inactive" && item.is_active) return false;
@@ -200,13 +217,11 @@ export function WheelInventoryManager({ standalone = false }: WheelInventoryMana
     }
   };
 
-  // Reset to default 6 pool stocks
+  // Reset to default 4 pool stocks
   const handleResetDefaultPool = async () => {
-    if (confirm("Reset wheel pool stocks back to the default 6 Belezia reward items?")) {
-      for (const defaultItem of DEFAULT_WHEEL_INVENTORY) {
-        await saveWheelInventoryItem(defaultItem);
-      }
-      showNotification("Reset wheel pool stocks to default 6 items!");
+    if (confirm("Reset wheel pool stocks back to the default 4 Belezia reward items (Shampoo, D-Tan, Hair Cut, Repair Mask)?")) {
+      await resetWheelInventory();
+      showNotification("Reset wheel pool stocks to default 4 items across all devices!");
     }
   };
 

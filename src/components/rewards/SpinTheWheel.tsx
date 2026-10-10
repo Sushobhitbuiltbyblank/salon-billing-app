@@ -185,9 +185,19 @@ export function SpinTheWheel({
   // Map dedicated wheelInventory items to prize slices if configured
   const prizes: RewardPrize[] = useMemo(() => {
     if (wheelInventory && wheelInventory.length > 0) {
-      const activeItems = wheelInventory.filter(
-        (item) => item.is_active && !item.title.toLowerCase().includes("facewash")
-      );
+      const activeItems = wheelInventory.filter((item) => {
+        if (!item.is_active) return false;
+        const clean = (item.title || "").toLowerCase().replace(/[\s\-_]/g, "");
+        if (
+          clean.includes("facewash") ||
+          clean.includes("facecleaner") ||
+          item.id === "00000000-0000-0000-0000-000000000202" ||
+          item.id === "prize-loreal-facewash"
+        ) {
+          return false;
+        }
+        return true;
+      });
       if (activeItems.length > 0) {
         return activeItems.map((item) => {
           const cleanTitle = removeProductQuantity(item.title);

@@ -121,6 +121,7 @@ interface AppContextType {
   wheelInventory: WheelInventoryItem[];
   saveWheelInventoryItem: (item: WheelInventoryItem) => Promise<void>;
   deleteWheelInventoryItem: (itemId: string) => Promise<void>;
+  resetWheelInventory: () => Promise<void>;
   decrementWheelItemQuantity: (itemId: string) => Promise<WheelInventoryItem | null>;
   checkPhoneHasClaimed: (phone: string) => Promise<boolean>;
   validateOfferToken: (
@@ -1365,22 +1366,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setIsSpinWheelOpen,
         wheelInventory,
         saveWheelInventoryItem: async (item: WheelInventoryItem) => {
-          Storage.saveWheelInventoryItem(item);
-          setWheelInventory(Storage.getWheelInventory());
-          if (isSupabaseConfigured()) {
-            await SupabaseSync.saveWheelInventoryItem(item);
-            const updated = await SupabaseSync.loadWheelInventory();
-            setWheelInventory(updated);
-          }
+          const updated = await SupabaseSync.saveWheelInventoryItem(item);
+          setWheelInventory(updated);
         },
         deleteWheelInventoryItem: async (itemId: string) => {
-          Storage.deleteWheelInventoryItem(itemId);
-          setWheelInventory(Storage.getWheelInventory());
-          if (isSupabaseConfigured()) {
-            await SupabaseSync.deleteWheelInventoryItem(itemId);
-            const updated = await SupabaseSync.loadWheelInventory();
-            setWheelInventory(updated);
-          }
+          const updated = await SupabaseSync.deleteWheelInventoryItem(itemId);
+          setWheelInventory(updated);
+        },
+        resetWheelInventory: async () => {
+          const updated = await SupabaseSync.saveAllWheelInventory(DEFAULT_WHEEL_INVENTORY);
+          setWheelInventory(updated);
         },
         decrementWheelItemQuantity: async (itemId: string) => {
           const updated = await SupabaseSync.decrementWheelInventoryQuantity(itemId);

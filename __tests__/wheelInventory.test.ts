@@ -99,4 +99,25 @@ describe("Spin-the-Wheel Dedicated Inventory Pool", () => {
     expect(lowStock).toHaveLength(2);
     expect(lowStock.map((i) => i.id)).toEqual(["1", "2"]);
   });
+
+  it("should delete an item and never allow legacy facewash variants into inventory", () => {
+    // 1. Delete an item by ID
+    const shampooId = "00000000-0000-0000-0000-000000000201";
+    Storage.deleteWheelInventoryItem(shampooId);
+    const afterDelete = Storage.getWheelInventory();
+    expect(afterDelete.some((i) => i.id === shampooId)).toBe(false);
+
+    // 2. Reject saving facewash variant
+    const facewashVariant: WheelInventoryItem = {
+      id: "00000000-0000-0000-0000-000000000202",
+      title: "Free L'Oréal Face Wash",
+      category: "gift",
+      quantity: 30,
+      is_active: true,
+    };
+    Storage.saveWheelInventoryItem(facewashVariant);
+
+    const rechecked = Storage.getWheelInventory();
+    expect(rechecked.some((i) => i.title.toLowerCase().includes("wash"))).toBe(false);
+  });
 });
