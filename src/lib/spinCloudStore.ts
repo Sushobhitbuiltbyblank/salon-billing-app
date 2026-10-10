@@ -332,6 +332,34 @@ export async function deleteCloudClaim(options: {
 }): Promise<SpinClaimRecord[]> {
   if (options.clearAll) {
     await saveCloudClaims([]);
+
+    // Clear spin_claim from all customer profiles in Supabase as well
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data: custs } = await supabase
+          .from("customers")
+          .select("id, notes")
+          .ilike("notes", "%spin_claim%");
+
+        if (custs && custs.length > 0) {
+          for (const cust of custs) {
+            if (cust.id === SYSTEM_SPIN_DATA_ID) continue;
+            try {
+              const parsed = JSON.parse(cust.notes);
+              delete parsed.spin_claim;
+              delete parsed.spin_claims;
+              await supabase
+                .from("customers")
+                .update({ notes: JSON.stringify(parsed) })
+                .eq("id", cust.id);
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.warn("Error cleaning customer spin claims on clearAll:", err);
+      }
+    }
+
     return [];
   }
 
@@ -339,22 +367,31 @@ export async function deleteCloudClaim(options: {
   const cleanPhone = options.phone ? cleanPhoneNumber(options.phone) : null;
   const cleanCode = options.code ? options.code.trim().toLowerCase() : null;
 
+  let phoneToClean = cleanPhone;
+
   const filtered = current.filter((c) => {
-    if (options.id && c.id === options.id) return false;
-    if (cleanCode && c.claimCode.trim().toLowerCase() === cleanCode) return false;
-    if (cleanPhone && c.customerPhone && cleanPhoneNumber(c.customerPhone) === cleanPhone) return false;
+    const matchesId = Boolean(options.id && c.id === options.id);
+    const matchesCode = Boolean(cleanCode && c.claimCode.trim().toLowerCase() === cleanCode);
+    const matchesPhone = Boolean(cleanPhone && c.customerPhone && cleanPhoneNumber(c.customerPhone) === cleanPhone);
+
+    if (matchesId || matchesCode || matchesPhone) {
+      if (!phoneToClean && c.customerPhone) {
+        phoneToClean = cleanPhoneNumber(c.customerPhone);
+      }
+      return false; // remove from list
+    }
     return true;
   });
 
   await saveCloudClaims(filtered);
 
   // If deleting for a customer with phone, also remove spin_claim from their customer profile
-  if (isSupabaseConfigured() && supabase && cleanPhone) {
+  if (isSupabaseConfigured() && supabase && phoneToClean) {
     try {
       const { data: cust } = await supabase
         .from("customers")
         .select("id, notes")
-        .eq("phone", cleanPhone)
+        .eq("phone", phoneToClean)
         .maybeSingle();
 
       if (cust?.notes && cust.notes.startsWith("{")) {

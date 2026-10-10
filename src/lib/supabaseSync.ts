@@ -1937,7 +1937,7 @@ export const SupabaseSync = {
     deleteClaimRecord(idOrToken, idOrToken, phone);
     deleteLocalSpinLog(idOrToken);
     if (phone) deleteLocalSpinLog(phone);
-    deleteServerClaimRecord(idOrToken, idOrToken, phone).catch(() => {});
+    await deleteServerClaimRecord(idOrToken, idOrToken, phone).catch(() => {});
 
     if (isSupabaseConfigured() && supabase) {
       try {
@@ -1964,7 +1964,7 @@ export const SupabaseSync = {
   async clearAllSpinLogs(): Promise<boolean> {
     clearAllClaimRecords();
     clearAllLocalSpinLogs();
-    clearAllServerClaimRecords().catch(() => {});
+    await clearAllServerClaimRecords().catch(() => {});
 
     if (isSupabaseConfigured() && supabase) {
       try {
