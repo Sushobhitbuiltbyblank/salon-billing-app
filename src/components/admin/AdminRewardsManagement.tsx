@@ -333,27 +333,6 @@ export function AdminRewardsManagement({
             Verify customer Offer IDs, check campaign terms &amp; reward details, manage pool stock, and audit claims.
           </p>
         </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsSpinWheelOpen(true)}
-            className="gap-1.5 border-purple-500/40 text-purple-300 hover:bg-purple-500/20 text-xs font-bold"
-          >
-            <Eye className="h-3.5 w-3.5" />
-            <span>Test Spin Wheel</span>
-          </Button>
-
-          <Link
-            href="/spin"
-            target="_blank"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            <span>Tablet Kiosk</span>
-          </Link>
-        </div>
       </div>
 
       {/* SUB-TABS NAVIGATION */}

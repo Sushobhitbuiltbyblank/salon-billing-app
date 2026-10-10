@@ -253,25 +253,6 @@ export function WheelInventoryManager({ standalone = false }: WheelInventoryMana
             </div>
 
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsSpinWheelOpen(true)}
-                className="hidden sm:flex items-center gap-1.5 border-purple-500/30 text-purple-300 hover:bg-purple-500/15 text-xs font-bold"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                <span>Test Wheel</span>
-              </Button>
-
-              <Link
-                href="/spin"
-                target="_blank"
-                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                <span>Tablet Kiosk Mode</span>
-              </Link>
-
               <Link
                 href="/"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-md shadow-purple-600/30 transition-all cursor-pointer"
