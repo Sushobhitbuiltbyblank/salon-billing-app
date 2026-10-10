@@ -31,8 +31,8 @@ describe("Spin-the-Wheel Rewards Engine", () => {
     mockStorage.clear();
   });
 
-  it("should have 5 curated L'Oréal Day prizes with appropriate configuration", () => {
-    expect(DEFAULT_PRIZES).toHaveLength(5);
+  it("should have 4 curated L'Oréal Day prizes with appropriate configuration", () => {
+    expect(DEFAULT_PRIZES).toHaveLength(4);
 
     const shampoo = DEFAULT_PRIZES.find((p) => p.id === "prize-loreal-shampoo");
     expect(shampoo).toBeDefined();

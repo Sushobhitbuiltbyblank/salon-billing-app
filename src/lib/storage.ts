@@ -1667,7 +1667,14 @@ export const Storage = {
         localStorage.setItem(KEYS.WHEEL_INVENTORY, JSON.stringify(DEFAULT_WHEEL_INVENTORY));
         return DEFAULT_WHEEL_INVENTORY;
       }
-      return parsed;
+      // Cleanse any legacy facewash items
+      const cleaned = parsed.filter(
+        (i: WheelInventoryItem) => !i.title.toLowerCase().includes("facewash")
+      );
+      if (cleaned.length !== parsed.length) {
+        localStorage.setItem(KEYS.WHEEL_INVENTORY, JSON.stringify(cleaned));
+      }
+      return cleaned.length > 0 ? cleaned : DEFAULT_WHEEL_INVENTORY;
     } catch {
       return DEFAULT_WHEEL_INVENTORY;
     }

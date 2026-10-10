@@ -31,18 +31,13 @@ describe("Spin-the-Wheel Dedicated Inventory Pool", () => {
     mockStorage.clear();
   });
 
-  it("should contain the 5 core L'Oréal Day wheel items with 30 initial stock each", () => {
-    expect(DEFAULT_WHEEL_INVENTORY).toHaveLength(5);
+  it("should contain the 4 core L'Oréal Day wheel items with 30 initial stock each", () => {
+    expect(DEFAULT_WHEEL_INVENTORY).toHaveLength(4);
 
     const shampoo = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "Free L'Oréal Shampoo");
     expect(shampoo).toBeDefined();
     expect(shampoo?.quantity).toBe(30);
     expect(shampoo?.category).toBe("gift");
-
-    const facewash = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "Free L'Oréal Facewash");
-    expect(facewash).toBeDefined();
-    expect(facewash?.quantity).toBe(30);
-    expect(facewash?.category).toBe("gift");
 
     const dtan = DEFAULT_WHEEL_INVENTORY.find((i) => i.title === "Free D-Tan Service");
     expect(dtan).toBeDefined();
@@ -63,9 +58,9 @@ describe("Spin-the-Wheel Dedicated Inventory Pool", () => {
   });
 
   it("should correctly persist, load, and decrement wheel inventory items in storage", () => {
-    // Initial fetch should return default 5 items
+    // Initial fetch should return default 4 items
     const initial = Storage.getWheelInventory();
-    expect(initial).toHaveLength(5);
+    expect(initial).toHaveLength(4);
 
     // Decrement "Free L'Oréal Shampoo" (initial: 30)
     const shampooId = "00000000-0000-0000-0000-000000000201";

@@ -864,6 +864,48 @@ export function AdminRewardsManagement({
       {/* ========================================================================= */}
       {activeSubTab === "gate" && (
         <div className="space-y-4 max-w-2xl animate-in fade-in duration-200">
+          {/* CUSTOMER SPIN SHARE LINK CARD */}
+          <Card className="p-4 sm:p-5 bg-gradient-to-r from-purple-950/40 via-zinc-900 to-amber-950/40 border border-purple-500/40 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-400" />
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Customer Lucky Wheel Link (Instagram &amp; WhatsApp)
+                </h4>
+              </div>
+              <span className="text-[10px] font-mono text-purple-300 font-bold px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30">
+                Live Public Link
+              </span>
+            </div>
+
+            <p className="text-xs text-zinc-300">
+              Share this link in your Instagram bio, stories, or WhatsApp broadcasts. Customers open it on their phones to spin the wheel and claim their vouchers.
+            </p>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={typeof window !== "undefined" ? `${window.location.origin}/spin` : "/spin"}
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-amber-300 focus:outline-none select-all"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    const url = `${window.location.origin}/spin`;
+                    navigator.clipboard.writeText(url);
+                    showToast("📋 Spin Wheel link copied to clipboard!");
+                  }
+                }}
+                className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                <span>Copy Link</span>
+              </button>
+            </div>
+          </Card>
+
           <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800">
             <h3 className="text-sm font-bold text-white">Verification Gate Links &amp; QR Codes</h3>
             <p className="text-xs text-zinc-400">

@@ -66,12 +66,9 @@ function splitTitleIntoLines(title: string): string[] {
   const clean = removeProductQuantity(title || "").trim();
   const lower = clean.toLowerCase();
 
-  // Optimized line splits for the 5 official event offers
+  // Optimized line splits for the 4 official event offers
   if (lower.includes("shampoo")) {
     return ["Free L'Oréal", "Shampoo"];
-  }
-  if (lower.includes("facewash")) {
-    return ["Free L'Oréal", "Facewash"];
   }
   if (lower.includes("d-tan") || lower.includes("de-tan")) {
     return ["Free D-Tan", "Service"];
@@ -188,8 +185,12 @@ export function SpinTheWheel({
   // Map dedicated wheelInventory items to prize slices if configured
   const prizes: RewardPrize[] = useMemo(() => {
     if (wheelInventory && wheelInventory.length > 0) {
-      return wheelInventory.map((item) => {
-        const cleanTitle = removeProductQuantity(item.title);
+      const activeItems = wheelInventory.filter(
+        (item) => item.is_active && !item.title.toLowerCase().includes("facewash")
+      );
+      if (activeItems.length > 0) {
+        return activeItems.map((item) => {
+          const cleanTitle = removeProductQuantity(item.title);
         const matchingDefault = DEFAULT_PRIZES.find(
           (p) =>
             p.label.toLowerCase() === cleanTitle.toLowerCase() ||
@@ -197,31 +198,32 @@ export function SpinTheWheel({
             cleanTitle.toLowerCase().includes(p.shortLabel.toLowerCase())
         );
 
-        return {
-          id: item.id,
-          label: cleanTitle,
-          shortLabel: cleanTitle,
-          type:
-            item.category === "free_service"
-              ? ("service" as PrizeType)
-              : item.category === "gift"
-              ? ("product_gift" as PrizeType)
-              : ("discount_percent" as PrizeType),
-          value: 0,
-          color: item.color || "#8b5cf6",
-          textColor: "#ffffff",
-          iconName:
-            item.category === "free_service"
-              ? "Scissors"
-              : item.category === "gift"
-              ? "Gift"
-              : "Tag",
-          description:
-            removeProductQuantity(matchingDefault?.description || "") ||
-            `Complimentary ${cleanTitle} for L'Oréal Consultation Day`,
-          requiresInventoryDeduction: false,
-        };
-      });
+          return {
+            id: item.id,
+            label: cleanTitle,
+            shortLabel: cleanTitle,
+            type:
+              item.category === "free_service"
+                ? ("service" as PrizeType)
+                : item.category === "gift"
+                ? ("product_gift" as PrizeType)
+                : ("discount_percent" as PrizeType),
+            value: 0,
+            color: item.color || "#8b5cf6",
+            textColor: "#ffffff",
+            iconName:
+              item.category === "free_service"
+                ? "Scissors"
+                : item.category === "gift"
+                ? "Gift"
+                : "Tag",
+            description:
+              removeProductQuantity(matchingDefault?.description || "") ||
+              `Complimentary ${cleanTitle} for L'Oréal Consultation Day`,
+            requiresInventoryDeduction: false,
+          };
+        });
+      }
     }
     return DEFAULT_PRIZES;
   }, [wheelInventory]);
@@ -513,14 +515,17 @@ export function SpinTheWheel({
       const imgRadius = radius * 0.75;
       const imgX = center + imgRadius * Math.cos(textRad);
       const imgY = center + imgRadius * Math.sin(textRad);
-      const imgSize = 34;
+      const imgSize = 36;
       const productImgUrl = getOfferProductImage(prize.label || prize.shortLabel);
 
-      // Multi-line text coordinates (at 48% radius)
-      const textRadius = radius * 0.48;
+      // Multi-line text coordinates (at 46% radius)
+      const textRadius = radius * 0.46;
       const textX = center + textRadius * Math.cos(textRad);
       const textY = center + textRadius * Math.sin(textRad);
       const lines = splitTitleIntoLines(prize.label || prize.shortLabel);
+      const isThreeLines = lines.length >= 3;
+      const fontSize = isThreeLines ? 12.5 : 14;
+      const lineHeight = isThreeLines ? 15 : 17;
 
       return (
         <g key={prize.id} className="cursor-pointer">
@@ -567,7 +572,7 @@ export function SpinTheWheel({
             />
           </g>
 
-          {/* Multi-line Offer Label */}
+          {/* Multi-line Offer Label (Enlarged font for superior legibility) */}
           <g
             transform={`translate(${textX}, ${textY}) rotate(${
               textAngle > 90 && textAngle < 270 ? textAngle + 180 : textAngle
@@ -576,22 +581,21 @@ export function SpinTheWheel({
             <text
               textAnchor="middle"
               dominantBaseline="middle"
-              className="fill-white font-extrabold select-none filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
+              className="fill-white font-extrabold select-none filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]"
               style={{
-                fontSize: lines.length >= 3 ? "10px" : "11px",
+                fontSize: `${fontSize}px`,
                 letterSpacing: "0.02em",
               }}
             >
               {lines.map((line, lIdx) => {
                 const totalLines = lines.length;
-                const lineHeight = lines.length >= 3 ? 12 : 13;
                 const offset = (lIdx - (totalLines - 1) / 2) * lineHeight;
                 return (
                   <tspan
                     key={lIdx}
                     x={0}
                     dy={lIdx === 0 ? offset : lineHeight}
-                    className={lIdx === 0 ? "fill-amber-300 font-black" : "fill-white"}
+                    className={lIdx === 0 ? "fill-amber-300 font-black" : "fill-white font-extrabold"}
                   >
                     {line}
                   </tspan>

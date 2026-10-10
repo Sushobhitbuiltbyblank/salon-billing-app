@@ -30,14 +30,6 @@ export const DEFAULT_WHEEL_INVENTORY: WheelInventoryItem[] = [
     color: "#3b82f6", // Blue
   },
   {
-    id: "00000000-0000-0000-0000-000000000202",
-    title: "Free L'Oréal Facewash",
-    category: "gift",
-    quantity: 30,
-    is_active: true,
-    color: "#06b6d4", // Cyan
-  },
-  {
     id: "00000000-0000-0000-0000-000000000203",
     title: "Free D-Tan Service",
     category: "free_service",
@@ -120,18 +112,6 @@ export const DEFAULT_PRIZES: RewardPrize[] = [
     textColor: "#ffffff",
     iconName: "Gift",
     description: "Complimentary bottle of L'Oréal Professionnel Shampoo",
-    requiresInventoryDeduction: true,
-  },
-  {
-    id: "prize-loreal-facewash",
-    label: "Free L'Oréal Facewash",
-    shortLabel: "L'Oréal Facewash",
-    type: "product_gift",
-    value: 450,
-    color: "#06b6d4", // Cyan
-    textColor: "#ffffff",
-    iconName: "Droplet",
-    description: "Complimentary salon-grade L'Oréal Facewash cleanser",
     requiresInventoryDeduction: true,
   },
   {
