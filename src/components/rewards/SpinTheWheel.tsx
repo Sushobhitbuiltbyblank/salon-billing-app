@@ -126,6 +126,10 @@ export function SpinTheWheel({
   const [customerPhone, setCustomerPhone] = useState<string>(initialPhone);
   const [offerToken, setOfferToken] = useState<string>(initialToken);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [existingOffer, setExistingOffer] = useState<{
+    claimCode: string;
+    prizeLabel: string;
+  } | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isTokenExpired, setIsTokenExpired] = useState<boolean>(false);
   const [showVoucherModal, setShowVoucherModal] = useState<boolean>(false);
@@ -137,7 +141,7 @@ export function SpinTheWheel({
   const animationFrameRef = useRef<number | null>(null);
   const lastTickAngleRef = useRef<number>(0);
 
-  // Validate single-use link / token on mount
+  // Validate single-use link / token or initial phone on mount
   useEffect(() => {
     if (initialToken) {
       setOfferToken(initialToken);
@@ -150,7 +154,22 @@ export function SpinTheWheel({
         }
       });
     }
-  }, [initialToken, validateOfferToken]);
+
+    if (initialPhone) {
+      const clean = cleanPhoneNumber(initialPhone);
+      if (clean && clean.length === 10) {
+        checkPhoneHasClaimedServer(clean).then((res) => {
+          if (res.hasClaimed && res.claim) {
+            setIsTokenExpired(true);
+            const prize = removeProductQuantity(res.claim.prizeLabel || "an offer");
+            setTokenError(
+              `⚠️ Already have offers! This phone number (+91 ${clean}) already exists in claim history with offer: "${prize}" (${res.claim.claimCode}). Each customer can only claim one offer.`
+            );
+          }
+        });
+      }
+    }
+  }, [initialToken, initialPhone, validateOfferToken]);
 
   // For public links: synchronize claims with server and restore won state only if valid
   useEffect(() => {
@@ -261,7 +280,23 @@ export function SpinTheWheel({
   // Launch Spin (Screen 1 Action)
   const spinWheel = useCallback(async () => {
     if (gameState === "SPINNING") return;
-    if (isTokenExpired) return;
+    if (isTokenExpired || Boolean(tokenError)) return;
+
+    // Check if phone number already claimed before spinning
+    if (customerPhone) {
+      const clean = cleanPhoneNumber(customerPhone);
+      if (clean && clean.length === 10) {
+        const check = await checkPhoneHasClaimedServer(clean);
+        if (check.hasClaimed && check.claim) {
+          const prize = removeProductQuantity(check.claim.prizeLabel || "an offer");
+          setTokenError(
+            `⚠️ Already have offers! This phone number (+91 ${clean}) already exists in claim history with offer: "${prize}" (${check.claim.claimCode}). Each customer can only claim one offer.`
+          );
+          setIsTokenExpired(true);
+          return;
+        }
+      }
+    }
 
     // Unlock Web Audio context on user gesture immediately & play tactile tap tick
     unlockAudio();
@@ -381,6 +416,31 @@ export function SpinTheWheel({
     };
   }, []);
 
+  // Real-time phone check as customer types their 10-digit number
+  const handlePhoneInputChange = async (val: string) => {
+    setCustomerPhone(val);
+    setPhoneError(null);
+    setExistingOffer(null);
+
+    const clean = cleanPhoneNumber(val);
+    if (clean && clean.length === 10) {
+      try {
+        const serverCheck = await checkPhoneHasClaimedServer(clean);
+        if (serverCheck.hasClaimed && serverCheck.claim) {
+          const code = serverCheck.claim.claimCode || "BZ-SPIN";
+          const prizeName = removeProductQuantity(serverCheck.claim.prizeLabel || "an offer");
+          setExistingOffer({
+            claimCode: code,
+            prizeLabel: prizeName,
+          });
+          setPhoneError(
+            `⚠️ Already have offers! This phone number (+91 ${clean}) already exists in claim history with offer: "${prizeName}" (${code}). Each customer can only claim one offer.`
+          );
+        }
+      } catch {}
+    }
+  };
+
   // Form Submission & Voucher Generation (Screen 2 Action)
   const handleGenerateAndDownloadVoucher = async () => {
     if (!customerName || !customerName.trim()) {
@@ -396,33 +456,29 @@ export function SpinTheWheel({
 
     setIsSubmitting(true);
     try {
-      const hasClaimed = await checkPhoneHasClaimed(cleanPhone);
+      const serverCheck = await checkPhoneHasClaimedServer(cleanPhone);
+      const hasClaimed = serverCheck.hasClaimed || (await checkPhoneHasClaimed(cleanPhone));
       if (hasClaimed) {
-        // If already claimed, retrieve existing voucher details so customer can view/download
-        const serverCheck = await checkPhoneHasClaimedServer(cleanPhone);
+        // If already claimed, show error that customer already has an offer
         const existing = (serverCheck.claim || findLocalOfferById(cleanPhone)) as any;
-        if (existing) {
-          const code = existing.claimCode || existing.offer_token;
-          const prizeName = existing.prizeLabel || existing.won_item || "Offer";
-          if (code) {
-            setClaimCode(code);
-            setIsFormSubmitted(true);
-          }
-          setPhoneError(
-            `⚠️ This phone number (+91 ${cleanPhone}) already claimed "${removeProductQuantity(
-              prizeName
-            )}"! You can view and download your voucher below.`
-          );
-        } else {
-          setPhoneError(
-            `⚠️ This phone number (+91 ${cleanPhone}) has already claimed an offer for L'Oréal Professional Day! Each customer can only claim one offer.`
-          );
-        }
+        const code = existing?.claimCode || existing?.offer_token || "BZ-SPIN";
+        const prizeName = removeProductQuantity(existing?.prizeLabel || existing?.won_item || "an offer");
+
+        setExistingOffer({
+          claimCode: code,
+          prizeLabel: prizeName,
+        });
+
+        // DO NOT set isFormSubmitted(true) - keep the form visible and show the error message!
+        setPhoneError(
+          `⚠️ Already have offers! This phone number (+91 ${cleanPhone}) already exists in claim history with offer: "${prizeName}" (${code}). Each customer can only claim one offer.`
+        );
         setIsSubmitting(false);
         return;
       }
 
       setPhoneError(null);
+      setExistingOffer(null);
       const finalOfferId = offerToken || claimCode || generateOfferToken();
       setClaimCode(finalOfferId);
 
@@ -743,11 +799,11 @@ export function SpinTheWheel({
                   unlockAudio();
                   playTickSound(1.2);
                 }}
-                disabled={gameState === "SPINNING"}
+                disabled={gameState === "SPINNING" || isTokenExpired || Boolean(tokenError)}
                 aria-label="Spin the wheel"
                 className={`relative group flex flex-col items-center justify-center h-18 w-18 sm:h-22 sm:w-22 rounded-full border-4 border-amber-400/90 shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all duration-300 cursor-pointer ${
-                  gameState === "SPINNING"
-                    ? "bg-zinc-900 cursor-not-allowed opacity-90 scale-95"
+                  gameState === "SPINNING" || isTokenExpired || Boolean(tokenError)
+                    ? "bg-zinc-900 cursor-not-allowed opacity-70 scale-95"
                     : "bg-gradient-to-b from-amber-400 via-amber-500 to-amber-600 hover:scale-105 active:scale-95"
                 }`}
               >
@@ -929,10 +985,7 @@ export function SpinTheWheel({
                       <input
                         type="tel"
                         value={customerPhone}
-                        onChange={(e) => {
-                          setCustomerPhone(e.target.value);
-                          setPhoneError(null);
-                        }}
+                        onChange={(e) => handlePhoneInputChange(e.target.value)}
                         placeholder="10-digit mobile number"
                         maxLength={10}
                         className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 transition-colors"
@@ -942,20 +995,28 @@ export function SpinTheWheel({
                 </div>
 
                 {phoneError && (
-                  <div className="p-2.5 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs font-semibold flex flex-col gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
-                      <span>{phoneError}</span>
+                  <div className="p-3 rounded-xl bg-rose-950/90 border border-rose-500/60 text-rose-200 text-xs font-semibold flex flex-col gap-2.5 shadow-lg animate-in fade-in">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                      <span className="leading-relaxed">{phoneError}</span>
                     </div>
-                    {claimCode && (
-                      <button
-                        type="button"
-                        onClick={() => setShowVoucherModal(true)}
-                        className="py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold text-[11px] transition-colors cursor-pointer self-start flex items-center gap-1 shadow-md"
-                      >
-                        <FileDown className="h-3.5 w-3.5" />
-                        <span>View / Download Voucher ({claimCode})</span>
-                      </button>
+                    {existingOffer && (
+                      <div className="pt-2 border-t border-rose-900/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                        <span className="text-[11px] text-zinc-300">
+                          Existing Voucher: <strong className="text-amber-400">{existingOffer.claimCode}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setClaimCode(existingOffer.claimCode);
+                            setShowVoucherModal(true);
+                          }}
+                          className="py-1 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-extrabold text-[11px] transition-colors cursor-pointer flex items-center gap-1 shadow-md"
+                        >
+                          <FileDown className="h-3.5 w-3.5" />
+                          <span>View Existing Voucher</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -963,12 +1024,20 @@ export function SpinTheWheel({
                 <button
                   type="button"
                   onClick={handleGenerateAndDownloadVoucher}
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 active:scale-98 text-white font-extrabold text-xs shadow-lg shadow-purple-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  disabled={isSubmitting || Boolean(existingOffer)}
+                  className={`w-full py-2.5 px-3 rounded-xl font-extrabold text-xs shadow-lg transition-all flex items-center justify-center gap-1.5 ${
+                    existingOffer
+                      ? "bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed opacity-70"
+                      : "bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 active:scale-98 text-white shadow-purple-600/30 cursor-pointer"
+                  }`}
                 >
                   <Sparkles className="h-4 w-4" />
                   <span>
-                    {isSubmitting ? "Submitting..." : "Submit"}
+                    {isSubmitting
+                      ? "Submitting..."
+                      : existingOffer
+                      ? "Already Have Offer"
+                      : "Submit"}
                   </span>
                 </button>
               </div>

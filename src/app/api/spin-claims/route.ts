@@ -6,6 +6,7 @@ import {
   addCloudClaim,
   deleteCloudClaim,
 } from "@/lib/spinCloudStore";
+import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 
 // GET: Fetch all claims, or verify a specific claim, or check if phone claimed
 export async function GET(request: Request) {
@@ -19,9 +20,28 @@ export async function GET(request: Request) {
     // 1. Phone number claim check (anti-fraud: one claim per phone number)
     if (checkPhone) {
       const cleanPhone = cleanPhoneNumber(checkPhone);
-      const match = claims.find(
+      let match = claims.find(
         (c) => c.customerPhone && cleanPhoneNumber(c.customerPhone) === cleanPhone
       );
+
+      // Also check customer profile directly in Supabase if not found in claims array
+      if (!match && isSupabaseConfigured() && supabase && cleanPhone) {
+        try {
+          const { data: cust } = await supabase
+            .from("customers")
+            .select("name, notes")
+            .eq("phone", cleanPhone)
+            .maybeSingle();
+
+          if (cust?.notes && cust.notes.includes("spin_claim")) {
+            const parsed = JSON.parse(cust.notes);
+            if (parsed.spin_claim) {
+              match = parsed.spin_claim;
+            }
+          }
+        } catch {}
+      }
+
       const hasClaimed = Boolean(match);
       return NextResponse.json({
         hasClaimed,
