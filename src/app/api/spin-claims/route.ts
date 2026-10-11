@@ -4,6 +4,7 @@ import { cleanPhoneNumber, SALON_EVENT_DATE, SALON_EVENT_VENUE, LOREAL_EVENT_TER
 import {
   loadCloudClaims,
   addCloudClaim,
+  updateCloudClaim,
   deleteCloudClaim,
 } from "@/lib/spinCloudStore";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
@@ -166,15 +167,17 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    if (!body || !body.claimCode || !body.prizeLabel) {
+    if (!body || !body.prizeLabel) {
       return NextResponse.json(
-        { success: false, error: "Invalid claim payload" },
-        { status: 400 }
+        { success: false, error: "Prize label is required" },
+        { status: 400, headers: NO_CACHE_HEADERS }
       );
     }
 
     const cleanName = body.customerName ? String(body.customerName).trim() : "";
     const cleanPhone = body.customerPhone ? cleanPhoneNumber(String(body.customerPhone)) : "";
+    const isAdmin = Boolean(body.isAdmin);
+    const allowOverride = Boolean(body.override);
 
     // Strictly enforce: customer who does not fill name and valid 10-digit number must NOT be created/saved
     if (!cleanName || !cleanPhone || cleanPhone.length !== 10) {
@@ -187,13 +190,37 @@ export async function POST(request: Request) {
       );
     }
 
-    // Anti-fraud: strictly prevent duplicate claims for the same phone number
+    // Auto-generate claim code if admin created without specifying one
+    const claimCode = body.claimCode
+      ? String(body.claimCode).trim()
+      : `BZ-LOREAL-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // Anti-fraud: strictly prevent duplicate claims for the same phone number (unless admin overrides)
     const existingClaims = await loadCloudClaims();
     const existingForPhone = existingClaims.find(
       (c) => c.customerPhone && cleanPhoneNumber(c.customerPhone) === cleanPhone
     );
 
     if (existingForPhone) {
+      if (isAdmin && allowOverride) {
+        // Admin override: update existing claim with new prize & name
+        const updated = await updateCloudClaim(existingForPhone.id, {
+          customerName: cleanName,
+          customerPhone: cleanPhone,
+          prizeLabel: body.prizeLabel,
+          prizeId: body.prizeId,
+          prizeType: body.prizeType,
+        });
+        return NextResponse.json(
+          {
+            success: true,
+            claim: updated || existingForPhone,
+            message: "Existing offer updated by admin",
+          },
+          { headers: NO_CACHE_HEADERS }
+        );
+      }
+
       return NextResponse.json(
         {
           success: false,
@@ -206,7 +233,7 @@ export async function POST(request: Request) {
 
     const newClaim: SpinClaimRecord = {
       id: body.id || `claim-${Date.now()}`,
-      claimCode: body.claimCode,
+      claimCode,
       prizeId: body.prizeId || "prize-custom",
       prizeLabel: body.prizeLabel,
       prizeType: body.prizeType || "product_gift",
@@ -231,6 +258,61 @@ export async function POST(request: Request) {
     console.error("POST /api/spin-claims error:", err);
     return NextResponse.json(
       { success: false, error: "Failed to save spin claim" },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
+  }
+}
+
+// PUT: Update an existing claim record (Admin edit customer name, phone, prize)
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    if (!body || (!body.id && !body.claimCode)) {
+      return NextResponse.json(
+        { success: false, error: "Claim ID or claimCode is required to update an offer." },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    const targetId = body.id || body.claimCode;
+    const cleanPhone = body.customerPhone ? cleanPhoneNumber(String(body.customerPhone)) : undefined;
+    const cleanName = body.customerName ? String(body.customerName).trim() : undefined;
+
+    if (cleanPhone !== undefined && cleanPhone.length !== 10) {
+      return NextResponse.json(
+        { success: false, error: "WhatsApp number must be a valid 10-digit mobile number." },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    const updated = await updateCloudClaim(targetId, {
+      customerName: cleanName,
+      customerPhone: cleanPhone,
+      prizeLabel: body.prizeLabel ? String(body.prizeLabel).trim() : undefined,
+      prizeId: body.prizeId,
+      prizeType: body.prizeType,
+      claimCode: body.claimCode ? String(body.claimCode).trim() : undefined,
+    });
+
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, error: `Claim with ID "${targetId}" not found.` },
+        { status: 404, headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Offer updated successfully in cloud database",
+        claim: updated,
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
+  } catch (err: any) {
+    console.error("PUT /api/spin-claims error:", err);
+    return NextResponse.json(
+      { success: false, error: err?.message || "Failed to update spin claim" },
       { status: 500, headers: NO_CACHE_HEADERS }
     );
   }

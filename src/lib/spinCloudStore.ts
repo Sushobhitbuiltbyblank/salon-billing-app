@@ -153,15 +153,61 @@ async function getSupabaseSystemData(): Promise<{
 
     console.log("[SYSTEM_DATA_READ]", { error: error?.message, hasData: Boolean(data), notesLen: data?.notes?.length });
 
+    let sysClaims: SpinClaimRecord[] = [];
+    let sysInv: WheelInventoryItem[] = [];
+
     if (!error && data?.notes) {
       try {
         const parsed = JSON.parse(data.notes);
-        return {
-          claims: sanitizeClaims(parsed.claims || []),
-          wheel_inventory: sanitizeWheelInventory(parsed.wheel_inventory || []),
-        };
+        sysClaims = sanitizeClaims(parsed.claims || []);
+        sysInv = sanitizeWheelInventory(parsed.wheel_inventory || []);
       } catch {}
     }
+
+    // Auto-heal / Resilience: Check individual customer records that have spin claims
+    // so no claim is ever lost even if concurrent writes or race conditions affected the system row
+    try {
+      const { data: custWithNotes } = await supabase
+        .from("customers")
+        .select("id, name, phone, notes")
+        .neq("id", SYSTEM_SPIN_DATA_ID)
+        .like("notes", "%spin_claim%");
+
+      if (custWithNotes && custWithNotes.length > 0) {
+        const phoneMap = new Map<string, SpinClaimRecord>();
+        for (const c of sysClaims) {
+          if (c.customerPhone) phoneMap.set(c.customerPhone, c);
+        }
+
+        let needsResync = false;
+        for (const cust of custWithNotes) {
+          if (!cust.notes) continue;
+          try {
+            const parsed = JSON.parse(cust.notes);
+            if (parsed.spin_claim && parsed.spin_claim.customerPhone) {
+              const phone = cleanPhoneNumber(parsed.spin_claim.customerPhone);
+              if (phone && !phoneMap.has(phone)) {
+                phoneMap.set(phone, parsed.spin_claim);
+                needsResync = true;
+              }
+            }
+          } catch {}
+        }
+
+        if (needsResync) {
+          sysClaims = sanitizeClaims(Array.from(phoneMap.values()));
+          // Re-sync merged claims to system record in background
+          saveSupabaseSystemData({ claims: sysClaims }).catch(() => {});
+        }
+      }
+    } catch (mergeErr) {
+      console.warn("Error auto-merging customer profile claims:", mergeErr);
+    }
+
+    return {
+      claims: sysClaims,
+      wheel_inventory: sysInv.length > 0 ? sysInv : DEFAULT_WHEEL_INVENTORY,
+    };
   } catch (err) {
     console.warn("Error reading Supabase system spin data:", err);
   }
@@ -228,8 +274,7 @@ export async function loadCloudClaims(): Promise<SpinClaimRecord[]> {
   // 1. Supabase is the central source of truth across all devices
   if (isSupabaseConfigured() && supabase) {
     const systemData = await getSupabaseSystemData();
-    // Persist sanitized/deduplicated claims back to Supabase and disk cache
-    saveSupabaseSystemData({ claims: systemData.claims }).catch(() => {});
+    // Cache to local disk without unnecessary write-back on read
     safeWriteJson(LOCAL_CLAIMS_FILE, TMP_CLAIMS_FILE, systemData.claims).catch(() => {});
     return systemData.claims;
   }
@@ -331,6 +376,138 @@ export async function addCloudClaim(newClaim: SpinClaimRecord): Promise<SpinClai
   }
 
   return updatedList;
+}
+
+/**
+ * Update an existing claim record:
+ * Updates customer name, phone number, prize, or code in central registry and customer profile.
+ */
+export async function updateCloudClaim(
+  claimId: string,
+  updatedData: Partial<SpinClaimRecord>
+): Promise<SpinClaimRecord | null> {
+  const currentClaims = await loadCloudClaims();
+  const index = currentClaims.findIndex(
+    (c) => c.id === claimId || (c.claimCode && c.claimCode.toLowerCase() === claimId.toLowerCase())
+  );
+
+  if (index === -1) {
+    return null;
+  }
+
+  const existing = currentClaims[index];
+  const oldPhone = cleanPhoneNumber(existing.customerPhone || "");
+  const newPhone =
+    updatedData.customerPhone !== undefined
+      ? cleanPhoneNumber(updatedData.customerPhone)
+      : oldPhone;
+  const newName =
+    updatedData.customerName !== undefined
+      ? updatedData.customerName.trim()
+      : existing.customerName;
+  const newPrizeLabel =
+    updatedData.prizeLabel !== undefined
+      ? updatedData.prizeLabel.trim()
+      : existing.prizeLabel;
+  const newPrizeId = updatedData.prizeId || existing.prizeId;
+  const newPrizeType = updatedData.prizeType || existing.prizeType;
+  const newClaimCode =
+    updatedData.claimCode !== undefined
+      ? updatedData.claimCode.trim()
+      : existing.claimCode;
+
+  // Check if new phone number conflicts with another customer's claim
+  if (newPhone && newPhone !== oldPhone && newPhone.length === 10) {
+    const conflict = currentClaims.find(
+      (c) => c.id !== existing.id && c.customerPhone && cleanPhoneNumber(c.customerPhone) === newPhone
+    );
+    if (conflict) {
+      throw new Error(`Phone number ${newPhone} is already linked to another offer (${conflict.claimCode})`);
+    }
+  }
+
+  const updatedClaim: SpinClaimRecord = {
+    ...existing,
+    customerName: newName,
+    customerPhone: newPhone || existing.customerPhone,
+    prizeLabel: newPrizeLabel,
+    prizeId: newPrizeId,
+    prizeType: newPrizeType,
+    claimCode: newClaimCode,
+  };
+
+  const updatedList = [...currentClaims];
+  updatedList[index] = updatedClaim;
+
+  // 1. Save updated list to central cloud registry
+  await saveCloudClaims(updatedList);
+
+  // 2. Sync to Supabase customers table
+  if (isSupabaseConfigured() && supabase) {
+    // If phone number changed, clean old customer profile
+    if (oldPhone && newPhone && oldPhone !== newPhone) {
+      try {
+        const { data: oldCust } = await supabase
+          .from("customers")
+          .select("id, notes")
+          .eq("phone", oldPhone)
+          .maybeSingle();
+
+        if (oldCust?.notes) {
+          const parsed = JSON.parse(oldCust.notes);
+          delete parsed.spin_claim;
+          delete parsed.spin_claims;
+          await supabase
+            .from("customers")
+            .update({ notes: JSON.stringify(parsed) })
+            .eq("id", oldCust.id);
+        }
+      } catch {}
+    }
+
+    // Attach to new customer profile
+    if (newPhone && newPhone.length === 10) {
+      try {
+        const { data: existingCust } = await supabase
+          .from("customers")
+          .select("id, name, notes")
+          .eq("phone", newPhone)
+          .maybeSingle();
+
+        let notesObj: any = {};
+        if (existingCust?.notes && typeof existingCust.notes === "string" && existingCust.notes.startsWith("{")) {
+          try {
+            notesObj = JSON.parse(existingCust.notes);
+          } catch {}
+        }
+
+        const pastClaims: SpinClaimRecord[] = Array.isArray(notesObj.spin_claims) ? notesObj.spin_claims : [];
+        const updatedCustClaims = [
+          updatedClaim,
+          ...pastClaims.filter((c) => c.id !== updatedClaim.id && c.claimCode !== updatedClaim.claimCode),
+        ];
+
+        notesObj.spin_claim = updatedClaim;
+        notesObj.spin_claims = updatedCustClaims;
+        notesObj.updated_at = new Date().toISOString();
+
+        await supabase.from("customers").upsert(
+          {
+            id: existingCust?.id || undefined,
+            name: existingCust?.name || newName || `Guest (${newPhone})`,
+            phone: newPhone,
+            notes: JSON.stringify(notesObj),
+            last_visit: new Date().toISOString(),
+          },
+          { onConflict: "phone" }
+        );
+      } catch (err) {
+        console.warn("Failed to update customer row in Supabase:", err);
+      }
+    }
+  }
+
+  return updatedClaim;
 }
 
 /**

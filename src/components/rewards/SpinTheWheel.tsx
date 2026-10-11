@@ -482,7 +482,7 @@ export function SpinTheWheel({
       const finalOfferId = offerToken || claimCode || generateOfferToken();
       setClaimCode(finalOfferId);
 
-      // Save claim record and audit log in spin_logs
+      // Save claim record directly to Supabase cloud database (NO optimistic local-only save)
       if (winningPrize) {
         const record: SpinClaimRecord = {
           id: `claim-${Date.now()}`,
@@ -496,8 +496,40 @@ export function SpinTheWheel({
           inventoryDeducted: false,
           createdAt: new Date().toISOString(),
         };
+
+        // 1. Direct Cloud Save to Supabase with retries
+        const syncResult = await syncClaimToServer(record);
+
+        if (!syncResult.success) {
+          // If phone already claimed earlier
+          if (syncResult.isDuplicate && syncResult.claim) {
+            const code = syncResult.claim.claimCode || "BZ-SPIN";
+            const prizeName = removeProductQuantity(syncResult.claim.prizeLabel || "an offer");
+            setExistingOffer({
+              claimCode: code,
+              prizeLabel: prizeName,
+            });
+            setPhoneError(
+              syncResult.error ||
+                `⚠️ Already have offers! This phone number (+91 ${cleanPhone}) already exists in claim history with offer: "${prizeName}" (${code}). Each customer can only claim one offer.`
+            );
+          } else {
+            // Network connection error or cloud failure: DO NOT unlock voucher!
+            setPhoneError(
+              `⚠️ Cloud Save Failed: ${
+                syncResult.error ||
+                "Unable to confirm that offer was saved in the cloud database. Please check your internet connection and tap 'Retry Save to Cloud'."
+              }`
+            );
+          }
+          setIsSubmitting(false);
+          // Stop here! Do not mark submitted or show voucher.
+          return;
+        }
+
+        // 2. ONLY AFTER cloud confirms save to Supabase:
+        // Save local confirmed cache
         saveClaimRecord(record);
-        await syncClaimToServer(record).catch(() => {});
 
         await recordSpinLog({
           offer_token: finalOfferId,
@@ -506,9 +538,10 @@ export function SpinTheWheel({
           won_item: winningPrize.label,
           prize_id: winningPrize.id,
           is_redeemed: true,
-        });
+        }).catch(() => {});
       }
 
+      // 3. ONLY NOW unlock the voucher modal and allow download/save
       setIsFormSubmitted(true);
       setShowVoucherModal(true);
 
@@ -1031,13 +1064,15 @@ export function SpinTheWheel({
                       : "bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 active:scale-98 text-white shadow-purple-600/30 cursor-pointer"
                   }`}
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className={`h-4 w-4 ${isSubmitting ? "animate-spin text-amber-300" : ""}`} />
                   <span>
                     {isSubmitting
-                      ? "Submitting..."
+                      ? "Saving to Cloud (Supabase)..."
                       : existingOffer
                       ? "Already Have Offer"
-                      : "Submit"}
+                      : phoneError && !existingOffer
+                      ? "Retry Save to Cloud"
+                      : "Submit & Save to Cloud"}
                   </span>
                 </button>
               </div>

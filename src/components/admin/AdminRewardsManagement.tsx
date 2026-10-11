@@ -8,6 +8,8 @@ import {
   getLocalSpinLogs,
   fetchServerClaimRecords,
   fetchServerClaimsPaginated,
+  adminCreateClaim,
+  adminUpdateClaim,
 } from "@/lib/rewardStorage";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,9 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  Plus,
+  Edit2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { WheelInventoryManager } from "./WheelInventoryManager";
@@ -130,6 +135,142 @@ export function AdminRewardsManagement({
 
   const [isLoadingClaims, setIsLoadingClaims] = useState(false);
 
+  // Predefined salon prizes
+  const EVENT_PRIZES = useMemo(() => [
+    { label: "Free Hair Cut Service", type: "service", id: "00000000-0000-0000-0000-000000000204" },
+    { label: "Free D-Tan Service", type: "service", id: "00000000-0000-0000-0000-000000000203" },
+    { label: "Free L'Oréal absolute repair hair mask", type: "product_gift", id: "00000000-0000-0000-0000-000000000205" },
+    { label: "Free L'Oréal Shampoo", type: "product_gift", id: "00000000-0000-0000-0000-000000000201" },
+  ], []);
+
+  // Create Offer Modal State (e.g. for missed entries like Mansi)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    phone: "",
+    prize: "Free Hair Cut Service",
+    prizeType: "service",
+    code: "",
+  });
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  // Edit Offer Modal State (change prize, customer name, phone)
+  const [editingClaim, setEditingClaim] = useState<SpinClaimRecord | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    phone: "",
+    prize: "",
+    prizeType: "service",
+    code: "",
+  });
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  // Handle Admin Manual Offer Creation
+  const handleCreateOfferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createForm.name.trim()) {
+      setCreateError("Customer full name is required.");
+      return;
+    }
+    const clean = cleanPhoneNumber(createForm.phone);
+    if (!clean || clean.length !== 10) {
+      setCreateError("Valid 10-digit WhatsApp number is required.");
+      return;
+    }
+    if (!createForm.prize.trim()) {
+      setCreateError("Prize / offer is required.");
+      return;
+    }
+
+    setIsCreating(true);
+    setCreateError(null);
+
+    try {
+      const matchPrize = EVENT_PRIZES.find(
+        (p) => p.label.toLowerCase() === createForm.prize.toLowerCase()
+      );
+      const res = await adminCreateClaim({
+        customerName: createForm.name.trim(),
+        customerPhone: clean,
+        prizeLabel: createForm.prize.trim(),
+        prizeId: matchPrize?.id || "prize-custom",
+        prizeType: createForm.prizeType,
+        claimCode: createForm.code.trim() || undefined,
+        override: true,
+      });
+
+      if (res.success && res.claim) {
+        showToast(`✅ Offer created successfully for ${res.claim.customerName}! (${res.claim.claimCode})`);
+        setIsCreateModalOpen(false);
+        setCreateForm({
+          name: "",
+          phone: "",
+          prize: EVENT_PRIZES[0].label,
+          prizeType: EVENT_PRIZES[0].type,
+          code: "",
+        });
+        await refreshClaims(1, "", true);
+      } else {
+        setCreateError(res.error || "Failed to create offer in cloud database.");
+      }
+    } catch (err: any) {
+      setCreateError(err?.message || "Failed to create offer.");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  // Handle Admin Edit Offer
+  const handleEditOfferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClaim) return;
+
+    if (!editForm.name.trim()) {
+      setUpdateError("Customer full name is required.");
+      return;
+    }
+    const clean = cleanPhoneNumber(editForm.phone);
+    if (!clean || clean.length !== 10) {
+      setUpdateError("Valid 10-digit WhatsApp number is required.");
+      return;
+    }
+    if (!editForm.prize.trim()) {
+      setUpdateError("Prize / offer is required.");
+      return;
+    }
+
+    setIsUpdating(true);
+    setUpdateError(null);
+
+    try {
+      const matchPrize = EVENT_PRIZES.find(
+        (p) => p.label.toLowerCase() === editForm.prize.toLowerCase()
+      );
+      const res = await adminUpdateClaim(editingClaim.id, {
+        customerName: editForm.name.trim(),
+        customerPhone: clean,
+        prizeLabel: editForm.prize.trim(),
+        prizeId: matchPrize?.id || editingClaim.prizeId,
+        prizeType: editForm.prizeType,
+        claimCode: editForm.code.trim() || editingClaim.claimCode,
+      });
+
+      if (res.success && res.claim) {
+        showToast(`✅ Offer updated successfully for ${res.claim.customerName}!`);
+        setEditingClaim(null);
+        await refreshClaims(currentPage, searchLog, true);
+      } else {
+        setUpdateError(res.error || "Failed to update offer in cloud database.");
+      }
+    } catch (err: any) {
+      setUpdateError(err?.message || "Failed to update offer.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const refreshClaims = async (page = currentPage, query = searchLog, showLoadingState = false) => {
     if (showLoadingState) setIsLoadingClaims(true);
     try {
@@ -153,23 +294,12 @@ export function AdminRewardsManagement({
     setInstagramUrl(settings.instagram_url || "");
   }, [settings]);
 
-  // Auto-refresh claims across devices when viewing the "claims" tab or when window gets focus
+  // Refresh claims on-demand when opening the "claims" tab
   useEffect(() => {
     if (activeSubTab === "claims") {
       refreshClaims(currentPage, searchLog);
-      const interval = setInterval(() => {
-        if (typeof document !== "undefined" && document.visibilityState === "visible") {
-          refreshClaims(currentPage, searchLog);
-        }
-      }, 5000);
-      const onFocus = () => refreshClaims(currentPage, searchLog);
-      window.addEventListener("focus", onFocus);
-      return () => {
-        clearInterval(interval);
-        window.removeEventListener("focus", onFocus);
-      };
     }
-  }, [activeSubTab, currentPage, searchLog]);
+  }, [activeSubTab]);
 
   // Delete single claim record
   const handleDeleteClaim = async (claim: SpinClaimRecord) => {
@@ -744,6 +874,25 @@ export function AdminRewardsManagement({
                 <span className="hidden sm:inline">{isLoadingClaims ? "Refreshing..." : "Refresh"}</span>
               </button>
 
+              <button
+                onClick={() => {
+                  setCreateForm({
+                    name: "",
+                    phone: "",
+                    prize: EVENT_PRIZES[0].label,
+                    prizeType: EVENT_PRIZES[0].type,
+                    code: "",
+                  });
+                  setCreateError(null);
+                  setIsCreateModalOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 shadow-md shadow-purple-600/20"
+                title="Manually create an offer claim"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>+ Create Offer</span>
+              </button>
+
               {isAdmin && (totalClaimsCount > 0 || claimLogs.length > 0) && (
                 <button
                   onClick={handleClearAllClaims}
@@ -845,6 +994,25 @@ export function AdminRewardsManagement({
                                 className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-[11px] font-bold transition-colors cursor-pointer"
                               >
                                 Verify Details
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setEditingClaim(claim);
+                                  setEditForm({
+                                    name: claim.customerName || "",
+                                    phone: claim.customerPhone || "",
+                                    prize: claim.prizeLabel || "",
+                                    prizeType: (claim.prizeType as any) || "service",
+                                    code: claim.claimCode || "",
+                                  });
+                                  setUpdateError(null);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-colors cursor-pointer flex items-center gap-1 font-bold text-[11px]"
+                                title="Edit customer name, phone, or prize"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                                <span>Edit</span>
                               </button>
 
                               {isAdmin && (
@@ -1048,6 +1216,321 @@ export function AdminRewardsManagement({
           salonName="Belezia Salon"
           salonAddress="Laxmi Nagar, Delhi"
         />
+      )}
+
+      {/* ========================================================================= */}
+      {/* MANUAL CREATE OFFER CLAIM MODAL (e.g. for missed entries like Mansi) */}
+      {/* ========================================================================= */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-2xl sm:rounded-3xl bg-zinc-950 border border-zinc-800 shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-amber-400 to-purple-600 p-0.5 flex items-center justify-center">
+                  <div className="h-full w-full bg-zinc-950 rounded-[10px] flex items-center justify-center">
+                    <Sparkles className="h-4 w-4 text-amber-400" />
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Create Offer Claim</h3>
+                  <p className="text-[11px] text-zinc-400">Add missed customer data directly to Supabase cloud</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                className="h-7 w-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center border border-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateOfferSubmit} className="space-y-3 text-left">
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-zinc-400 font-bold mb-1">
+                  Customer Full Name *
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                  <input
+                    type="text"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                    placeholder="e.g. Mansi Sharma"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-zinc-400 font-bold mb-1">
+                  10-Digit WhatsApp Number *
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                  <input
+                    type="tel"
+                    value={createForm.phone}
+                    onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                    placeholder="10-digit mobile number"
+                    maxLength={10}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-zinc-400 font-bold mb-1">
+                  Prize Won / Offer *
+                </label>
+                <select
+                  value={createForm.prize}
+                  onChange={(e) => {
+                    const selected = EVENT_PRIZES.find((p) => p.label === e.target.value);
+                    setCreateForm({
+                      ...createForm,
+                      prize: e.target.value,
+                      prizeType: selected ? selected.type : createForm.prizeType,
+                    });
+                  }}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer mb-2"
+                >
+                  {EVENT_PRIZES.map((p) => (
+                    <option key={p.id} value={p.label}>
+                      {p.label} ({p.type === "service" ? "Free Service" : "Free Product Gift"})
+                    </option>
+                  ))}
+                  <option value="custom">Custom Offer (Type below)...</option>
+                </select>
+
+                {createForm.prize === "custom" && (
+                  <input
+                    type="text"
+                    placeholder="Enter custom offer name..."
+                    onChange={(e) => setCreateForm({ ...createForm, prize: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500"
+                  />
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-zinc-400 font-bold mb-1">
+                    Reward Category
+                  </label>
+                  <select
+                    value={createForm.prizeType}
+                    onChange={(e) => setCreateForm({ ...createForm, prizeType: e.target.value as any })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    <option value="service">Free Service</option>
+                    <option value="product_gift">Free Product Gift</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-zinc-400 font-bold mb-1">
+                    Voucher Code (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={createForm.code}
+                    onChange={(e) => setCreateForm({ ...createForm, code: e.target.value })}
+                    placeholder="Auto-generated if empty"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {createError && (
+                <div className="p-2.5 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+                  <span>{createError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:brightness-110 text-white text-xs font-extrabold shadow-lg shadow-purple-600/30 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Sparkles className={`h-3.5 w-3.5 ${isCreating ? "animate-spin" : ""}`} />
+                  <span>{isCreating ? "Saving to Supabase..." : "Save & Create Offer"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* EDIT OFFER MODAL (Change prize, name, phone) */}
+      {/* ========================================================================= */}
+      {editingClaim && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-2xl sm:rounded-3xl bg-zinc-950 border border-zinc-800 shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center">
+                  <Edit2 className="h-4 w-4 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Edit Offer Claim</h3>
+                  <p className="text-[11px] text-zinc-400 font-mono">
+                    Code: <strong className="text-amber-400">{editingClaim.claimCode}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingClaim(null)}
+                className="h-7 w-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center border border-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditOfferSubmit} className="space-y-3 text-left">
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-zinc-400 font-bold mb-1">
+                  Customer Full Name *
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-zinc-400 font-bold mb-1">
+                  10-Digit WhatsApp Number *
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-2.5 h-3.5 w-3.5 text-zinc-500" />
+                  <input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    maxLength={10}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-mono uppercase text-zinc-400 font-bold mb-1">
+                  Prize Won / Offer *
+                </label>
+                <select
+                  value={
+                    EVENT_PRIZES.some((p) => p.label === editForm.prize)
+                      ? editForm.prize
+                      : "custom"
+                  }
+                  onChange={(e) => {
+                    if (e.target.value !== "custom") {
+                      const selected = EVENT_PRIZES.find((p) => p.label === e.target.value);
+                      setEditForm({
+                        ...editForm,
+                        prize: e.target.value,
+                        prizeType: selected ? selected.type : editForm.prizeType,
+                      });
+                    } else {
+                      setEditForm({ ...editForm, prize: "" });
+                    }
+                  }}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer mb-2"
+                >
+                  {EVENT_PRIZES.map((p) => (
+                    <option key={p.id} value={p.label}>
+                      {p.label} ({p.type === "service" ? "Free Service" : "Free Product Gift"})
+                    </option>
+                  ))}
+                  <option value="custom">Custom Offer Name...</option>
+                </select>
+
+                {!EVENT_PRIZES.some((p) => p.label === editForm.prize) && (
+                  <input
+                    type="text"
+                    value={editForm.prize}
+                    placeholder="Enter custom offer name..."
+                    onChange={(e) => setEditForm({ ...editForm, prize: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500"
+                  />
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-zinc-400 font-bold mb-1">
+                    Reward Category
+                  </label>
+                  <select
+                    value={editForm.prizeType}
+                    onChange={(e) => setEditForm({ ...editForm, prizeType: e.target.value as any })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500 cursor-pointer"
+                  >
+                    <option value="service">Free Service</option>
+                    <option value="product_gift">Free Product Gift</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono uppercase text-zinc-400 font-bold mb-1">
+                    Voucher Code
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.code}
+                    onChange={(e) => setEditForm({ ...editForm, code: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              {updateError && (
+                <div className="p-2.5 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+                  <span>{updateError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingClaim(null)}
+                  className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:brightness-110 text-white text-xs font-extrabold shadow-lg shadow-purple-600/30 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Save className={`h-3.5 w-3.5 ${isUpdating ? "animate-spin" : ""}`} />
+                  <span>{isUpdating ? "Saving to Cloud..." : "Save Changes"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

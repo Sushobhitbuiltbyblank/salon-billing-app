@@ -73,23 +73,68 @@ function getApiUrl(path: string): string {
   return path;
 }
 
-export async function syncClaimToServer(record: SpinClaimRecord): Promise<boolean> {
-  if (typeof window === "undefined" || !window.location?.origin) return false;
+export interface SyncClaimResult {
+  success: boolean;
+  error?: string;
+  claim?: SpinClaimRecord;
+  isDuplicate?: boolean;
+}
+
+export async function syncClaimToServer(record: SpinClaimRecord): Promise<SyncClaimResult> {
+  if (typeof window === "undefined" || !window.location?.origin) {
+    return { success: false, error: "Network connection context not available." };
+  }
   // NEVER sync or create claims that lack customer name or phone
   if (!record.customerName || !record.customerName.trim() || !record.customerPhone) {
-    return false;
+    return { success: false, error: "Customer name and 10-digit WhatsApp number are required." };
   }
-  try {
-    const res = await fetch(getApiUrl("/api/spin-claims"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(record),
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn("Failed to sync spin claim to server:", err);
-    return false;
+
+  let lastError = "Unable to connect to the cloud database. Please check your internet connection.";
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(getApiUrl("/api/spin-claims"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(record),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data?.success) {
+        return { success: true, claim: data.claim || record };
+      }
+
+      if (res.status === 409) {
+        return {
+          success: false,
+          error: data?.error || "This phone number has already claimed an offer.",
+          claim: data?.claim,
+          isDuplicate: true,
+        };
+      }
+
+      if (res.status === 400) {
+        return {
+          success: false,
+          error: data?.error || "Invalid claim submission. Please check your details.",
+        };
+      }
+
+      if (data?.error) {
+        lastError = data.error;
+      }
+    } catch (err: any) {
+      console.warn(`Attempt ${attempt} failed to sync spin claim to cloud:`, err);
+      lastError = err?.message || "Network issue connecting to database. Please check your connection.";
+    }
+
+    if (attempt < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+    }
   }
+
+  return { success: false, error: lastError };
 }
 
 export interface PaginatedClaimsResponse {
@@ -277,10 +322,8 @@ export function saveClaimRecord(record: SpinClaimRecord): void {
     const updated = [record, ...current.filter((c) => c.id !== record.id)];
     localStorage.setItem(CLAIMS_STORAGE_KEY, JSON.stringify(updated.slice(0, 100)));
   } catch (err) {
-    console.error("Failed to save spin claim record:", err);
+    console.error("Failed to save spin claim record to cache:", err);
   }
-  // Immediately sync to server
-  syncClaimToServer(record).catch(() => {});
 }
 
 export function deleteClaimRecord(idOrCode: string, code?: string, phone?: string): void {
@@ -426,4 +469,76 @@ export function findLocalOfferById(offerId: string): SpinLog | null {
   }
   return null;
 }
+
+export async function adminCreateClaim(payload: {
+  customerName: string;
+  customerPhone: string;
+  prizeLabel: string;
+  prizeId?: string;
+  prizeType?: string;
+  claimCode?: string;
+  override?: boolean;
+}): Promise<{ success: boolean; error?: string; claim?: SpinClaimRecord }> {
+  if (typeof window === "undefined" || !window.location?.origin) {
+    return { success: false, error: "Network connection unavailable." };
+  }
+  try {
+    const res = await fetch(getApiUrl("/api/spin-claims"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...payload,
+        isAdmin: true,
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.success) {
+      return { success: true, claim: data.claim };
+    }
+    return {
+      success: false,
+      error: data?.error || `Failed to create offer (HTTP ${res.status})`,
+      claim: data?.claim,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to create offer" };
+  }
+}
+
+export async function adminUpdateClaim(
+  claimId: string,
+  updates: {
+    customerName?: string;
+    customerPhone?: string;
+    prizeLabel?: string;
+    prizeId?: string;
+    prizeType?: string;
+    claimCode?: string;
+  }
+): Promise<{ success: boolean; error?: string; claim?: SpinClaimRecord }> {
+  if (typeof window === "undefined" || !window.location?.origin) {
+    return { success: false, error: "Network connection unavailable." };
+  }
+  try {
+    const res = await fetch(getApiUrl("/api/spin-claims"), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: claimId,
+        ...updates,
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data?.success) {
+      return { success: true, claim: data.claim };
+    }
+    return {
+      success: false,
+      error: data?.error || `Failed to update offer (HTTP ${res.status})`,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to update offer" };
+  }
+}
+
 
