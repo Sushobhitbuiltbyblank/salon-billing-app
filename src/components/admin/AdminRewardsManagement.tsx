@@ -874,24 +874,26 @@ export function AdminRewardsManagement({
                 <span className="hidden sm:inline">{isLoadingClaims ? "Refreshing..." : "Refresh"}</span>
               </button>
 
-              <button
-                onClick={() => {
-                  setCreateForm({
-                    name: "",
-                    phone: "",
-                    prize: EVENT_PRIZES[0].label,
-                    prizeType: EVENT_PRIZES[0].type,
-                    code: "",
-                  });
-                  setCreateError(null);
-                  setIsCreateModalOpen(true);
-                }}
-                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 shadow-md shadow-purple-600/20"
-                title="Manually create an offer claim"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>+ Create Offer</span>
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    setCreateForm({
+                      name: "",
+                      phone: "",
+                      prize: EVENT_PRIZES[0].label,
+                      prizeType: EVENT_PRIZES[0].type,
+                      code: "",
+                    });
+                    setCreateError(null);
+                    setIsCreateModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-pink-600 to-purple-600 hover:brightness-110 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 shadow-md shadow-purple-600/20"
+                  title="Manually create an offer claim"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>+ Create Offer</span>
+                </button>
+              )}
 
               {isAdmin && (totalClaimsCount > 0 || claimLogs.length > 0) && (
                 <button
@@ -996,24 +998,26 @@ export function AdminRewardsManagement({
                                 Verify Details
                               </button>
 
-                              <button
-                                onClick={() => {
-                                  setEditingClaim(claim);
-                                  setEditForm({
-                                    name: claim.customerName || "",
-                                    phone: claim.customerPhone || "",
-                                    prize: claim.prizeLabel || "",
-                                    prizeType: (claim.prizeType as any) || "service",
-                                    code: claim.claimCode || "",
-                                  });
-                                  setUpdateError(null);
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-colors cursor-pointer flex items-center gap-1 font-bold text-[11px]"
-                                title="Edit customer name, phone, or prize"
-                              >
-                                <Edit2 className="h-3 w-3" />
-                                <span>Edit</span>
-                              </button>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => {
+                                    setEditingClaim(claim);
+                                    setEditForm({
+                                      name: claim.customerName || "",
+                                      phone: claim.customerPhone || "",
+                                      prize: claim.prizeLabel || "",
+                                      prizeType: (claim.prizeType as any) || "service",
+                                      code: claim.claimCode || "",
+                                    });
+                                    setUpdateError(null);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-colors cursor-pointer flex items-center gap-1 font-bold text-[11px]"
+                                  title="Edit customer name, phone, or prize"
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                  <span>Edit</span>
+                                </button>
+                              )}
 
                               {isAdmin && (
                                 <button
@@ -1221,7 +1225,7 @@ export function AdminRewardsManagement({
       {/* ========================================================================= */}
       {/* MANUAL CREATE OFFER CLAIM MODAL (e.g. for missed entries like Mansi) */}
       {/* ========================================================================= */}
-      {isCreateModalOpen && (
+      {isAdmin && isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="relative w-full max-w-md rounded-2xl sm:rounded-3xl bg-zinc-950 border border-zinc-800 shadow-2xl p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
@@ -1375,7 +1379,7 @@ export function AdminRewardsManagement({
       {/* ========================================================================= */}
       {/* EDIT OFFER MODAL (Change prize, name, phone) */}
       {/* ========================================================================= */}
-      {editingClaim && (
+      {isAdmin && editingClaim && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="relative w-full max-w-md rounded-2xl sm:rounded-3xl bg-zinc-950 border border-zinc-800 shadow-2xl p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
