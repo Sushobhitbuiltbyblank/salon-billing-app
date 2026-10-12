@@ -45,7 +45,6 @@ import {
   getOfferProductImage,
   checkPhoneHasClaimedServer,
   findLocalOfferById,
-  fetchServerClaimRecords,
   validateOfferTokenServer,
   fetchServerWheelInventory,
 } from "@/lib/rewardStorage";
@@ -183,18 +182,10 @@ export function SpinTheWheel({
     }
   }, [initialToken, initialPhone]);
 
-  // For public links: synchronize claims with server and restore won state only if valid
+  // Restore won state if session exists in current browser
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // Sync local storage with central server (clears stale local records if server was reset)
-      fetchServerClaimRecords().then((serverClaims) => {
-        if (!serverClaims || serverClaims.length === 0) {
-          sessionStorage.removeItem("belezia_spin_won_state");
-        }
-      }).catch(() => {});
-
       try {
-        // Restore won state if session exists
         const saved = sessionStorage.getItem("belezia_spin_won_state");
         if (saved) {
           const parsed = JSON.parse(saved);
