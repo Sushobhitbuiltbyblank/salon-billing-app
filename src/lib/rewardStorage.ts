@@ -1,4 +1,10 @@
-import { SpinClaimRecord, RewardPrize, DEFAULT_PRIZES } from "@/types/rewards";
+import {
+  SpinClaimRecord,
+  RewardPrize,
+  DEFAULT_PRIZES,
+  WheelInventoryItem,
+  DEFAULT_WHEEL_INVENTORY,
+} from "@/types/rewards";
 
 const CLAIMS_STORAGE_KEY = "belezia_spin_claims_v1";
 const PRIZES_STORAGE_KEY = "belezia_spin_prizes_v1";
@@ -541,4 +547,40 @@ export async function adminUpdateClaim(
   }
 }
 
+/**
+ * Validate a VIP/single-use invite token directly via API
+ */
+export async function validateOfferTokenServer(
+  token: string
+): Promise<{ valid: boolean; isRedeemed: boolean; record?: any }> {
+  if (!token || !token.trim()) return { valid: false, isRedeemed: false };
+  const cleanToken = token.trim();
+  try {
+    const res = await fetch(getApiUrl(`/api/spin-claims?verify=${encodeURIComponent(cleanToken)}`), {
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.isValid) {
+        return { valid: true, isRedeemed: true, record: json.offerDetails };
+      }
+    }
+  } catch {}
+  return { valid: true, isRedeemed: false };
+}
 
+/**
+ * Fetch dedicated wheel inventory directly via /api/wheel-inventory
+ */
+export async function fetchServerWheelInventory(): Promise<WheelInventoryItem[]> {
+  try {
+    const res = await fetch(getApiUrl("/api/wheel-inventory"), { cache: "no-store" });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.items) && json.items.length > 0) {
+        return json.items;
+      }
+    }
+  } catch {}
+  return DEFAULT_WHEEL_INVENTORY;
+}

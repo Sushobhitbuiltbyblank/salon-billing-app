@@ -23,6 +23,7 @@ import {
   Package,
   Menu,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 
@@ -180,14 +181,20 @@ export function Navbar() {
 
         {/* RIGHT ACTIONS: LOGGED-IN USER PROFILE, CLOCK & MOBILE MENU TOGGLE */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* SPIN & WIN WHEEL BUTTON */}
+          {/* SPIN & WIN WHEEL BUTTON (OPENS STANDALONE OFFERS PAGE IN NEW TAB) */}
           <button
-            onClick={() => setIsSpinWheelOpen(true)}
+            onClick={() => {
+              const url = typeof window !== "undefined" && window.location.hostname.includes("localhost")
+                ? "/spin"
+                : "https://belezia-offers.vercel.app";
+              window.open(url, "_blank", "noopener,noreferrer");
+            }}
             className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-pink-500/20 to-purple-500/20 hover:from-amber-500/30 hover:via-pink-500/30 hover:to-purple-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold shadow-sm transition-all cursor-pointer group shrink-0"
-            title="L'Oréal Day Spin & Win (October 31, 2026)"
+            title="L'Oréal Day Spin & Win (Opens in new tab)"
           >
             <Sparkles className="h-3.5 w-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
             <span className="hidden sm:inline">L&apos;Oréal Spin &amp; Win</span>
+            <ExternalLink className="h-3 w-3 opacity-60 ml-0.5" />
             <span className="text-[9px] uppercase font-black px-1.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 hidden md:inline">
               Oct 31
             </span>
@@ -259,7 +266,10 @@ export function Navbar() {
             <button
               onClick={() => {
                 setIsMobileMenuOpen(false);
-                setIsSpinWheelOpen(true);
+                const url = typeof window !== "undefined" && window.location.hostname.includes("localhost")
+                  ? "/spin"
+                  : "https://belezia-offers.vercel.app";
+                window.open(url, "_blank", "noopener,noreferrer");
               }}
               className="w-full flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-purple-950/60 via-pink-950/40 to-amber-950/50 border border-amber-500/40 text-white font-bold text-sm cursor-pointer shadow-md mb-2"
             >

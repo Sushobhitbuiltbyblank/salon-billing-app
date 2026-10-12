@@ -568,45 +568,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // 1. Initial boot: full load once
     loadAllData();
 
-    // 2. Subscribe to Supabase Realtime multi-device database events (uses incremental delta sync)
+    // 2. Subscribe to Supabase Realtime multi-device database events (event-driven, zero polling)
     const unsubscribe = SupabaseSync.subscribeToRealtimeUpdates(() => {
       syncIncremental();
     });
 
-    // 3. Multi-device 30-second heartbeat polling: sync pending queue and pull incremental delta
-    const interval = setInterval(() => {
-      if (Storage.getPendingInvoiceSyncQueue().length > 0) {
-        syncPendingInvoices();
-      }
-      syncIncremental();
-    }, 30000);
-
-    // 4. Instant incremental sync on window focus or screen unlock / tab switch
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        if (Storage.getPendingInvoiceSyncQueue().length > 0) {
-          syncPendingInvoices();
-        }
-        syncIncremental();
-      }
-    };
-    const onWindowFocus = () => {
-      if (Storage.getPendingInvoiceSyncQueue().length > 0) {
-        syncPendingInvoices();
-      }
-      syncIncremental();
-    };
-
-    window.addEventListener("focus", onWindowFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
     return () => {
       unsubscribe();
-      clearInterval(interval);
-      window.removeEventListener("focus", onWindowFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [loadAllData, syncIncremental, syncPendingInvoices]);
+  }, [loadAllData, syncIncremental]);
 
   // AUTH ACTIONS
   const loginWithPin = (userId: string, pin: string): boolean => {

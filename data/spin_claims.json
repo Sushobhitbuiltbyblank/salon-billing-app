@@ -1,15 +1,99 @@
 [
   {
-    "id": "claim-1791724481715",
-    "claimCode": "BZ-LOREAL-6563",
+    "id": "claim-1791732999177",
+    "claimCode": "BZ-LOREAL-4235",
+    "prizeId": "00000000-0000-0000-0000-000000000203",
+    "prizeLabel": "Free D-Tan Service",
+    "prizeType": "service",
+    "customerName": "Jivitesh",
+    "customerPhone": "9205336566",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-11T15:36:39.177Z"
+  },
+  {
+    "id": "claim-1791731317034",
+    "claimCode": "BZ-LOREAL-6069",
     "prizeId": "00000000-0000-0000-0000-000000000205",
     "prizeLabel": "Free L'Oréal absolute repair hair mask",
     "prizeType": "product_gift",
-    "customerName": "Sushobhit",
-    "customerPhone": "8802809679",
+    "customerName": "Mohit Sharma",
+    "customerPhone": "8168584831",
     "wasVerified": true,
     "inventoryDeducted": false,
-    "createdAt": "2026-10-11T13:14:41.715Z"
+    "createdAt": "2026-10-11T15:08:37.035Z"
+  },
+  {
+    "id": "claim-1791731197318",
+    "claimCode": "BZ-LOREAL-8200",
+    "prizeId": "00000000-0000-0000-0000-000000000203",
+    "prizeLabel": "Free D-Tan Service",
+    "prizeType": "service",
+    "customerName": "Sameer",
+    "customerPhone": "8130494926",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-11T15:06:37.318Z"
+  },
+  {
+    "id": "claim-1791730869734",
+    "claimCode": "BZ-LOREAL-5753",
+    "prizeId": "00000000-0000-0000-0000-000000000203",
+    "prizeLabel": "Free D-Tan Service",
+    "prizeType": "service",
+    "customerName": "Gautam",
+    "customerPhone": "8193990087",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-11T15:01:09.734Z"
+  },
+  {
+    "id": "claim-1791729994919",
+    "claimCode": "BZ-LOREAL-3060",
+    "prizeId": "00000000-0000-0000-0000-000000000205",
+    "prizeLabel": "Free L'Oréal absolute repair hair mask",
+    "prizeType": "product_gift",
+    "customerName": "Kanuska",
+    "customerPhone": "7017021953",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-11T14:46:34.919Z"
+  },
+  {
+    "id": "claim-1791728483372",
+    "claimCode": "BZ-LOREAL-2747",
+    "prizeId": "00000000-0000-0000-0000-000000000201",
+    "prizeLabel": "Free L'Oréal Shampoo",
+    "prizeType": "product_gift",
+    "customerName": "Komal",
+    "customerPhone": "7906102273",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-11T14:21:23.372Z"
+  },
+  {
+    "id": "claim-1791726572238",
+    "claimCode": "BZ-LOREAL-8985",
+    "prizeId": "00000000-0000-0000-0000-000000000204",
+    "prizeLabel": "Free Hair Cut Service",
+    "prizeType": "service",
+    "customerName": "Pooja",
+    "customerPhone": "9711392075",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-11T13:49:32.238Z"
+  },
+  {
+    "id": "claim-1791726493294",
+    "claimCode": "BZ-LOREAL-2191",
+    "prizeId": "00000000-0000-0000-0000-000000000205",
+    "prizeLabel": "Free L'Oréal absolute repair hair mask",
+    "prizeType": "product_gift",
+    "customerName": "Niharika",
+    "customerPhone": "8376914761",
+    "wasVerified": true,
+    "inventoryDeducted": false,
+    "createdAt": "2026-10-11T13:48:13.294Z"
   },
   {
     "id": "claim-1791724141898",
@@ -120,18 +204,6 @@
     "createdAt": "2026-10-10T12:22:57.586Z"
   },
   {
-    "id": "claim-1791633750076",
-    "claimCode": "BZ-LOREAL-9773",
-    "prizeId": "00000000-0000-0000-0000-000000000205",
-    "prizeLabel": "Free L'Oréal absolute repair hair mask",
-    "prizeType": "product_gift",
-    "customerName": "Subhan",
-    "customerPhone": "9711450618",
-    "wasVerified": true,
-    "inventoryDeducted": false,
-    "createdAt": "2026-10-10T12:02:30.076Z"
-  },
-  {
     "id": "claim-1791633613177",
     "claimCode": "BZ-LOREAL-9402",
     "prizeId": "00000000-0000-0000-0000-000000000203",
@@ -142,41 +214,5 @@
     "wasVerified": true,
     "inventoryDeducted": false,
     "createdAt": "2026-10-10T12:00:13.177Z"
-  },
-  {
-    "id": "claim-1791632392558",
-    "claimCode": "BZ-LOREAL-3632",
-    "prizeId": "00000000-0000-0000-0000-000000000205",
-    "prizeLabel": "Free L'Oréal absolute repair hair mask",
-    "prizeType": "product_gift",
-    "customerName": "Hhhh",
-    "customerPhone": "9685355595",
-    "wasVerified": true,
-    "inventoryDeducted": false,
-    "createdAt": "2026-10-10T11:39:52.558Z"
-  },
-  {
-    "id": "claim-1791632129174",
-    "claimCode": "BZ-LOREAL-6308",
-    "prizeId": "00000000-0000-0000-0000-000000000203",
-    "prizeLabel": "Free D-Tan Service",
-    "prizeType": "service",
-    "customerName": "Amit",
-    "customerPhone": "9711756513",
-    "wasVerified": true,
-    "inventoryDeducted": false,
-    "createdAt": "2026-10-10T11:35:29.174Z"
-  },
-  {
-    "id": "claim-1791631868194",
-    "claimCode": "BZ-LOREAL-2136",
-    "prizeId": "00000000-0000-0000-0000-000000000204",
-    "prizeLabel": "Free Hair Cut Service",
-    "prizeType": "service",
-    "customerName": "Prabhat Jain",
-    "customerPhone": "9250755665",
-    "wasVerified": true,
-    "inventoryDeducted": false,
-    "createdAt": "2026-10-10T11:31:08.194Z"
   }
 ]

@@ -19,13 +19,14 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import confetti from "canvas-confetti";
-import { useApp } from "@/context/AppContext";
 import {
   RewardPrize,
   DEFAULT_PRIZES,
   SpinGameState,
   SpinClaimRecord,
   PrizeType,
+  WheelInventoryItem,
+  DEFAULT_WHEEL_INVENTORY,
   removeProductQuantity,
 } from "@/types/rewards";
 import {
@@ -45,6 +46,8 @@ import {
   checkPhoneHasClaimedServer,
   findLocalOfferById,
   fetchServerClaimRecords,
+  validateOfferTokenServer,
+  fetchServerWheelInventory,
 } from "@/lib/rewardStorage";
 import { OfferVoucherCard } from "./OfferVoucherCard";
 import {
@@ -107,12 +110,21 @@ export function SpinTheWheel({
   initialPhone = "",
   isExternalLink = false,
 }: SpinTheWheelProps) {
-  const {
-    wheelInventory,
-    checkPhoneHasClaimed,
-    validateOfferToken,
-    recordSpinLog,
-  } = useApp();
+  // Dedicated Standalone Wheel Inventory State (Zero AppContext / POS Dependency)
+  const [wheelInventory, setWheelInventory] = useState<WheelInventoryItem[]>(DEFAULT_WHEEL_INVENTORY);
+
+  // Fetch wheel inventory once on mount from /api/wheel-inventory
+  useEffect(() => {
+    let isMounted = true;
+    fetchServerWheelInventory().then((items) => {
+      if (isMounted && items && items.length > 0) {
+        setWheelInventory(items);
+      }
+    }).catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const [gameState, setGameState] = useState<SpinGameState>("IDLE");
   const [currentRotation, setCurrentRotation] = useState<number>(0);
@@ -145,7 +157,7 @@ export function SpinTheWheel({
   useEffect(() => {
     if (initialToken) {
       setOfferToken(initialToken);
-      validateOfferToken(initialToken).then((res) => {
+      validateOfferTokenServer(initialToken).then((res) => {
         if (res.isRedeemed) {
           setIsTokenExpired(true);
           setTokenError(
@@ -169,7 +181,7 @@ export function SpinTheWheel({
         });
       }
     }
-  }, [initialToken, initialPhone, validateOfferToken]);
+  }, [initialToken, initialPhone]);
 
   // For public links: synchronize claims with server and restore won state only if valid
   useEffect(() => {
@@ -457,7 +469,7 @@ export function SpinTheWheel({
     setIsSubmitting(true);
     try {
       const serverCheck = await checkPhoneHasClaimedServer(cleanPhone);
-      const hasClaimed = serverCheck.hasClaimed || (await checkPhoneHasClaimed(cleanPhone));
+      const hasClaimed = serverCheck.hasClaimed || Boolean(findLocalOfferById(cleanPhone));
       if (hasClaimed) {
         // If already claimed, show error that customer already has an offer
         const existing = (serverCheck.claim || findLocalOfferById(cleanPhone)) as any;
@@ -530,15 +542,6 @@ export function SpinTheWheel({
         // 2. ONLY AFTER cloud confirms save to Supabase:
         // Save local confirmed cache
         saveClaimRecord(record);
-
-        await recordSpinLog({
-          offer_token: finalOfferId,
-          customer_name: customerName.trim() || "Valued Guest",
-          phone_number: cleanPhone,
-          won_item: winningPrize.label,
-          prize_id: winningPrize.id,
-          is_redeemed: true,
-        }).catch(() => {});
       }
 
       // 3. ONLY NOW unlock the voucher modal and allow download/save

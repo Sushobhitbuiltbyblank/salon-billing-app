@@ -375,6 +375,26 @@ export async function addCloudClaim(newClaim: SpinClaimRecord): Promise<SpinClai
     }
   }
 
+  // Also insert into spin_logs table for audit trail
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      await supabase.from("spin_logs").upsert(
+        {
+          id: updatedClaim.id,
+          offer_token: updatedClaim.claimCode,
+          customer_name: updatedClaim.customerName || "Valued Guest",
+          phone_number: cleanPhone || "",
+          won_item: updatedClaim.prizeLabel,
+          prize_id: updatedClaim.prizeId,
+          is_redeemed: true,
+          redeemed_at: updatedClaim.createdAt || new Date().toISOString(),
+          created_at: updatedClaim.createdAt || new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      );
+    } catch {}
+  }
+
   return updatedList;
 }
 

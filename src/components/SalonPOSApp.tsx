@@ -14,7 +14,6 @@ import { InvoicePrintModal } from "@/components/invoice/InvoicePrintModal";
 import { EditInvoiceModal } from "@/components/invoice/EditInvoiceModal";
 import { WhatsAppShareModal } from "@/components/invoice/WhatsAppShareModal";
 import { LoginModal } from "@/components/auth/LoginModal";
-import { SpinWheelModal } from "@/components/rewards/SpinWheelModal";
 import { AdminRewardsManagement } from "@/components/admin/AdminRewardsManagement";
 import { Scissors } from "lucide-react";
 
@@ -89,7 +88,6 @@ export default function SalonPOSApp() {
         <InvoicePrintModal />
         <EditInvoiceModal />
         <WhatsAppShareModal />
-        <SpinWheelModal />
         <LoginModal />
       </div>
     </AppProvider>

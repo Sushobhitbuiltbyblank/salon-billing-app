@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { AppProvider } from "@/context/AppContext";
 import { SpinTheWheel } from "@/components/rewards/SpinTheWheel";
 import { Sparkles } from "lucide-react";
 
@@ -49,10 +48,8 @@ function SpinPageContent() {
 
 export default function SpinPage() {
   return (
-    <AppProvider>
-      <Suspense fallback={<div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center text-sm font-mono">Loading Belezia Wheel...</div>}>
-        <SpinPageContent />
-      </Suspense>
-    </AppProvider>
+    <Suspense fallback={<div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center text-sm font-mono">Loading Belezia Wheel...</div>}>
+      <SpinPageContent />
+    </Suspense>
   );
 }
