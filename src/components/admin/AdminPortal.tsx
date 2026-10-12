@@ -23,6 +23,7 @@ import { CustomerModal } from "@/components/customer/CustomerModal";
 import { AdminAnalyticsDashboard } from "@/components/admin/AdminAnalyticsDashboard";
 import { AdminInvoiceManagement } from "@/components/admin/AdminInvoiceManagement";
 import { AdminRewardsManagement } from "@/components/admin/AdminRewardsManagement";
+import { AdminWhatsAppTest } from "@/components/admin/AdminWhatsAppTest";
 import { formatCurrency, formatDate, generateUUID } from "@/lib/utils";
 import { unifyCustomerList, isCustomerInTimeframe, CustomerTimeframeFilter } from "@/lib/customerUtils";
 import {
@@ -69,6 +70,7 @@ import {
   TrendingUp,
   Printer,
   History,
+  MessageSquare,
 } from "lucide-react";
 
 export function AdminPortal() {
@@ -105,7 +107,7 @@ export function AdminPortal() {
   } = useApp();
 
   const [activeAdminTab, setActiveAdminTab] = useState<
-    "analytics" | "invoices" | "customers" | "staff" | "catalog" | "categories" | "rewards" | "users" | "settings"
+    "analytics" | "invoices" | "customers" | "staff" | "catalog" | "categories" | "rewards" | "users" | "settings" | "whatsapp_test"
   >("analytics");
 
 
@@ -824,6 +826,7 @@ export function AdminPortal() {
           { id: "catalog", label: "Services & Products", icon: Package, count: catalog.length },
           { id: "categories", label: "Categories", icon: Layers, count: categories.length },
           { id: "rewards", label: "Spin Wheel & Claim History", icon: Gift },
+          { id: "whatsapp_test", label: "WhatsApp API Test", icon: MessageSquare },
           ...(currentUser?.role === "admin"
             ? [
                 { id: "users", label: "Receptionists & PINs", icon: KeyRound, count: users.length },
@@ -2129,6 +2132,15 @@ export function AdminPortal() {
       {activeAdminTab === "rewards" && (
         <div className="space-y-4 animate-in fade-in duration-200">
           <AdminRewardsManagement initialSubTab="claims" isAdmin={true} />
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB: WHATSAPP API & SMS TESTING CONSOLE
+          ========================================================================= */}
+      {activeAdminTab === "whatsapp_test" && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <AdminWhatsAppTest />
         </div>
       )}
 
