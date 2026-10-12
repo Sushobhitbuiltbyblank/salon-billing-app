@@ -27,6 +27,24 @@ export function middleware(request: NextRequest) {
       const spinUrl = new URL(`/spin${request.nextUrl.search}`, request.url);
       return NextResponse.rewrite(spinUrl);
     }
+
+    return NextResponse.next();
+  }
+
+  // STRICT DOMAIN ISOLATION:
+  // Do NOT open game on billing domain (https://belezia-salon-billing-app.vercel.app/spin)
+  // Only allow game from https://belezia-offers.vercel.app/ (or localhost for local testing)
+  const isLocalhost =
+    host.includes("localhost") ||
+    host.includes("127.0.0.1") ||
+    host.includes("0.0.0.0");
+
+  if (pathname.startsWith("/spin") && !isLocalhost) {
+    const search = request.nextUrl.search || "";
+    return NextResponse.redirect(
+      new URL(`https://belezia-offers.vercel.app/${search}`),
+      307
+    );
   }
 
   return NextResponse.next();
