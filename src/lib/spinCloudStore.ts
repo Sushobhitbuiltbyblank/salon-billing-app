@@ -18,6 +18,9 @@ const TMP_CLAIMS_FILE = path.join(TMP_DATA_DIR, "spin_claims.json");
 const LOCAL_INVENTORY_FILE = path.join(LOCAL_DATA_DIR, "wheel_inventory.json");
 const TMP_INVENTORY_FILE = path.join(TMP_DATA_DIR, "wheel_inventory.json");
 
+const LOCAL_SETTINGS_FILE = path.join(LOCAL_DATA_DIR, "spin_settings.json");
+const TMP_SETTINGS_FILE = path.join(TMP_DATA_DIR, "spin_settings.json");
+
 /**
  * Filter out facewash variants and deduplicate inventory items
  */
@@ -134,14 +137,15 @@ async function safeReadJson(primaryPath: string, tmpPath: string): Promise<any |
 }
 
 /**
- * Load the Supabase System Record notes JSON containing { claims, wheel_inventory }
+ * Load the Supabase System Record notes JSON containing { claims, wheel_inventory, is_spin_active }
  */
 async function getSupabaseSystemData(): Promise<{
   claims: SpinClaimRecord[];
   wheel_inventory: WheelInventoryItem[];
+  is_spin_active: boolean;
 }> {
   if (!isSupabaseConfigured() || !supabase) {
-    return { claims: [], wheel_inventory: [] };
+    return { claims: [], wheel_inventory: [], is_spin_active: false };
   }
 
   try {
@@ -155,12 +159,14 @@ async function getSupabaseSystemData(): Promise<{
 
     let sysClaims: SpinClaimRecord[] = [];
     let sysInv: WheelInventoryItem[] = [];
+    let isSpinActive = false;
 
     if (!error && data?.notes) {
       try {
         const parsed = JSON.parse(data.notes);
         sysClaims = sanitizeClaims(parsed.claims || []);
         sysInv = sanitizeWheelInventory(parsed.wheel_inventory || []);
+        isSpinActive = typeof parsed.is_spin_active === "boolean" ? parsed.is_spin_active : false;
       } catch {}
     }
 
@@ -207,20 +213,22 @@ async function getSupabaseSystemData(): Promise<{
     return {
       claims: sysClaims,
       wheel_inventory: sysInv.length > 0 ? sysInv : DEFAULT_WHEEL_INVENTORY,
+      is_spin_active: isSpinActive,
     };
   } catch (err) {
     console.warn("Error reading Supabase system spin data:", err);
   }
 
-  return { claims: [], wheel_inventory: [] };
+  return { claims: [], wheel_inventory: [], is_spin_active: false };
 }
 
 /**
- * Save the Supabase System Record notes JSON containing { claims, wheel_inventory }
+ * Save the Supabase System Record notes JSON containing { claims, wheel_inventory, is_spin_active }
  */
 async function saveSupabaseSystemData(payload: {
   claims?: SpinClaimRecord[];
   wheel_inventory?: WheelInventoryItem[];
+  is_spin_active?: boolean;
 }): Promise<boolean> {
   if (!isSupabaseConfigured() || !supabase) return false;
 
@@ -231,14 +239,17 @@ async function saveSupabaseSystemData(payload: {
       payload.wheel_inventory !== undefined
         ? sanitizeWheelInventory(payload.wheel_inventory)
         : current.wheel_inventory;
+    const isSpinActiveToSave =
+      payload.is_spin_active !== undefined ? payload.is_spin_active : current.is_spin_active;
 
     const notesStr = JSON.stringify({
       claims: claimsToSave,
       wheel_inventory: inventoryToSave,
+      is_spin_active: isSpinActiveToSave,
       updated_at: new Date().toISOString(),
     });
 
-    console.log("[SYSTEM_DATA_SAVING]", { claimsCount: claimsToSave.length, notesLen: notesStr.length });
+    console.log("[SYSTEM_DATA_SAVING]", { claimsCount: claimsToSave.length, notesLen: notesStr.length, isSpinActive: isSpinActiveToSave });
 
     const { data: upsertData, error } = await supabase.from("customers").upsert(
       {
@@ -666,4 +677,27 @@ export async function saveCloudWheelInventory(items: WheelInventoryItem[]): Prom
   await saveSupabaseSystemData({ wheel_inventory: sanitized });
   await safeWriteJson(LOCAL_INVENTORY_FILE, TMP_INVENTORY_FILE, sanitized);
   return sanitized;
+}
+
+/**
+ * Load whether the Spin The Wheel game is actively enabled or in Event Concluded mode
+ */
+export async function loadCloudSpinSettings(): Promise<{ is_spin_active: boolean }> {
+  // 1. Try reading from disk / tmp
+  const disk = await safeReadJson(LOCAL_SETTINGS_FILE, TMP_SETTINGS_FILE);
+  if (disk && typeof disk.is_spin_active === "boolean") {
+    return { is_spin_active: disk.is_spin_active };
+  }
+
+  // 2. Fallback to Supabase system record
+  const sys = await getSupabaseSystemData();
+  return { is_spin_active: Boolean(sys.is_spin_active) };
+}
+
+/**
+ * Save whether the Spin The Wheel game is actively enabled or in Event Concluded mode
+ */
+export async function saveCloudSpinSettings(settings: { is_spin_active: boolean }): Promise<boolean> {
+  await safeWriteJson(LOCAL_SETTINGS_FILE, TMP_SETTINGS_FILE, settings);
+  return await saveSupabaseSystemData({ is_spin_active: settings.is_spin_active });
 }

@@ -49,10 +49,12 @@ import {
   Plus,
   Edit2,
   X,
+  Power,
 } from "lucide-react";
 import Link from "next/link";
 import { WheelInventoryManager } from "./WheelInventoryManager";
 import { OfferVoucherCard } from "@/components/rewards/OfferVoucherCard";
+import { fetchServerWheelStatus, updateServerWheelStatus } from "@/lib/rewardStorage";
 import {
   LOREAL_EVENT_TERMS,
   SALON_BOOKING_WHATSAPP,
@@ -131,6 +133,40 @@ export function AdminRewardsManagement({
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Spin The Wheel Public Game Active State
+  const [isSpinActive, setIsSpinActive] = useState<boolean>(false);
+  const [isTogglingSpin, setIsTogglingSpin] = useState<boolean>(false);
+
+  useEffect(() => {
+    fetchServerWheelStatus()
+      .then((res) => {
+        setIsSpinActive(Boolean(res.isSpinActive));
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleSpinGame = async () => {
+    setIsTogglingSpin(true);
+    const nextState = !isSpinActive;
+    try {
+      const ok = await updateServerWheelStatus(nextState);
+      if (ok) {
+        setIsSpinActive(nextState);
+        showToast(
+          nextState
+            ? "🎉 Spin the Wheel game is now ENABLED publicly! Customers on belezia-offers can play."
+            : "🛑 Spin the Wheel game is now DISABLED. Customers on belezia-offers will see the Thank You page."
+        );
+      } else {
+        alert("Failed to update status. Please try again.");
+      }
+    } catch {
+      alert("Error updating status. Please check your network.");
+    } finally {
+      setIsTogglingSpin(false);
+    }
   };
 
   const [isLoadingClaims, setIsLoadingClaims] = useState(false);
@@ -1099,24 +1135,66 @@ export function AdminRewardsManagement({
       {activeSubTab === "gate" && (
         <div className="space-y-4 max-w-2xl animate-in fade-in duration-200">
           {/* CUSTOMER SPIN SHARE LINK CARD */}
-          <Card className="p-4 sm:p-5 bg-gradient-to-r from-purple-950/40 via-zinc-900 to-amber-950/40 border border-purple-500/40 space-y-3">
-            <div className="flex items-center justify-between gap-2">
+          <Card className="p-4 sm:p-5 bg-gradient-to-r from-purple-950/40 via-zinc-900 to-amber-950/40 border border-purple-500/40 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-amber-400" />
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Customer Offers Link (Instagram Follow &amp; Event Concluded)
+                <h4 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
+                  Public Offers Domain &amp; Lucky Wheel Controller
                 </h4>
               </div>
-              <span className="text-[10px] font-mono text-emerald-300 font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30">
-                Event Concluded
-              </span>
+              <Badge
+                variant="outline"
+                className={`text-[10px] font-bold px-2 py-0.5 ${
+                  isSpinActive
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                    : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                }`}
+              >
+                {isSpinActive ? "LIVE GAME ACTIVE" : "EVENT CONCLUDED (THANK YOU PAGE)"}
+              </Badge>
             </div>
 
-            <p className="text-xs text-zinc-300">
-              The Oct 31st L&apos;Oréal Event has concluded! This link now displays the celebratory thank-you page with the official Instagram QR code and invitations to follow for upcoming events.
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              {isSpinActive
+                ? "The spin the wheel game is currently LIVE. Customers visiting belezia-offers.vercel.app can spin the wheel and claim prize vouchers."
+                : "The event is currently marked as CONCLUDED. Customers visiting belezia-offers.vercel.app will see the celebratory Thank You & Instagram follow page."}
             </p>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                onClick={handleToggleSpinGame}
+                disabled={isTogglingSpin}
+                className={`h-9 px-4 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2 ${
+                  isSpinActive
+                    ? "bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/30"
+                    : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
+                }`}
+              >
+                <Power className="h-3.5 w-3.5" />
+                <span>
+                  {isTogglingSpin
+                    ? "Updating..."
+                    : isSpinActive
+                    ? "Turn Off (Show Thank You Page)"
+                    : "Enable Spin the Wheel Game"}
+                </span>
+              </Button>
+
+              <a
+                href="https://belezia-offers.vercel.app/spin?preview=wheel"
+                target="_blank"
+                rel="noreferrer"
+                className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold border border-zinc-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Preview the wheel game directly as admin"
+              >
+                <span>Preview Wheel</span>
+                <ExternalLink className="h-3 w-3 opacity-60" />
+              </a>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1 border-t border-zinc-800">
               <input
                 type="text"
                 readOnly

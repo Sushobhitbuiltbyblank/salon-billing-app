@@ -584,3 +584,35 @@ export async function fetchServerWheelInventory(): Promise<WheelInventoryItem[]>
   } catch {}
   return DEFAULT_WHEEL_INVENTORY;
 }
+
+/**
+ * Fetch whether the Spin The Wheel game is actively enabled or in Event Concluded mode
+ */
+export async function fetchServerWheelStatus(): Promise<{ isSpinActive: boolean }> {
+  try {
+    const res = await fetch(getApiUrl("/api/wheel-inventory"), { cache: "no-store" });
+    if (res.ok) {
+      const json = await res.json();
+      return { isSpinActive: Boolean(json.is_spin_active) };
+    }
+  } catch {}
+  return { isSpinActive: false };
+}
+
+/**
+ * Update whether the Spin The Wheel game is actively enabled from Admin
+ */
+export async function updateServerWheelStatus(isSpinActive: boolean): Promise<boolean> {
+  try {
+    const res = await fetch(getApiUrl("/api/wheel-inventory"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_spin_active: isSpinActive }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return Boolean(json.success);
+    }
+  } catch {}
+  return false;
+}

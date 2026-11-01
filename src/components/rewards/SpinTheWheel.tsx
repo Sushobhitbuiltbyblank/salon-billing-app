@@ -735,12 +735,6 @@ export function SpinTheWheel({
       {/* 1. EVENT DETAILS (ON TOP) */}
       {/* ========================================================================= */}
       <div className="w-full max-w-2xl mb-1 sm:mb-3 p-2.5 sm:p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/70 via-zinc-900/90 to-pink-950/70 border border-amber-500/30 text-center space-y-1.5 shadow-lg">
-        {/* EVENT CONCLUDED NOTICE */}
-        <div className="px-2.5 py-1 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-          <span>Event Concluded! Follow @beleziasalonlaxminagar on Instagram for future events.</span>
-        </div>
-
         <div className="flex items-center justify-between gap-2">
           <div className="flex-1 flex items-center justify-center gap-1.5 text-xs sm:text-sm font-extrabold text-amber-200">
             <Sparkles className="h-4 w-4 text-amber-400 shrink-0 animate-spin-slow" />

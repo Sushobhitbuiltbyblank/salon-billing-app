@@ -4,6 +4,8 @@ import {
   loadCloudWheelInventory,
   saveCloudWheelInventory,
   sanitizeWheelInventory,
+  loadCloudSpinSettings,
+  saveCloudSpinSettings,
 } from "@/lib/spinCloudStore";
 
 export const dynamic = "force-dynamic";
@@ -31,24 +33,46 @@ function isFacewashItem(item: { id?: string; title?: string } | null | undefined
 // GET: Fetch current wheel pool stocks inventory (central source of truth across all devices)
 export async function GET() {
   try {
-    const items = await loadCloudWheelInventory();
+    const [items, spinSettings] = await Promise.all([
+      loadCloudWheelInventory(),
+      loadCloudSpinSettings(),
+    ]);
     return NextResponse.json(
-      { success: true, items, count: items.length },
+      {
+        success: true,
+        items,
+        count: items.length,
+        is_spin_active: spinSettings.is_spin_active,
+      },
       { headers: NO_CACHE_HEADERS }
     );
   } catch (err) {
     console.error("GET /api/wheel-inventory error:", err);
     return NextResponse.json(
-      { success: false, items: DEFAULT_WHEEL_INVENTORY, count: DEFAULT_WHEEL_INVENTORY.length },
+      {
+        success: false,
+        items: DEFAULT_WHEEL_INVENTORY,
+        count: DEFAULT_WHEEL_INVENTORY.length,
+        is_spin_active: false,
+      },
       { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }
 
-// POST: Upsert a single item, or replace entire pool stock inventory
+// POST: Upsert a single item, update spin status, or replace entire pool stock inventory
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
+    // 0. Update public spin the wheel game active status
+    if (typeof body.is_spin_active === "boolean") {
+      await saveCloudSpinSettings({ is_spin_active: body.is_spin_active });
+      return NextResponse.json(
+        { success: true, is_spin_active: body.is_spin_active },
+        { headers: NO_CACHE_HEADERS }
+      );
+    }
 
     // 1. Bulk replace (e.g. reset to default or batch update)
     if (Array.isArray(body.items)) {

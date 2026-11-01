@@ -30,7 +30,10 @@ import {
   RotateCcw,
   Layers,
   Filter,
+  Radio,
+  Power,
 } from "lucide-react";
+import { fetchServerWheelStatus, updateServerWheelStatus } from "@/lib/rewardStorage";
 
 export const CATEGORY_META: Record<
   WheelItemCategory,
@@ -101,6 +104,40 @@ export function WheelInventoryManager({ standalone = false }: WheelInventoryMana
   });
 
   const [notification, setNotification] = useState<string | null>(null);
+
+  // Spin The Wheel Game Public Activation State
+  const [isSpinActive, setIsSpinActive] = useState<boolean>(false);
+  const [isTogglingSpin, setIsTogglingSpin] = useState<boolean>(false);
+
+  useEffect(() => {
+    fetchServerWheelStatus()
+      .then((res) => {
+        setIsSpinActive(Boolean(res.isSpinActive));
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleSpinGame = async () => {
+    setIsTogglingSpin(true);
+    const nextState = !isSpinActive;
+    try {
+      const ok = await updateServerWheelStatus(nextState);
+      if (ok) {
+        setIsSpinActive(nextState);
+        showNotification(
+          nextState
+            ? "🎉 Spin the Wheel game is now ENABLED publicly! Customers on belezia-offers can play."
+            : "🛑 Spin the Wheel game is now DISABLED. Customers on belezia-offers will see the Thank You page."
+        );
+      } else {
+        alert("Failed to update status. Please try again.");
+      }
+    } catch {
+      alert("Error updating status. Please check your network.");
+    } finally {
+      setIsTogglingSpin(false);
+    }
+  };
 
   const showNotification = (msg: string) => {
     setNotification(msg);
@@ -315,6 +352,68 @@ export function WheelInventoryManager({ standalone = false }: WheelInventoryMana
           <span>{notification}</span>
         </div>
       )}
+
+      {/* PUBLIC OFFERS DOMAIN & GAME STATUS CONTROLLER */}
+      <Card className="p-4 sm:p-5 bg-gradient-to-r from-purple-950/40 via-zinc-900 to-zinc-950 border border-purple-500/40 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-amber-400" />
+              <h4 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
+                Public Spin the Wheel Game Status
+              </h4>
+              <Badge
+                variant="outline"
+                className={`text-[10px] font-bold px-2 py-0.5 ${
+                  isSpinActive
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                    : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                }`}
+              >
+                {isSpinActive ? "LIVE GAME ACTIVE" : "EVENT CONCLUDED (THANK YOU PAGE)"}
+              </Badge>
+            </div>
+            <p className="text-xs text-zinc-300 max-w-2xl leading-relaxed">
+              {isSpinActive
+                ? "The spin the wheel game is currently LIVE. Customers visiting belezia-offers.vercel.app can spin the wheel and claim prize vouchers."
+                : "The event is currently marked as CONCLUDED. Customers visiting belezia-offers.vercel.app will see the celebratory Thank You & Instagram follow page."}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              onClick={handleToggleSpinGame}
+              disabled={isTogglingSpin}
+              className={`h-9 px-4 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-2 ${
+                isSpinActive
+                  ? "bg-amber-600 hover:bg-amber-500 text-white shadow-amber-600/30"
+                  : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30"
+              }`}
+            >
+              <Power className="h-3.5 w-3.5" />
+              <span>
+                {isTogglingSpin
+                  ? "Updating..."
+                  : isSpinActive
+                  ? "Turn Off (Show Thank You Page)"
+                  : "Enable Spin the Wheel Game"}
+              </span>
+            </Button>
+
+            <a
+              href="https://belezia-offers.vercel.app/spin?preview=wheel"
+              target="_blank"
+              rel="noreferrer"
+              className="h-9 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold border border-zinc-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Preview the wheel game directly as admin"
+            >
+              <span>Preview Wheel</span>
+              <ExternalLink className="h-3 w-3 opacity-60" />
+            </a>
+          </div>
+        </div>
+      </Card>
 
       {/* 1. KPI SUMMARY CARDS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
