@@ -205,7 +205,7 @@ export function AdminWhatsAppTest({ standalone = false }: AdminWhatsAppTestProps
     switch (templateKey) {
       case "spin_invite":
         setMessageText(
-          `✨ *Exclusive VIP Invitation: L'Oréal Professional Day!* ✨\n\nDear ${custName},\n\nYou are cordially invited to *Belezia Salon Laxmi Nagar* for our exclusive *L'Oréal Day & Lucky Wheel Campaign*!\n\n🎁 *Spin & Win Guaranteed Prizes:* Free L'Oréal Shampoos, Absolute Repair Hair Masks, Free D-Tan Services & Haircuts!\n\n🎡 *Spin your lucky wheel now:*\nhttps://belezia-offers.vercel.app/spin?phone=${activeRecipient?.phone || ""}\n\n📅 *Event Date:* ${SALON_EVENT_DATE}\n📍 *Venue:* ${SALON_EVENT_VENUE}\n\n${LOREAL_EVENT_TERMS_SHORT}\n\nWe look forward to welcoming you!\n— *${salonName} Team* 💇‍♀️`
+          `✨ *Thank You for Making L'Oréal Professional Day a Grand Success!* ✨\n\nDear ${custName},\n\nA huge thank you from *${salonName} Laxmi Nagar* for celebrating our *L'Oréal Day & Consultation Event* with us! The event was great and a wonderful success.\n\n🚀 We will launch more such exciting events, expert hair consultations & lucky giveaways in the future!\n\n📸 *Follow us on Instagram for future event updates & offers:*\nhttps://www.instagram.com/beleziasalonlaxminagar/\n\n🔗 *Event Page & Updates:*\nhttps://belezia-offers.vercel.app/?phone=${activeRecipient?.phone || ""}\n\n📍 *Venue:* ${SALON_EVENT_VENUE}\n📞 *Call/WhatsApp:* ${bookingPhone}\n\nWe look forward to seeing you again!\n— *${salonName} Team* 💇‍♀️✨`
         );
         break;
 

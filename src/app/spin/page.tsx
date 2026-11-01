@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { EventConcludedView } from "@/components/rewards/EventConcludedView";
 import { SpinTheWheel } from "@/components/rewards/SpinTheWheel";
 import { Sparkles } from "lucide-react";
 
@@ -14,10 +15,12 @@ function SpinPageContent() {
   const token = searchParams.get("token") || searchParams.get("offer_token") || "";
   const name = searchParams.get("name") || "";
   const phone = searchParams.get("phone") || searchParams.get("mobile") || "";
+  const preview = searchParams.get("preview") || "";
 
   useEffect(() => {
     setMounted(true);
     if (typeof window !== "undefined") {
+      document.title = "L'Oréal Event Concluded | Belezia Salon Laxmi Nagar";
       const hostname = window.location.hostname || "";
       const isAllowed =
         hostname.includes("belezia-offers") ||
@@ -46,7 +49,7 @@ function SpinPageContent() {
         <p className="text-xs font-mono font-bold text-amber-300">
           {!isAllowedDomain
             ? "Redirecting to official offers domain (belezia-offers.vercel.app)..."
-            : "Loading L'Oréal Lucky Wheel..."}
+            : "Loading Belezia Salon Event Concluded Update..."}
         </p>
         {!isAllowedDomain && (
           <a
@@ -60,24 +63,43 @@ function SpinPageContent() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center p-2 sm:p-4 selection:bg-purple-500 selection:text-white">
-      <div className="relative w-full max-w-4xl my-auto rounded-2xl sm:rounded-3xl bg-zinc-950 border border-zinc-800 shadow-2xl p-2.5 sm:p-5 overflow-hidden">
-        <SpinTheWheel
-          initialToken={token}
-          initialName={name}
-          initialPhone={phone}
-          isExternalLink={true}
-          isModal={false}
-        />
+  // If explicitly requested via ?preview=wheel, render the legacy wheel for admin inspection
+  if (preview === "wheel") {
+    return (
+      <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center p-2 sm:p-4 selection:bg-purple-500 selection:text-white">
+        <div className="relative w-full max-w-4xl my-auto rounded-2xl sm:rounded-3xl bg-zinc-950 border border-zinc-800 shadow-2xl p-2.5 sm:p-5 overflow-hidden">
+          <SpinTheWheel
+            initialToken={token}
+            initialName={name}
+            initialPhone={phone}
+            isExternalLink={true}
+            isModal={false}
+          />
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center p-3 sm:p-6 py-8 sm:py-12 selection:bg-pink-500 selection:text-white">
+      <EventConcludedView
+        initialToken={token}
+        initialName={name}
+        initialPhone={phone}
+      />
     </div>
   );
 }
 
 export default function SpinPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center text-sm font-mono">Loading Belezia Wheel...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center text-sm font-mono text-zinc-400">
+          Loading Belezia Salon Update...
+        </div>
+      }
+    >
       <SpinPageContent />
     </Suspense>
   );

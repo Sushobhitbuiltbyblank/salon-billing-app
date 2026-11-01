@@ -1104,16 +1104,16 @@ export function AdminRewardsManagement({
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-amber-400" />
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Customer Lucky Wheel Link (Instagram &amp; WhatsApp)
+                  Customer Offers Link (Instagram Follow &amp; Event Concluded)
                 </h4>
               </div>
-              <span className="text-[10px] font-mono text-purple-300 font-bold px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30">
-                Live Public Link
+              <span className="text-[10px] font-mono text-emerald-300 font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/30">
+                Event Concluded
               </span>
             </div>
 
             <p className="text-xs text-zinc-300">
-              Share this link in your Instagram bio, stories, or WhatsApp broadcasts. Customers open it on their phones to spin the wheel and claim their vouchers.
+              The Oct 31st L&apos;Oréal Event has concluded! This link now displays the celebratory thank-you page with the official Instagram QR code and invitations to follow for upcoming events.
             </p>
 
             <div className="flex items-center gap-2">

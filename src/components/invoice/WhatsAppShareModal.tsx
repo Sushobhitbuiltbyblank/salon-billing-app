@@ -420,11 +420,11 @@ export function WhatsAppShareModal() {
               </div>
               <div>
                 <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <span>Send L'Oréal Spin Wheel (Separate Message)</span>
-                  <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded font-mono font-bold">Event Invite</span>
+                  <span>Send Event Thank-You &amp; Instagram Link</span>
+                  <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-bold">Event Concluded</span>
                 </h4>
                 <p className="text-[11px] text-zinc-300 mt-1 leading-relaxed">
-                  Send the L'Oréal Professional Day Spin-the-Wheel link, event date (31 Oct), and terms directly to the customer's WhatsApp separately.
+                  Send the L&apos;Oréal Day event thank-you message, future event updates, and Instagram follow link directly to customer&apos;s WhatsApp.
                 </p>
               </div>
             </div>
@@ -436,7 +436,7 @@ export function WhatsAppShareModal() {
                 className="flex-1 h-10 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs shadow-md shadow-purple-600/30 gap-2 cursor-pointer transition-all"
               >
                 <Sparkles className="h-4 w-4" />
-                <span>Send L'Oréal Spin on WhatsApp</span>
+                <span>Send Event Thank-You on WhatsApp</span>
                 <ExternalLink className="h-3.5 w-3.5 opacity-70 ml-auto" />
               </Button>
               <Button
