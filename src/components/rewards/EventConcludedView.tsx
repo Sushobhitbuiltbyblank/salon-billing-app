@@ -12,17 +12,7 @@ import {
   MessageCircle,
   MapPin,
   Heart,
-  Gift,
-  Search,
-  ChevronDown,
-  ChevronUp,
-  AlertCircle,
-  X,
 } from "lucide-react";
-import { OfferVoucherCard } from "./OfferVoucherCard";
-import { checkPhoneHasClaimedServer } from "@/lib/rewardStorage";
-import { cleanPhoneNumber, SALON_BOOKING_WHATSAPP } from "@/lib/whatsapp";
-import { removeProductQuantity } from "@/types/rewards";
 
 export const INSTAGRAM_URL = "https://www.instagram.com/beleziasalonlaxminagar/";
 export const INSTAGRAM_HANDLE = "@beleziasalonlaxminagar";
@@ -30,32 +20,9 @@ export const SALON_PHONE_DISPLAY = "+91 7290828680";
 export const SALON_WHATSAPP_CLEAN = "917290828680";
 export const SALON_ADDRESS = "Belezia Salon, Laxmi Nagar, Delhi";
 
-interface EventConcludedViewProps {
-  initialPhone?: string;
-  initialToken?: string;
-  initialName?: string;
-}
-
-export function EventConcludedView({
-  initialPhone = "",
-  initialToken = "",
-  initialName = "",
-}: EventConcludedViewProps) {
+export function EventConcludedView() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedHandle, setCopiedHandle] = useState(false);
-
-  // Voucher lookup state for attendees who won on Oct 31
-  const [showVoucherLookup, setShowVoucherLookup] = useState(false);
-  const [searchPhone, setSearchPhone] = useState(initialPhone);
-  const [isSearching, setIsSearching] = useState(false);
-  const [lookupError, setLookupError] = useState<string | null>(null);
-  const [foundClaim, setFoundClaim] = useState<{
-    customerName: string;
-    customerPhone: string;
-    prizeLabel: string;
-    claimCode: string;
-  } | null>(null);
-  const [showVoucherModal, setShowVoucherModal] = useState(false);
 
   // Trigger celebration confetti on mount
   useEffect(() => {
@@ -90,47 +57,6 @@ export function EventConcludedView({
     }
   }, []);
 
-  // Auto-check voucher if initialPhone was provided or stored in session
-  useEffect(() => {
-    // 1. Check session storage for current browser claim
-    if (typeof window !== "undefined") {
-      try {
-        const saved = sessionStorage.getItem("belezia_spin_won_state");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && parsed.claimCode && parsed.winningPrize) {
-            setFoundClaim({
-              customerName: parsed.customerName || initialName || "Valued Guest",
-              customerPhone: parsed.customerPhone || initialPhone || "",
-              prizeLabel: removeProductQuantity(parsed.winningPrize.label || "Exclusive Salon Offer"),
-              claimCode: parsed.claimCode,
-            });
-            return;
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    // 2. Check phone parameter
-    if (initialPhone) {
-      const clean = cleanPhoneNumber(initialPhone);
-      if (clean && clean.length === 10) {
-        checkPhoneHasClaimedServer(clean).then((res) => {
-          if (res.hasClaimed && res.claim) {
-            setFoundClaim({
-              customerName: res.claim.customerName || initialName || "Valued Guest",
-              customerPhone: res.claim.customerPhone || clean,
-              prizeLabel: removeProductQuantity(res.claim.prizeLabel || "Exclusive Salon Offer"),
-              claimCode: res.claim.claimCode,
-            });
-          }
-        });
-      }
-    }
-  }, [initialPhone, initialName]);
-
   const handleCopyLink = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard.writeText(INSTAGRAM_URL);
@@ -144,38 +70,6 @@ export function EventConcludedView({
       navigator.clipboard.writeText(INSTAGRAM_HANDLE);
       setCopiedHandle(true);
       setTimeout(() => setCopiedHandle(false), 2500);
-    }
-  };
-
-  const handleSearchVoucher = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLookupError(null);
-    const clean = cleanPhoneNumber(searchPhone);
-    if (!clean || clean.length !== 10) {
-      setLookupError("Please enter a valid 10-digit mobile number.");
-      return;
-    }
-
-    setIsSearching(true);
-    try {
-      const res = await checkPhoneHasClaimedServer(clean);
-      if (res.hasClaimed && res.claim) {
-        setFoundClaim({
-          customerName: res.claim.customerName || "Valued Guest",
-          customerPhone: res.claim.customerPhone || clean,
-          prizeLabel: removeProductQuantity(res.claim.prizeLabel || "Exclusive Salon Offer"),
-          claimCode: res.claim.claimCode,
-        });
-        setShowVoucherModal(true);
-      } else {
-        setLookupError(
-          `No voucher record found for +91 ${clean}. If you spun the wheel, please contact Belezia Salon at ${SALON_PHONE_DISPLAY}.`
-        );
-      }
-    } catch {
-      setLookupError("Failed to check voucher. Please check your connection or contact the salon directly.");
-    } finally {
-      setIsSearching(false);
     }
   };
 
@@ -347,92 +241,7 @@ export function EventConcludedView({
         </div>
 
         {/* ========================================================================= */}
-        {/* 5. VOUCHER LOOKUP (FOR ATTENDEES WHO WON ON OCT 31) */}
-        {/* ========================================================================= */}
-        <div className="pt-2 border-t border-zinc-800/80">
-          <button
-            onClick={() => setShowVoucherLookup(!showVoucherLookup)}
-            className="w-full flex items-center justify-between p-3 sm:p-4 rounded-xl bg-zinc-950/60 hover:bg-zinc-950 border border-zinc-800 text-left transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2.5">
-              <Gift className="h-4 w-4 text-amber-400" />
-              <div>
-                <div className="text-xs sm:text-sm font-bold text-white">
-                  Already claimed a voucher on October 31st?
-                </div>
-                <div className="text-[11px] text-zinc-400">
-                  {foundClaim
-                    ? `Found saved voucher: "${foundClaim.prizeLabel}" (${foundClaim.claimCode})`
-                    : "Check or retrieve your saved offer voucher"}
-                </div>
-              </div>
-            </div>
-            <div className="text-zinc-400">
-              {showVoucherLookup ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </div>
-          </button>
-
-          {showVoucherLookup && (
-            <div className="mt-3 p-4 rounded-xl bg-zinc-950 border border-zinc-800/80 space-y-3 animate-in fade-in duration-200">
-              {foundClaim ? (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-lg bg-emerald-950/30 border border-emerald-500/40">
-                  <div className="space-y-0.5 text-center sm:text-left">
-                    <div className="text-xs font-bold text-emerald-300">
-                      🎉 Active Voucher for {foundClaim.customerName}
-                    </div>
-                    <div className="text-xs text-white font-medium">
-                      {foundClaim.prizeLabel}{" "}
-                      <span className="font-mono text-zinc-400">({foundClaim.claimCode})</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowVoucherModal(true)}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer shrink-0"
-                  >
-                    View &amp; Show Voucher Card
-                  </button>
-                </div>
-              ) : null}
-
-              <form onSubmit={handleSearchVoucher} className="space-y-2">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-                  Enter your registered 10-digit mobile number:
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    placeholder="e.g. 9876543210"
-                    value={searchPhone}
-                    onChange={(e) => setSearchPhone(e.target.value.replace(/\D/g, ""))}
-                    className="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSearching}
-                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    {isSearching ? (
-                      <span className="animate-spin text-xs">⏳</span>
-                    ) : (
-                      <Search className="h-3.5 w-3.5" />
-                    )}
-                    <span>{isSearching ? "Searching..." : "Find"}</span>
-                  </button>
-                </div>
-                {lookupError && (
-                  <p className="text-[11px] text-rose-400 flex items-center gap-1 mt-1">
-                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                    <span>{lookupError}</span>
-                  </p>
-                )}
-              </form>
-            </div>
-          )}
-        </div>
-
-        {/* ========================================================================= */}
-        {/* 6. SALON LOCATION & QUICK CONTACT */}
+        {/* 5. SALON LOCATION & QUICK CONTACT */}
         {/* ========================================================================= */}
         <div className="pt-4 border-t border-zinc-800 text-center space-y-3">
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-400">
@@ -449,7 +258,7 @@ export function EventConcludedView({
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
             <a
               href={`https://wa.me/${SALON_WHATSAPP_CLEAN}?text=${encodeURIComponent(
-                "Hello Belezia Salon! I attended the L'Oréal Consultation Event and would like to stay in touch for upcoming events!"
+                "Hello Belezia Salon! I would love to know about upcoming events and offers."
               )}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -474,20 +283,6 @@ export function EventConcludedView({
           </p>
         </div>
       </div>
-
-      {/* ========================================================================= */}
-      {/* 7. VOUCHER MODAL (IF REVEALED) */}
-      {/* ========================================================================= */}
-      {showVoucherModal && foundClaim && (
-        <OfferVoucherCard
-          customerName={foundClaim.customerName}
-          customerPhone={foundClaim.customerPhone}
-          wonItem={foundClaim.prizeLabel}
-          offerId={foundClaim.claimCode}
-          onClose={() => setShowVoucherModal(false)}
-          showModalWrapper={true}
-        />
-      )}
     </div>
   );
 }

@@ -82,11 +82,7 @@ function SpinPageContent() {
 
   return (
     <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center p-3 sm:p-6 py-8 sm:py-12 selection:bg-pink-500 selection:text-white">
-      <EventConcludedView
-        initialToken={token}
-        initialName={name}
-        initialPhone={phone}
-      />
+      <EventConcludedView />
     </div>
   );
 }
