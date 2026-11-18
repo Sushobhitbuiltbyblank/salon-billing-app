@@ -2131,7 +2131,7 @@ export function AdminPortal() {
           ========================================================================= */}
       {activeAdminTab === "rewards" && (
         <div className="space-y-4 animate-in fade-in duration-200">
-          <AdminRewardsManagement initialSubTab="claims" isAdmin={true} />
+          <AdminRewardsManagement initialSubTab="brand" isAdmin={true} />
         </div>
       )}
 

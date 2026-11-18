@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import confetti from "canvas-confetti";
+import { fetchServerBrandConfig } from "@/lib/rewardStorage";
 import {
   Sparkles,
   ExternalLink,
@@ -23,6 +24,13 @@ export const SALON_ADDRESS = "Belezia Salon, Laxmi Nagar, Delhi";
 export function EventConcludedView() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedHandle, setCopiedHandle] = useState(false);
+  const [brandName, setBrandName] = useState<string>("Kanpeki");
+
+  useEffect(() => {
+    fetchServerBrandConfig().then((cfg) => {
+      if (cfg?.brandName) setBrandName(cfg.brandName);
+    }).catch(() => {});
+  }, []);
 
   // Trigger celebration confetti on mount
   useEffect(() => {
@@ -81,12 +89,12 @@ export function EventConcludedView() {
       <div className="w-full text-center space-y-3 mb-6">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-mono font-bold uppercase tracking-wider shadow-sm animate-pulse">
           <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-          <span>Event Concluded • L&apos;Oréal Professionnel Day</span>
+          <span>Event Concluded • {brandName} Day</span>
         </div>
 
         <div className="space-y-1">
           <h2 className="text-xs sm:text-sm font-black tracking-widest text-zinc-400 uppercase">
-            Belezia Salon &amp; Spa × L&apos;Oréal Professionnel
+            Belezia Salon &amp; Spa × {brandName}
           </h2>
           <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-pink-400 to-purple-400 leading-tight">
             The Event Was Great!

@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { EventConcludedView } from "@/components/rewards/EventConcludedView";
 import { SpinTheWheel } from "@/components/rewards/SpinTheWheel";
-import { fetchServerWheelStatus } from "@/lib/rewardStorage";
+import { fetchServerWheelStatus, fetchServerBrandConfig } from "@/lib/rewardStorage";
 import { Sparkles } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,7 @@ function SpinPageContent() {
   const [isAllowedDomain, setIsAllowedDomain] = useState(true);
   const [isSpinActive, setIsSpinActive] = useState<boolean>(false);
   const [checkingStatus, setCheckingStatus] = useState<boolean>(true);
+  const [brandName, setBrandName] = useState<string>("Kanpeki");
 
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || searchParams.get("offer_token") || "";
@@ -40,10 +41,11 @@ function SpinPageContent() {
         return;
       }
 
-      // Check whether the game is enabled in cloud admin or set to thank you page
-      fetchServerWheelStatus()
-        .then((res) => {
-          setIsSpinActive(Boolean(res.isSpinActive));
+      // Check whether the game is enabled in cloud admin and get brand name
+      Promise.all([fetchServerWheelStatus(), fetchServerBrandConfig()])
+        .then(([statusRes, brandRes]) => {
+          setIsSpinActive(Boolean(statusRes.isSpinActive));
+          if (brandRes?.brandName) setBrandName(brandRes.brandName);
         })
         .catch(() => {})
         .finally(() => {
@@ -52,16 +54,16 @@ function SpinPageContent() {
     }
   }, []);
 
-  // Update document title dynamically based on active state
+  // Update document title dynamically based on active state and brand
   useEffect(() => {
     if (typeof window !== "undefined") {
       if (isSpinActive || preview === "wheel") {
-        document.title = "L'Oréal Lucky Wheel | Belezia Salon Laxmi Nagar";
+        document.title = `${brandName} Lucky Wheel | Belezia Salon Laxmi Nagar`;
       } else {
-        document.title = "L'Oréal Event Concluded | Belezia Salon Laxmi Nagar";
+        document.title = `${brandName} Event Concluded | Belezia Salon Laxmi Nagar`;
       }
     }
-  }, [isSpinActive, preview]);
+  }, [isSpinActive, preview, brandName]);
 
   if (!mounted || !isAllowedDomain || checkingStatus) {
     return (

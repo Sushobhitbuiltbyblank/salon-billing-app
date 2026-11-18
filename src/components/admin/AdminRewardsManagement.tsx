@@ -53,6 +53,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { WheelInventoryManager } from "./WheelInventoryManager";
+import { BrandCampaignManager } from "./BrandCampaignManager";
 import { OfferVoucherCard } from "@/components/rewards/OfferVoucherCard";
 import { fetchServerWheelStatus, updateServerWheelStatus } from "@/lib/rewardStorage";
 import {
@@ -78,12 +79,12 @@ interface VerificationDetails {
 }
 
 interface AdminRewardsManagementProps {
-  initialSubTab?: "verify" | "pool" | "claims" | "gate";
+  initialSubTab?: "brand" | "verify" | "pool" | "claims" | "gate";
   isAdmin?: boolean;
 }
 
 export function AdminRewardsManagement({
-  initialSubTab = "verify",
+  initialSubTab = "brand",
   isAdmin = false,
 }: AdminRewardsManagementProps = {}) {
   const {
@@ -99,7 +100,7 @@ export function AdminRewardsManagement({
   } = useApp();
 
   const [claimLogs, setClaimLogs] = useState<SpinClaimRecord[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState<"verify" | "pool" | "claims" | "gate">(initialSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<"brand" | "verify" | "pool" | "claims" | "gate">(initialSubTab);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [searchLog, setSearchLog] = useState("");
 
@@ -511,6 +512,22 @@ export function AdminRewardsManagement({
 
       {/* SUB-TABS NAVIGATION */}
       <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-2xl border border-zinc-800/80 overflow-x-auto no-scrollbar">
+        {/* TAB 0: BRAND SETUP & RULES */}
+        <button
+          onClick={() => setActiveSubTab("brand")}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+            activeSubTab === "brand"
+              ? "bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white shadow-md shadow-pink-600/30 font-black"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+          }`}
+        >
+          <Sparkles className="h-4 w-4 text-pink-400" />
+          <span>Brand Setup &amp; Rules</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-pink-950/80 text-pink-300 font-bold border border-pink-700/50">
+            Kanpeki
+          </span>
+        </button>
+
         {/* TAB 1: VERIFY OFFER ID */}
         <button
           onClick={() => setActiveSubTab("verify")}
@@ -578,6 +595,15 @@ export function AdminRewardsManagement({
         <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
           <CheckCircle2 className="h-4 w-4 text-emerald-400" />
           <span>Configuration saved successfully! Changes are live on all tablets and devices.</span>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 0. BRAND & CAMPAIGN SETUP WORKBENCH */}
+      {/* ========================================================================= */}
+      {activeSubTab === "brand" && (
+        <div className="animate-in fade-in duration-200">
+          <BrandCampaignManager />
         </div>
       )}
 

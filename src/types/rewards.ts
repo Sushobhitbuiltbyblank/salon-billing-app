@@ -20,14 +20,193 @@ export interface WheelInventoryItem {
   created_at?: string;
 }
 
-export const DEFAULT_WHEEL_INVENTORY: WheelInventoryItem[] = [
+export interface SpinBrandConfig {
+  brandName: string;
+  eventName: string;
+  tagline: string;
+  disclaimerTerms: string;
+  eventDate: string;
+  eventVenue: string;
+  offerPrefix: string;
+  isSpinActive: boolean;
+  instagramUrl?: string;
+  instagramHandle?: string;
+  updatedAt?: string;
+}
+
+export const DEFAULT_KANPEKI_CONFIG: SpinBrandConfig = {
+  brandName: "Kanpeki",
+  eventName: "Kanpeki Japanese Skin & Hair Rituals Event",
+  tagline: "Exclusive Japanese Skincare Consultations & Guaranteed Lucky Wheel Rewards",
+  disclaimerTerms:
+    "🚨 Disclaimer: This exclusive offer and free goodies are valid strictly on a First-Come, First-Served basis, only till stocks last! Doors open at 10:00 AM sharp—make sure to arrive early so you don't miss out!",
+  eventDate: "Saturday, November 28, 2026",
+  eventVenue: "Belezia Salon, Laxmi Nagar",
+  offerPrefix: "BZ-KANPEKI-",
+  isSpinActive: true,
+  instagramUrl: "https://www.instagram.com/beleziasalonlaxminagar/",
+  instagramHandle: "@beleziasalonlaxminagar",
+};
+
+export const DEFAULT_KANPEKI_INVENTORY: WheelInventoryItem[] = [
+  {
+    id: "00000000-0000-0000-0000-000000000301",
+    title: "Free Kanpeki Skin Facial",
+    category: "free_service",
+    quantity: 30,
+    is_active: true,
+    color: "#ec4899", // Pink
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000302",
+    title: "Free Kanpeki Hair Spa Ritual",
+    category: "free_service",
+    quantity: 30,
+    is_active: true,
+    color: "#8b5cf6", // Purple
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000303",
+    title: "Free Kanpeki Professional Gift",
+    category: "gift",
+    quantity: 30,
+    is_active: true,
+    color: "#3b82f6", // Blue
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000304",
+    title: "Free D-Tan Brightening Service",
+    category: "free_service",
+    quantity: 30,
+    is_active: true,
+    color: "#10b981", // Emerald
+  },
+];
+
+export const BRAND_PRESETS: {
+  id: string;
+  name: string;
+  config: SpinBrandConfig;
+  inventory: WheelInventoryItem[];
+}[] = [
+  {
+    id: "kanpeki",
+    name: "Kanpeki (Active)",
+    config: DEFAULT_KANPEKI_CONFIG,
+    inventory: DEFAULT_KANPEKI_INVENTORY,
+  },
+  {
+    id: "loreal",
+    name: "L'Oréal Professionnel",
+    config: {
+      brandName: "L'Oréal Professionnel",
+      eventName: "L’Oréal Professionnel Hair Consultation Event",
+      tagline: "Expert Hair Consultations & Lucky Wheel Giveaways",
+      disclaimerTerms:
+        "🚨 Disclaimer: This exclusive offer and free goodies are valid strictly on a First-Come, First-Served basis, only till stocks last! Doors open at 10:00 AM sharp—make sure to arrive early so you don't miss out!",
+      eventDate: "Saturday, October 31, 2026",
+      eventVenue: "Belezia Salon, Laxmi Nagar",
+      offerPrefix: "BZ-LOREAL-",
+      isSpinActive: true,
+      instagramUrl: "https://www.instagram.com/beleziasalonlaxminagar/",
+      instagramHandle: "@beleziasalonlaxminagar",
+    },
+    inventory: [
+      {
+        id: "00000000-0000-0000-0000-000000000201",
+        title: "Free L'Oréal Shampoo",
+        category: "gift",
+        quantity: 30,
+        is_active: true,
+        color: "#3b82f6",
+      },
+      {
+        id: "00000000-0000-0000-0000-000000000203",
+        title: "Free D-Tan Service",
+        category: "free_service",
+        quantity: 30,
+        is_active: true,
+        color: "#8b5cf6",
+      },
+      {
+        id: "00000000-0000-0000-0000-000000000204",
+        title: "Free Hair Cut Service",
+        category: "free_service",
+        quantity: 30,
+        is_active: true,
+        color: "#ec4899",
+      },
+      {
+        id: "00000000-0000-0000-0000-000000000205",
+        title: "Free L'Oréal absolute repair hair mask",
+        category: "gift",
+        quantity: 30,
+        is_active: true,
+        color: "#10b981",
+      },
+    ],
+  },
+  {
+    id: "generic",
+    name: "Belezia Signature / Custom Brand",
+    config: {
+      brandName: "Belezia VIP",
+      eventName: "Belezia Luxury Beauty & Lucky Wheel Day",
+      tagline: "Exclusive Salon Pampering & Guaranteed Rewards",
+      disclaimerTerms:
+        "🚨 Disclaimer: Valid strictly during salon operating hours on a First-Come, First-Served basis, only till stocks last! Arrive early to claim your reward.",
+      eventDate: "Upcoming Salon Event",
+      eventVenue: "Belezia Salon, Laxmi Nagar",
+      offerPrefix: "BZ-SPIN-",
+      isSpinActive: true,
+      instagramUrl: "https://www.instagram.com/beleziasalonlaxminagar/",
+      instagramHandle: "@beleziasalonlaxminagar",
+    },
+    inventory: [
+      {
+        id: "00000000-0000-0000-0000-000000000401",
+        title: "Free Luxury Hair Spa",
+        category: "free_service",
+        quantity: 30,
+        is_active: true,
+        color: "#8b5cf6",
+      },
+      {
+        id: "00000000-0000-0000-0000-000000000402",
+        title: "Free D-Tan Brightening",
+        category: "free_service",
+        quantity: 30,
+        is_active: true,
+        color: "#ec4899",
+      },
+      {
+        id: "00000000-0000-0000-0000-000000000403",
+        title: "Free Senior Stylist Hair Cut",
+        category: "free_service",
+        quantity: 30,
+        is_active: true,
+        color: "#3b82f6",
+      },
+      {
+        id: "00000000-0000-0000-0000-000000000404",
+        title: "Free Luxury Beauty Gift",
+        category: "gift",
+        quantity: 30,
+        is_active: true,
+        color: "#10b981",
+      },
+    ],
+  },
+];
+
+export const DEFAULT_LOREAL_INVENTORY: WheelInventoryItem[] = [
   {
     id: "00000000-0000-0000-0000-000000000201",
     title: "Free L'Oréal Shampoo",
     category: "gift",
     quantity: 30,
     is_active: true,
-    color: "#3b82f6", // Blue
+    color: "#3b82f6",
   },
   {
     id: "00000000-0000-0000-0000-000000000203",
@@ -35,7 +214,7 @@ export const DEFAULT_WHEEL_INVENTORY: WheelInventoryItem[] = [
     category: "free_service",
     quantity: 30,
     is_active: true,
-    color: "#8b5cf6", // Purple
+    color: "#8b5cf6",
   },
   {
     id: "00000000-0000-0000-0000-000000000204",
@@ -43,7 +222,7 @@ export const DEFAULT_WHEEL_INVENTORY: WheelInventoryItem[] = [
     category: "free_service",
     quantity: 30,
     is_active: true,
-    color: "#ec4899", // Pink
+    color: "#ec4899",
   },
   {
     id: "00000000-0000-0000-0000-000000000205",
@@ -51,9 +230,11 @@ export const DEFAULT_WHEEL_INVENTORY: WheelInventoryItem[] = [
     category: "gift",
     quantity: 30,
     is_active: true,
-    color: "#10b981", // Emerald
+    color: "#10b981",
   },
 ];
+
+export const DEFAULT_WHEEL_INVENTORY: WheelInventoryItem[] = DEFAULT_LOREAL_INVENTORY;
 
 export type PrizeType =
   | "service"

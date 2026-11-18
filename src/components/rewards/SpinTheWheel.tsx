@@ -28,6 +28,8 @@ import {
   WheelInventoryItem,
   DEFAULT_WHEEL_INVENTORY,
   removeProductQuantity,
+  SpinBrandConfig,
+  DEFAULT_KANPEKI_CONFIG,
 } from "@/types/rewards";
 import {
   playTickSound,
@@ -47,6 +49,7 @@ import {
   findLocalOfferById,
   validateOfferTokenServer,
   fetchServerWheelInventory,
+  fetchServerBrandConfig,
 } from "@/lib/rewardStorage";
 import { OfferVoucherCard } from "./OfferVoucherCard";
 import {
@@ -111,15 +114,22 @@ export function SpinTheWheel({
 }: SpinTheWheelProps) {
   // Dedicated Standalone Wheel Inventory State (Zero AppContext / POS Dependency)
   const [wheelInventory, setWheelInventory] = useState<WheelInventoryItem[]>(DEFAULT_WHEEL_INVENTORY);
+  const [brandConfig, setBrandConfig] = useState<SpinBrandConfig>(DEFAULT_KANPEKI_CONFIG);
 
-  // Fetch wheel inventory once on mount from /api/wheel-inventory
+  // Fetch wheel inventory and brand configuration once on mount from /api/wheel-inventory
   useEffect(() => {
     let isMounted = true;
-    fetchServerWheelInventory().then((items) => {
-      if (isMounted && items && items.length > 0) {
-        setWheelInventory(items);
-      }
-    }).catch(() => {});
+    Promise.all([fetchServerWheelInventory(), fetchServerBrandConfig()])
+      .then(([items, config]) => {
+        if (!isMounted) return;
+        if (items && items.length > 0) {
+          setWheelInventory(items);
+        }
+        if (config) {
+          setBrandConfig(config);
+        }
+      })
+      .catch(() => {});
     return () => {
       isMounted = false;
     };
@@ -251,7 +261,7 @@ export function SpinTheWheel({
                 : "Tag",
             description:
               removeProductQuantity(matchingDefault?.description || "") ||
-              `Complimentary ${cleanTitle} for L'Oréal Consultation Day`,
+              `Complimentary ${cleanTitle} for ${brandConfig.brandName || "Salon"} Consultation Day`,
             requiresInventoryDeduction: false,
           };
         });
@@ -363,7 +373,9 @@ export function SpinTheWheel({
         // Spin finished! Direct transition to prize reveal & form screen
         setCurrentRotation(totalRotationTarget);
         setGameState("VERIFIED_AND_REVEALED");
-        const newCode = offerToken || generateOfferToken();
+        const prefix = brandConfig.offerPrefix || "BZ-KANPEKI-";
+        const cleanPrefix = prefix.endsWith("-") ? prefix : `${prefix}-`;
+        const newCode = offerToken || `${cleanPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
         setClaimCode(newCode);
 
         // DO NOT save to history or server here.
@@ -533,6 +545,18 @@ export function SpinTheWheel({
         // 2. ONLY AFTER cloud confirms save to Supabase:
         // Save local confirmed cache
         saveClaimRecord(record);
+
+        // Instantly decrement local inventory state so remaining stock reflects immediately
+        if (winningPrize) {
+          setWheelInventory((prev) =>
+            prev.map((it) =>
+              it.id === winningPrize.id ||
+              it.title.toLowerCase().trim() === winningPrize.label.toLowerCase().trim()
+                ? { ...it, quantity: Math.max(0, (it.quantity ?? 0) - 1) }
+                : it
+            )
+          );
+        }
       }
 
       // 3. ONLY NOW unlock the voucher modal and allow download/save
@@ -738,7 +762,7 @@ export function SpinTheWheel({
         <div className="flex items-center justify-between gap-2">
           <div className="flex-1 flex items-center justify-center gap-1.5 text-xs sm:text-sm font-extrabold text-amber-200">
             <Sparkles className="h-4 w-4 text-amber-400 shrink-0 animate-spin-slow" />
-            <span>Belezia Salon × L’Oréal Professionnel Hair Consultation Event</span>
+            <span>Belezia Salon × {brandConfig.eventName || `${brandConfig.brandName} Event`}</span>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
@@ -776,11 +800,11 @@ export function SpinTheWheel({
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-0.5 text-[10px] sm:text-[11px] text-zinc-300">
-          <span className="text-pink-300 font-bold">🎁 Free L&apos;Oréal Goodie Bag for every consultation</span>
+          <span className="text-pink-300 font-bold">🎁 Free {brandConfig.brandName} Goodie Bag for every consultation</span>
           <span className="hidden sm:inline text-zinc-600">•</span>
           <span className="text-emerald-300 font-semibold">💰 100% Free Consult</span>
           <span className="hidden sm:inline text-zinc-600">•</span>
-          <span className="text-purple-300 font-medium">🔬 Micro-analysis &amp; Color Mapping by Experts</span>
+          <span className="text-purple-300 font-medium">🔬 Skin &amp; Hair Mapping by Senior Experts</span>
         </div>
       </div>
 
@@ -870,7 +894,7 @@ export function SpinTheWheel({
           )}
           {gameState === "SPINNING" && (
             <p className="text-xs text-purple-300 font-semibold animate-pulse">
-              🎰 Revealing your L&apos;Oréal Day reward...
+              🎰 Revealing your {brandConfig.brandName} reward...
             </p>
           )}
         </div>
@@ -881,7 +905,7 @@ export function SpinTheWheel({
       {/* ========================================================================= */}
       <div className="w-full max-w-xl mt-2 sm:mt-3 p-2 sm:p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-[10px] sm:text-[11px] font-medium leading-relaxed flex items-center justify-center gap-1.5 text-center shadow-sm">
         <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-        <span>{LOREAL_EVENT_TERMS}</span>
+        <span>{brandConfig.disclaimerTerms || LOREAL_EVENT_TERMS}</span>
       </div>
 
       {/* ========================================================================= */}
@@ -1130,11 +1154,11 @@ export function SpinTheWheel({
           customerName={customerName || "Valued Guest"}
           customerPhone={customerPhone}
           wonItem={removeProductQuantity(winningPrize.label)}
-          offerId={claimCode || offerToken || "BZ-LOREAL-OFFER"}
-          eventDate="31st October"
+          offerId={claimCode || offerToken || `${brandConfig.offerPrefix || "BZ-KANPEKI-"}OFFER`}
+          eventDate={brandConfig.eventDate || "Valid during event"}
           eventTime="10:00 AM – 9:00 PM"
           salonName="Belezia Salon"
-          salonAddress="Laxmi Nagar, Delhi"
+          salonAddress={brandConfig.eventVenue || "Laxmi Nagar, Delhi"}
         />
       )}
     </div>

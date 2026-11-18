@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { SpinClaimRecord } from "@/types/rewards";
+import { SpinClaimRecord, DEFAULT_KANPEKI_CONFIG } from "@/types/rewards";
 import { cleanPhoneNumber, SALON_EVENT_DATE, SALON_EVENT_VENUE, LOREAL_EVENT_TERMS_SHORT } from "@/lib/whatsapp";
 import {
   loadCloudClaims,
   addCloudClaim,
   updateCloudClaim,
   deleteCloudClaim,
+  loadCloudSpinSettings,
 } from "@/lib/spinCloudStore";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 
@@ -76,6 +77,8 @@ export async function GET(request: Request) {
       );
 
       if (match) {
+        const spinSettings = await loadCloudSpinSettings();
+        const brand = spinSettings.brand_config || DEFAULT_KANPEKI_CONFIG;
         return NextResponse.json(
           {
             isValid: true,
@@ -89,9 +92,10 @@ export async function GET(request: Request) {
               isRedeemed: true,
               redeemedAt: match.createdAt,
               createdAt: match.createdAt,
-              eventDate: SALON_EVENT_DATE,
-              terms: LOREAL_EVENT_TERMS_SHORT,
-              venue: SALON_EVENT_VENUE,
+              eventDate: brand.eventDate || SALON_EVENT_DATE,
+              terms: brand.disclaimerTerms || LOREAL_EVENT_TERMS_SHORT,
+              venue: brand.eventVenue || SALON_EVENT_VENUE,
+              brandName: brand.brandName || "Kanpeki",
             },
           },
           { headers: NO_CACHE_HEADERS }
@@ -190,10 +194,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Auto-generate claim code if admin created without specifying one
+    // Auto-generate claim code with dynamic brand prefix if not provided
+    const spinSettings = await loadCloudSpinSettings();
+    const brandPrefix = spinSettings.brand_config?.offerPrefix || "BZ-KANPEKI-";
     const claimCode = body.claimCode
       ? String(body.claimCode).trim()
-      : `BZ-LOREAL-${Math.floor(1000 + Math.random() * 9000)}`;
+      : `${brandPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
 
     // Anti-fraud: strictly prevent duplicate claims for the same phone number (unless admin overrides)
     const existingClaims = await loadCloudClaims();

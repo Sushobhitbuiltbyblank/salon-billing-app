@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { WheelInventoryItem, DEFAULT_WHEEL_INVENTORY } from "@/types/rewards";
+import { WheelInventoryItem, DEFAULT_WHEEL_INVENTORY, DEFAULT_KANPEKI_CONFIG } from "@/types/rewards";
 import {
   loadCloudWheelInventory,
   saveCloudWheelInventory,
   sanitizeWheelInventory,
   loadCloudSpinSettings,
   saveCloudSpinSettings,
+  decrementCloudWheelInventory,
 } from "@/lib/spinCloudStore";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,7 @@ export async function GET() {
         items,
         count: items.length,
         is_spin_active: spinSettings.is_spin_active,
+        brand_config: spinSettings.brand_config || DEFAULT_KANPEKI_CONFIG,
       },
       { headers: NO_CACHE_HEADERS }
     );
@@ -53,19 +55,53 @@ export async function GET() {
         success: false,
         items: DEFAULT_WHEEL_INVENTORY,
         count: DEFAULT_WHEEL_INVENTORY.length,
-        is_spin_active: false,
+        is_spin_active: true,
+        brand_config: DEFAULT_KANPEKI_CONFIG,
       },
       { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }
 
-// POST: Upsert a single item, update spin status, or replace entire pool stock inventory
+// POST: Upsert a single item, update spin status, update brand config, or replace entire pool stock inventory
 export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    // 0. Update public spin the wheel game active status
+    // 0. Update brand configuration & rules
+    if (body.brand_config && typeof body.brand_config === "object") {
+      await saveCloudSpinSettings({
+        brand_config: body.brand_config,
+        is_spin_active: typeof body.brand_config.isSpinActive === "boolean" ? body.brand_config.isSpinActive : undefined,
+      });
+
+      // If items were also sent with brand config, save them as well
+      let savedItems: WheelInventoryItem[] | undefined;
+      if (Array.isArray(body.items)) {
+        const sanitized = sanitizeWheelInventory(body.items);
+        savedItems = await saveCloudWheelInventory(sanitized);
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          brand_config: body.brand_config,
+          items: savedItems,
+        },
+        { headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    // 0b. Direct stock decrement
+    if (body.action === "decrement" && body.itemId) {
+      const updated = await decrementCloudWheelInventory(body.itemId);
+      return NextResponse.json(
+        { success: Boolean(updated), item: updated },
+        { headers: NO_CACHE_HEADERS }
+      );
+    }
+
+    // 0c. Update public spin the wheel game active status
     if (typeof body.is_spin_active === "boolean") {
       await saveCloudSpinSettings({ is_spin_active: body.is_spin_active });
       return NextResponse.json(

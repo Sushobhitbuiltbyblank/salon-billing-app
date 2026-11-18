@@ -4,6 +4,8 @@ import {
   DEFAULT_PRIZES,
   WheelInventoryItem,
   DEFAULT_WHEEL_INVENTORY,
+  SpinBrandConfig,
+  DEFAULT_KANPEKI_CONFIG,
 } from "@/types/rewards";
 
 const CLAIMS_STORAGE_KEY = "belezia_spin_claims_v1";
@@ -608,6 +610,45 @@ export async function updateServerWheelStatus(isSpinActive: boolean): Promise<bo
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ is_spin_active: isSpinActive }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return Boolean(json.success);
+    }
+  } catch {}
+  return false;
+}
+
+/**
+ * Fetch current brand & campaign configuration from /api/wheel-inventory
+ */
+export async function fetchServerBrandConfig(): Promise<SpinBrandConfig> {
+  try {
+    const res = await fetch(getApiUrl("/api/wheel-inventory"), { cache: "no-store" });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.brand_config) return json.brand_config;
+    }
+  } catch {}
+  return DEFAULT_KANPEKI_CONFIG;
+}
+
+/**
+ * Save brand & campaign configuration to /api/wheel-inventory
+ */
+export async function updateServerBrandConfig(
+  brandConfig: SpinBrandConfig,
+  items?: WheelInventoryItem[]
+): Promise<boolean> {
+  try {
+    const res = await fetch(getApiUrl("/api/wheel-inventory"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        brand_config: brandConfig,
+        items,
+        is_spin_active: brandConfig.isSpinActive,
+      }),
     });
     if (res.ok) {
       const json = await res.json();

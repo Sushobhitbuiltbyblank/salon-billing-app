@@ -1,32 +1,32 @@
 [
   {
-    "id": "00000000-0000-0000-0000-000000000201",
-    "title": "Free L'Oréal Shampoo",
-    "category": "gift",
-    "quantity": 30,
-    "is_active": true,
-    "color": "#3b82f6"
-  },
-  {
-    "id": "00000000-0000-0000-0000-000000000203",
-    "title": "Free D-Tan Service",
-    "category": "free_service",
-    "quantity": 30,
-    "is_active": true,
-    "color": "#8b5cf6"
-  },
-  {
-    "id": "00000000-0000-0000-0000-000000000204",
-    "title": "Free Hair Cut Service",
+    "id": "00000000-0000-0000-0000-000000000301",
+    "title": "Free Kanpeki Skin Facial",
     "category": "free_service",
     "quantity": 30,
     "is_active": true,
     "color": "#ec4899"
   },
   {
-    "id": "00000000-0000-0000-0000-000000000205",
-    "title": "Free L'Oréal absolute repair hair mask",
+    "id": "00000000-0000-0000-0000-000000000302",
+    "title": "Free Kanpeki Hair Spa Ritual",
+    "category": "free_service",
+    "quantity": 30,
+    "is_active": true,
+    "color": "#8b5cf6"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000303",
+    "title": "Free Kanpeki Professional Gift",
     "category": "gift",
+    "quantity": 30,
+    "is_active": true,
+    "color": "#3b82f6"
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000304",
+    "title": "Free D-Tan Brightening Service",
+    "category": "free_service",
     "quantity": 30,
     "is_active": true,
     "color": "#10b981"

@@ -1,7 +1,13 @@
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { SpinClaimRecord, WheelInventoryItem, DEFAULT_WHEEL_INVENTORY } from "@/types/rewards";
+import {
+  SpinClaimRecord,
+  WheelInventoryItem,
+  DEFAULT_WHEEL_INVENTORY,
+  SpinBrandConfig,
+  DEFAULT_KANPEKI_CONFIG,
+} from "@/types/rewards";
 import { cleanPhoneNumber } from "@/lib/whatsapp";
 import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
 
@@ -137,15 +143,16 @@ async function safeReadJson(primaryPath: string, tmpPath: string): Promise<any |
 }
 
 /**
- * Load the Supabase System Record notes JSON containing { claims, wheel_inventory, is_spin_active }
+ * Load the Supabase System Record notes JSON containing { claims, wheel_inventory, is_spin_active, brand_config }
  */
 async function getSupabaseSystemData(): Promise<{
   claims: SpinClaimRecord[];
   wheel_inventory: WheelInventoryItem[];
   is_spin_active: boolean;
+  brand_config?: SpinBrandConfig;
 }> {
   if (!isSupabaseConfigured() || !supabase) {
-    return { claims: [], wheel_inventory: [], is_spin_active: false };
+    return { claims: [], wheel_inventory: [], is_spin_active: false, brand_config: DEFAULT_KANPEKI_CONFIG };
   }
 
   try {
@@ -159,14 +166,18 @@ async function getSupabaseSystemData(): Promise<{
 
     let sysClaims: SpinClaimRecord[] = [];
     let sysInv: WheelInventoryItem[] = [];
-    let isSpinActive = false;
+    let isSpinActive = true;
+    let brandConfig: SpinBrandConfig = DEFAULT_KANPEKI_CONFIG;
 
     if (!error && data?.notes) {
       try {
         const parsed = JSON.parse(data.notes);
         sysClaims = sanitizeClaims(parsed.claims || []);
         sysInv = sanitizeWheelInventory(parsed.wheel_inventory || []);
-        isSpinActive = typeof parsed.is_spin_active === "boolean" ? parsed.is_spin_active : false;
+        isSpinActive = typeof parsed.is_spin_active === "boolean" ? parsed.is_spin_active : true;
+        if (parsed.brand_config && typeof parsed.brand_config === "object") {
+          brandConfig = { ...DEFAULT_KANPEKI_CONFIG, ...parsed.brand_config };
+        }
       } catch {}
     }
 
@@ -214,21 +225,23 @@ async function getSupabaseSystemData(): Promise<{
       claims: sysClaims,
       wheel_inventory: sysInv.length > 0 ? sysInv : DEFAULT_WHEEL_INVENTORY,
       is_spin_active: isSpinActive,
+      brand_config: brandConfig,
     };
   } catch (err) {
     console.warn("Error reading Supabase system spin data:", err);
   }
 
-  return { claims: [], wheel_inventory: [], is_spin_active: false };
+  return { claims: [], wheel_inventory: [], is_spin_active: false, brand_config: DEFAULT_KANPEKI_CONFIG };
 }
 
 /**
- * Save the Supabase System Record notes JSON containing { claims, wheel_inventory, is_spin_active }
+ * Save the Supabase System Record notes JSON containing { claims, wheel_inventory, is_spin_active, brand_config }
  */
 async function saveSupabaseSystemData(payload: {
   claims?: SpinClaimRecord[];
   wheel_inventory?: WheelInventoryItem[];
   is_spin_active?: boolean;
+  brand_config?: SpinBrandConfig;
 }): Promise<boolean> {
   if (!isSupabaseConfigured() || !supabase) return false;
 
@@ -241,15 +254,22 @@ async function saveSupabaseSystemData(payload: {
         : current.wheel_inventory;
     const isSpinActiveToSave =
       payload.is_spin_active !== undefined ? payload.is_spin_active : current.is_spin_active;
+    const brandConfigToSave =
+      payload.brand_config !== undefined ? payload.brand_config : (current.brand_config || DEFAULT_KANPEKI_CONFIG);
 
     const notesStr = JSON.stringify({
       claims: claimsToSave,
       wheel_inventory: inventoryToSave,
       is_spin_active: isSpinActiveToSave,
+      brand_config: brandConfigToSave,
       updated_at: new Date().toISOString(),
     });
 
-    console.log("[SYSTEM_DATA_SAVING]", { claimsCount: claimsToSave.length, notesLen: notesStr.length, isSpinActive: isSpinActiveToSave });
+    console.log("[SYSTEM_DATA_SAVING]", {
+      claimsCount: claimsToSave.length,
+      brand: brandConfigToSave.brandName,
+      isSpinActive: isSpinActiveToSave,
+    });
 
     const { data: upsertData, error } = await supabase.from("customers").upsert(
       {
@@ -260,8 +280,6 @@ async function saveSupabaseSystemData(payload: {
       },
       { onConflict: "id" }
     ).select();
-
-    console.log("[SYSTEM_DATA_SAVED]", { error: error?.message, upsertData });
 
     if (error) {
       console.warn("Failed to upsert Supabase system spin data:", error.message);
@@ -330,7 +348,28 @@ export async function addCloudClaim(newClaim: SpinClaimRecord): Promise<SpinClai
     ...newClaim,
     customerName: cleanName,
     customerPhone: cleanPhone,
+    inventoryDeducted: true,
   };
+
+  // Auto-decrement inventory stock for this prize slice
+  try {
+    const currentInventory = await loadCloudWheelInventory();
+    const cleanLabel = (updatedClaim.prizeLabel || "").toLowerCase().trim();
+    const matched = currentInventory.find(
+      (it) =>
+        it.id === updatedClaim.prizeId ||
+        it.title.toLowerCase().trim() === cleanLabel ||
+        cleanLabel.includes(it.title.toLowerCase().trim())
+    );
+    if (matched) {
+      const prevQty = matched.quantity ?? 0;
+      matched.quantity = Math.max(0, prevQty - 1);
+      await saveCloudWheelInventory(currentInventory);
+      console.log(`[INVENTORY_AUTO_DECREMENT] Prize "${matched.title}": ${prevQty} -> ${matched.quantity}`);
+    }
+  } catch (invErr) {
+    console.warn("Failed to auto-decrement wheel inventory on claim:", invErr);
+  }
 
   const updatedList = [
     updatedClaim,
@@ -551,9 +590,7 @@ export async function deleteCloudClaim(options: {
   clearAll?: boolean;
 }): Promise<SpinClaimRecord[]> {
   if (options.clearAll) {
-    await saveCloudClaims([]);
-
-    // Clear spin_claim from all customer profiles in Supabase as well
+    // 1. Clear spin_claim from all customer profiles in Supabase first so auto-heal does not resurrect them
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data: custs } = await supabase
@@ -568,6 +605,7 @@ export async function deleteCloudClaim(options: {
               const parsed = JSON.parse(cust.notes);
               delete parsed.spin_claim;
               delete parsed.spin_claims;
+              parsed.updated_at = new Date().toISOString();
               await supabase
                 .from("customers")
                 .update({ notes: JSON.stringify(parsed) })
@@ -578,7 +616,15 @@ export async function deleteCloudClaim(options: {
       } catch (err) {
         console.warn("Error cleaning customer spin claims on clearAll:", err);
       }
+
+      // Also purge from spin_logs audit table if present
+      try {
+        await supabase.from("spin_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      } catch {}
     }
+
+    // 2. Clear central system row and local disk cache
+    await saveCloudClaims([]);
 
     return [];
   }
@@ -588,6 +634,7 @@ export async function deleteCloudClaim(options: {
   const cleanCode = options.code ? options.code.trim().toLowerCase() : null;
 
   let phoneToClean = cleanPhone;
+  let deletedClaim: SpinClaimRecord | null = null;
 
   const filtered = current.filter((c) => {
     const matchesId = Boolean(options.id && c.id === options.id);
@@ -598,12 +645,34 @@ export async function deleteCloudClaim(options: {
       if (!phoneToClean && c.customerPhone) {
         phoneToClean = cleanPhoneNumber(c.customerPhone);
       }
+      deletedClaim = c;
       return false; // remove from list
     }
     return true;
   });
 
   await saveCloudClaims(filtered);
+
+  // Restore inventory stock if deleted claim was deducted
+  if (deletedClaim && (deletedClaim as SpinClaimRecord).inventoryDeducted) {
+    try {
+      const currentInventory = await loadCloudWheelInventory();
+      const cleanLabel = ((deletedClaim as SpinClaimRecord).prizeLabel || "").toLowerCase().trim();
+      const matched = currentInventory.find(
+        (it) =>
+          it.id === (deletedClaim as SpinClaimRecord).prizeId ||
+          it.title.toLowerCase().trim() === cleanLabel ||
+          cleanLabel.includes(it.title.toLowerCase().trim())
+      );
+      if (matched) {
+        matched.quantity = (matched.quantity ?? 0) + 1;
+        await saveCloudWheelInventory(currentInventory);
+        console.log(`[INVENTORY_RESTORE] "${matched.title}": restored to ${matched.quantity}`);
+      }
+    } catch (restoreErr) {
+      console.warn("Failed to restore inventory on claim delete:", restoreErr);
+    }
+  }
 
   // If deleting for a customer with phone, also remove spin_claim from their customer profile
   if (isSupabaseConfigured() && supabase && phoneToClean) {
@@ -680,24 +749,76 @@ export async function saveCloudWheelInventory(items: WheelInventoryItem[]): Prom
 }
 
 /**
- * Load whether the Spin The Wheel game is actively enabled or in Event Concluded mode
+ * Load whether the Spin The Wheel game is actively enabled or in Event Concluded mode,
+ * and current brand & campaign configuration
  */
-export async function loadCloudSpinSettings(): Promise<{ is_spin_active: boolean }> {
+export async function loadCloudSpinSettings(): Promise<{
+  is_spin_active: boolean;
+  brand_config: SpinBrandConfig;
+}> {
   // 1. Try reading from disk / tmp
   const disk = await safeReadJson(LOCAL_SETTINGS_FILE, TMP_SETTINGS_FILE);
   if (disk && typeof disk.is_spin_active === "boolean") {
-    return { is_spin_active: disk.is_spin_active };
+    return {
+      is_spin_active: disk.is_spin_active,
+      brand_config: disk.brand_config || DEFAULT_KANPEKI_CONFIG,
+    };
   }
 
   // 2. Fallback to Supabase system record
   const sys = await getSupabaseSystemData();
-  return { is_spin_active: Boolean(sys.is_spin_active) };
+  return {
+    is_spin_active: Boolean(sys.is_spin_active),
+    brand_config: sys.brand_config || DEFAULT_KANPEKI_CONFIG,
+  };
 }
 
 /**
- * Save whether the Spin The Wheel game is actively enabled or in Event Concluded mode
+ * Save whether the Spin The Wheel game is actively enabled or in Event Concluded mode,
+ * and save brand & campaign configuration
  */
-export async function saveCloudSpinSettings(settings: { is_spin_active: boolean }): Promise<boolean> {
-  await safeWriteJson(LOCAL_SETTINGS_FILE, TMP_SETTINGS_FILE, settings);
-  return await saveSupabaseSystemData({ is_spin_active: settings.is_spin_active });
+export async function saveCloudSpinSettings(settings: {
+  is_spin_active?: boolean;
+  brand_config?: SpinBrandConfig;
+}): Promise<boolean> {
+  const current = await loadCloudSpinSettings();
+  const nextIsActive =
+    settings.is_spin_active !== undefined
+      ? settings.is_spin_active
+      : settings.brand_config?.isSpinActive !== undefined
+      ? settings.brand_config.isSpinActive
+      : current.is_spin_active;
+  const nextBrand = settings.brand_config || current.brand_config || DEFAULT_KANPEKI_CONFIG;
+
+  const combined = {
+    is_spin_active: nextIsActive,
+    brand_config: nextBrand,
+    updated_at: new Date().toISOString(),
+  };
+
+  await safeWriteJson(LOCAL_SETTINGS_FILE, TMP_SETTINGS_FILE, combined);
+  return await saveSupabaseSystemData({
+    is_spin_active: nextIsActive,
+    brand_config: nextBrand,
+  });
+}
+
+/**
+ * Directly decrement stock quantity for a prize slice by ID or Title
+ */
+export async function decrementCloudWheelInventory(
+  itemIdOrTitle: string
+): Promise<WheelInventoryItem | null> {
+  const current = await loadCloudWheelInventory();
+  const cleanTarget = itemIdOrTitle.toLowerCase().trim();
+  const matched = current.find(
+    (it) =>
+      it.id === itemIdOrTitle ||
+      it.title.toLowerCase().trim() === cleanTarget ||
+      cleanTarget.includes(it.title.toLowerCase().trim())
+  );
+  if (!matched) return null;
+  matched.quantity = Math.max(0, (matched.quantity ?? 0) - 1);
+  await saveCloudWheelInventory(current);
+  return matched;
 }
