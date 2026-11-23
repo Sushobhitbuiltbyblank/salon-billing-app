@@ -1472,7 +1472,7 @@ export function AdminRewardsManagement({
                   className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:brightness-110 text-white text-xs font-extrabold shadow-lg shadow-purple-600/30 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <Sparkles className={`h-3.5 w-3.5 ${isCreating ? "animate-spin" : ""}`} />
-                  <span>{isCreating ? "Saving to Supabase..." : "Save & Create Offer"}</span>
+                  <span>{isCreating ? "Saving..." : "Save & Create Offer"}</span>
                 </button>
               </div>
             </form>

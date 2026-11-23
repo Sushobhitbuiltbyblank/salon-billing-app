@@ -1121,12 +1121,12 @@ export function SpinTheWheel({
                   <Sparkles className={`h-4 w-4 ${isSubmitting ? "animate-spin text-amber-300" : ""}`} />
                   <span>
                     {isSubmitting
-                      ? "Saving to Cloud (Supabase)..."
+                      ? "Saving..."
                       : existingOffer
                       ? "Already Have Offer"
                       : phoneError && !existingOffer
-                      ? "Retry Save to Cloud"
-                      : "Submit & Save to Cloud"}
+                      ? "Retry Save"
+                      : "Submit & Save"}
                   </span>
                 </button>
               </div>
