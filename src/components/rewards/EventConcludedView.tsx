@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import confetti from "canvas-confetti";
 import { fetchServerBrandConfig } from "@/lib/rewardStorage";
+import { SpinBrandConfig, DEFAULT_KANPEKI_CONFIG } from "@/types/rewards";
 import {
   Sparkles,
   ExternalLink,
@@ -24,12 +25,30 @@ export const SALON_ADDRESS = "Belezia Salon, Laxmi Nagar, Delhi";
 export function EventConcludedView() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedHandle, setCopiedHandle] = useState(false);
-  const [brandName, setBrandName] = useState<string>("Kanpeki");
+  const [brandConfig, setBrandConfig] = useState<SpinBrandConfig>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("belezia_brand_config_cache_v1");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.brandName) return parsed;
+        }
+      } catch {}
+    }
+    return DEFAULT_KANPEKI_CONFIG;
+  });
 
   useEffect(() => {
-    fetchServerBrandConfig().then((cfg) => {
-      if (cfg?.brandName) setBrandName(cfg.brandName);
-    }).catch(() => {});
+    fetchServerBrandConfig()
+      .then((cfg) => {
+        if (cfg) {
+          setBrandConfig(cfg);
+          try {
+            localStorage.setItem("belezia_brand_config_cache_v1", JSON.stringify(cfg));
+          } catch {}
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Trigger celebration confetti on mount
@@ -87,14 +106,22 @@ export function EventConcludedView() {
       {/* 1. TOP HEADER / BRAND BADGE */}
       {/* ========================================================================= */}
       <div className="w-full text-center space-y-3 mb-6">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-mono font-bold uppercase tracking-wider shadow-sm animate-pulse">
-          <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-          <span>Event Concluded • {brandName} Day</span>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-mono font-bold uppercase tracking-wider shadow-sm animate-pulse">
+            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+            <span>Event Concluded • {brandConfig.brandName} Day</span>
+          </div>
+          {brandConfig.eventDate && (
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-purple-500/15 border border-purple-500/40 text-purple-300 text-xs font-bold shadow-sm">
+              <Calendar className="h-3.5 w-3.5 text-purple-400" />
+              <span>Event Date: {brandConfig.eventDate}</span>
+            </div>
+          )}
         </div>
 
         <div className="space-y-1">
           <h2 className="text-xs sm:text-sm font-black tracking-widest text-zinc-400 uppercase">
-            Belezia Salon &amp; Spa × {brandName}
+            Belezia Salon &amp; Spa × {brandConfig.brandName}
           </h2>
           <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-pink-400 to-purple-400 leading-tight">
             The Event Was Great!
@@ -118,11 +145,20 @@ export function EventConcludedView() {
           <p className="text-sm sm:text-base text-zinc-300 leading-relaxed">
             Our exclusive{" "}
             <span className="text-white font-bold">
-              L&apos;Oréal Professionnel Hair Consultation &amp; Lucky Wheel Event
+              {brandConfig.eventName || `${brandConfig.brandName} Lucky Wheel Event`}
+            </span>{" "}
+            {brandConfig.eventDate ? (
+              <>
+                held on{" "}
+                <span className="text-amber-300 font-bold">{brandConfig.eventDate}</span>{" "}
+              </>
+            ) : null}
+            at{" "}
+            <span className="text-amber-300 font-bold">
+              {brandConfig.eventVenue || "Belezia Salon, Laxmi Nagar"}
             </span>{" "}
             has officially ended. We are overwhelmed and deeply grateful for the incredible
-            love, energy, and smiles brought by all our wonderful clients and guests to{" "}
-            <span className="text-amber-300 font-bold">Belezia Salon, Laxmi Nagar</span>.
+            love, energy, and smiles brought by all our wonderful clients and guests!
           </p>
           <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
             From expert scalp analyses and personalised hair color mapping to exciting wheel spins

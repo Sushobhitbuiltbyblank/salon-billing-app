@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   X,
   ArrowLeft,
+  Calendar,
+  MapPin,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import {
@@ -835,6 +837,22 @@ export function SpinTheWheel({
           </div>
         </div>
 
+        {/* EVENT DATE & VENUE BADGE */}
+        {brandConfig.eventDate && (
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5">
+            <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs sm:text-sm font-extrabold shadow-sm">
+              <Calendar className="h-3.5 w-3.5 text-amber-400" />
+              <span>Event Date: {brandConfig.eventDate}</span>
+            </span>
+            {brandConfig.eventVenue && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-800/80 border border-zinc-700/80 text-zinc-300 text-[11px] font-semibold">
+                <MapPin className="h-3 w-3 text-pink-400" />
+                <span>{brandConfig.eventVenue}</span>
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-0.5 text-[10px] sm:text-[11px] text-zinc-300">
           <span className="text-pink-300 font-bold">🎁 Free {brandConfig.brandName} Goodie Bag for every consultation</span>
           <span className="hidden sm:inline text-zinc-600">•</span>
@@ -1011,9 +1029,17 @@ export function SpinTheWheel({
               </div>
 
               <div className="flex-1 min-w-0">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300 font-bold block mb-0.5">
-                  L&apos;Oréal Day VIP Reward
-                </span>
+                <div className="flex items-center justify-between gap-1 mb-0.5">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-amber-300 font-bold">
+                    {brandConfig.brandName} VIP Reward
+                  </span>
+                  {brandConfig.eventDate && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono text-purple-300 font-semibold">
+                      <Calendar className="h-3 w-3 text-purple-400" />
+                      <span>{brandConfig.eventDate}</span>
+                    </span>
+                  )}
+                </div>
                 <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight leading-tight line-clamp-1">
                   {removeProductQuantity(winningPrize.label)}
                 </h3>

@@ -36,6 +36,7 @@ export function OfferVoucherCard({
   customerPhone = "",
   wonItem,
   offerId,
+  eventDate = "Saturday, November 28, 2026",
   salonName = "Belezia Salon",
   onClose,
   showModalWrapper = false,
@@ -349,7 +350,7 @@ export function OfferVoucherCard({
             }}
           >
             <Sparkles className="h-3 w-3 text-amber-400" />
-            <span>L&apos;Oréal Day</span>
+            <span>VIP Event Day</span>
           </div>
         </div>
 
@@ -434,7 +435,7 @@ export function OfferVoucherCard({
                 marginTop: "3px",
               }}
             >
-              Valid on event day: <strong style={{ color: "#e4e4e7" }}>31st October</strong>
+              Valid on event day: <strong style={{ color: "#e4e4e7" }}>{eventDate || "Event Day"}</strong>
             </div>
           </div>
         </div>
