@@ -45,6 +45,7 @@ describe("Lucky Wheel Brand Configuration & Live Inventory Decrement (Kanpeki)",
     expect(DEFAULT_KANPEKI_CONFIG.isSpinActive).toBe(true);
     expect(DEFAULT_KANPEKI_CONFIG.eventName).toContain("Kanpeki");
     expect(DEFAULT_KANPEKI_CONFIG.disclaimerTerms).toContain("First-Come, First-Served");
+    expect(DEFAULT_KANPEKI_CONFIG.eventDate).toBe("Saturday, December 5, 2026");
   });
 
   it("should have 4 curated reward items with exact specified probability weights and 30 initial stock each", () => {

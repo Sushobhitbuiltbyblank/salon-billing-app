@@ -41,7 +41,7 @@ export const DEFAULT_KANPEKI_CONFIG: SpinBrandConfig = {
   tagline: "Exclusive Japanese Skincare Consultations & Guaranteed Lucky Wheel Rewards",
   disclaimerTerms:
     "🚨 Disclaimer: This exclusive offer and free goodies are valid strictly on a First-Come, First-Served basis, only till stocks last! Doors open at 10:00 AM sharp—make sure to arrive early so you don't miss out!",
-  eventDate: "Saturday, November 28, 2026",
+  eventDate: "Saturday, December 5, 2026",
   eventVenue: "Belezia Salon, Laxmi Nagar",
   offerPrefix: "BZ-KANPEKI-",
   isSpinActive: true,

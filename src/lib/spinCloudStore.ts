@@ -178,6 +178,9 @@ async function getSupabaseSystemData(): Promise<{
         isSpinActive = typeof parsed.is_spin_active === "boolean" ? parsed.is_spin_active : true;
         if (parsed.brand_config && typeof parsed.brand_config === "object") {
           brandConfig = { ...DEFAULT_KANPEKI_CONFIG, ...parsed.brand_config };
+          if (brandConfig.eventDate && brandConfig.eventDate.includes("November 28")) {
+            brandConfig.eventDate = "Saturday, December 5, 2026";
+          }
         }
       } catch {}
     }
@@ -790,6 +793,9 @@ export async function saveCloudSpinSettings(settings: {
       ? settings.brand_config.isSpinActive
       : current.is_spin_active;
   const nextBrand = settings.brand_config || current.brand_config || DEFAULT_KANPEKI_CONFIG;
+  if (nextBrand.eventDate && nextBrand.eventDate.includes("November 28")) {
+    nextBrand.eventDate = "Saturday, December 5, 2026";
+  }
 
   const combined = {
     is_spin_active: nextIsActive,

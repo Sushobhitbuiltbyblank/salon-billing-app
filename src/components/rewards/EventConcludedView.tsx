@@ -31,7 +31,12 @@ export function EventConcludedView() {
         const cached = localStorage.getItem("belezia_brand_config_cache_v1");
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (parsed && parsed.brandName) return parsed;
+          if (parsed && parsed.brandName) {
+            if (parsed.eventDate && parsed.eventDate.includes("November 28")) {
+              parsed.eventDate = "Saturday, December 5, 2026";
+            }
+            return parsed;
+          }
         }
       } catch {}
     }
@@ -42,6 +47,9 @@ export function EventConcludedView() {
     fetchServerBrandConfig()
       .then((cfg) => {
         if (cfg) {
+          if (cfg.eventDate && cfg.eventDate.includes("November 28")) {
+            cfg.eventDate = "Saturday, December 5, 2026";
+          }
           setBrandConfig(cfg);
           try {
             localStorage.setItem("belezia_brand_config_cache_v1", JSON.stringify(cfg));

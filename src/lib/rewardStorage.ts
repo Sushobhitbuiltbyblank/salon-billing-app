@@ -635,7 +635,12 @@ export async function fetchServerBrandConfig(): Promise<SpinBrandConfig> {
     const res = await fetch(getApiUrl("/api/wheel-inventory"), { cache: "no-store" });
     if (res.ok) {
       const json = await res.json();
-      if (json.brand_config) return json.brand_config;
+      if (json.brand_config) {
+        if (json.brand_config.eventDate && json.brand_config.eventDate.includes("November 28")) {
+          json.brand_config.eventDate = "Saturday, December 5, 2026";
+        }
+        return json.brand_config;
+      }
     }
   } catch {}
   return DEFAULT_KANPEKI_CONFIG;

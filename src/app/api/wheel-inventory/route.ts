@@ -38,13 +38,17 @@ export async function GET() {
       loadCloudWheelInventory(),
       loadCloudSpinSettings(),
     ]);
+    const brandConfig = spinSettings.brand_config || DEFAULT_KANPEKI_CONFIG;
+    if (brandConfig.eventDate && brandConfig.eventDate.includes("November 28")) {
+      brandConfig.eventDate = "Saturday, December 5, 2026";
+    }
     return NextResponse.json(
       {
         success: true,
         items,
         count: items.length,
         is_spin_active: spinSettings.is_spin_active,
-        brand_config: spinSettings.brand_config || DEFAULT_KANPEKI_CONFIG,
+        brand_config: brandConfig,
       },
       { headers: NO_CACHE_HEADERS }
     );

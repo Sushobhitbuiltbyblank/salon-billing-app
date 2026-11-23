@@ -463,7 +463,7 @@ export function BrandCampaignManager() {
               type="text"
               value={brandConfig.eventDate}
               onChange={(e) => setBrandConfig({ ...brandConfig, eventDate: e.target.value })}
-              placeholder="e.g. Saturday, November 28, 2026"
+              placeholder="e.g. Saturday, December 5, 2026"
               className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-700/80 text-white text-xs font-semibold focus:outline-none focus:border-pink-500"
             />
           </div>

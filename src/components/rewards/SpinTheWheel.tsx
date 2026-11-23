@@ -144,7 +144,12 @@ export function SpinTheWheel({
         const cached = localStorage.getItem("belezia_brand_config_cache_v1");
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (parsed && parsed.brandName) return parsed;
+          if (parsed && parsed.brandName) {
+            if (parsed.eventDate && parsed.eventDate.includes("November 28")) {
+              parsed.eventDate = "Saturday, December 5, 2026";
+            }
+            return parsed;
+          }
         }
       } catch {}
     }
@@ -164,6 +169,9 @@ export function SpinTheWheel({
           } catch {}
         }
         if (config) {
+          if (config.eventDate && config.eventDate.includes("November 28")) {
+            config.eventDate = "Saturday, December 5, 2026";
+          }
           setBrandConfig(config);
           try {
             localStorage.setItem("belezia_brand_config_cache_v1", JSON.stringify(config));

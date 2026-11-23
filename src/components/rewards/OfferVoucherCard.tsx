@@ -36,7 +36,7 @@ export function OfferVoucherCard({
   customerPhone = "",
   wonItem,
   offerId,
-  eventDate = "Saturday, November 28, 2026",
+  eventDate = "Saturday, December 5, 2026",
   salonName = "Belezia Salon",
   onClose,
   showModalWrapper = false,
