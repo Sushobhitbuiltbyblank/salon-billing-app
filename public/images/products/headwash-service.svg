@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="washGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa" />
+      <stop offset="50%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#6d28d9" />
+    </linearGradient>
+    <linearGradient id="waterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+  <!-- Background Glow Circle -->
+  <circle cx="50" cy="50" r="46" fill="#4c1d95" opacity="0.4" />
+
+  <!-- Salon Shampoo Basin Bowl -->
+  <path d="M22 42 Q50 32 78 42 L74 68 Q50 78 26 68 Z" fill="url(#washGrad)" stroke="#c4b5fd" stroke-width="1.5" />
+  <ellipse cx="50" cy="42" rx="28" ry="10" fill="#2e1065" stroke="#a78bfa" stroke-width="1.2" />
+
+  <!-- Water Basin Drain / Chrome Ring -->
+  <ellipse cx="50" cy="44" rx="8" ry="3" fill="#64748b" stroke="#cbd5e1" stroke-width="0.8" />
+
+  <!-- Foam & Bubbles in Basin -->
+  <circle cx="42" cy="40" r="4" fill="#ffffff" opacity="0.9" />
+  <circle cx="48" cy="38" r="5" fill="#ffffff" opacity="0.95" />
+  <circle cx="56" cy="39" r="4.5" fill="#ffffff" opacity="0.9" />
+  <circle cx="62" cy="42" r="3.5" fill="#ffffff" opacity="0.85" />
+  <circle cx="36" cy="43" r="3" fill="#ffffff" opacity="0.85" />
+
+  <!-- Shower Head / Spray Wand -->
+  <g transform="translate(6, -4)">
+    <path d="M48 14 C48 24 38 24 38 28" stroke="#cbd5e1" stroke-width="3" fill="none" stroke-linecap="round" />
+    <path d="M34 28 L42 28 L44 33 L32 33 Z" fill="#94a3b8" stroke="#64748b" stroke-width="1" />
+    <!-- Water Streams -->
+    <path d="M35 34 L33 40" stroke="url(#waterGrad)" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="1 2" />
+    <path d="M38 34 L38 42" stroke="url(#waterGrad)" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="1 2" />
+    <path d="M41 34 L43 40" stroke="url(#waterGrad)" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="1 2" />
+  </g>
+
+  <!-- Sparkles -->
+  <path d="M72 24 L73.5 27.5 L77 29 L73.5 30.5 L72 34 L70.5 30.5 L67 29 L70.5 27.5 Z" fill="#fbbf24" />
+  <path d="M22 26 L23 28.5 L25.5 29.5 L23 30.5 L22 33 L21 30.5 L18.5 29.5 L21 28.5 Z" fill="#c084fc" />
+
+  <!-- Label Badge -->
+  <rect x="25" y="70" width="50" height="15" rx="4" fill="#ffffff" stroke="#8b5cf6" stroke-width="1.2" />
+  <text x="50" y="81" font-family="sans-serif" font-size="6.5" font-weight="900" text-anchor="middle" fill="#6d28d9">HEAD WASH</text>
+</svg>

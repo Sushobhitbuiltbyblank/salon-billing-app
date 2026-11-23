@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="razorHandle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa" />
+      <stop offset="50%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    <linearGradient id="chromeSteel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="50%" stop-color="#e2e8f0" />
+      <stop offset="100%" stop-color="#94a3b8" />
+    </linearGradient>
+  </defs>
+  <!-- Background Glow Circle -->
+  <circle cx="50" cy="50" r="46" fill="#1e3a8a" opacity="0.4" />
+
+  <!-- Threading Cotton Thread Loop -->
+  <path d="M22 36 Q38 18 62 26 Q78 34 68 52 Q58 70 34 62 Q16 54 22 36" stroke="#93c5fd" stroke-width="1.6" stroke-dasharray="3 2" fill="none" opacity="0.8" />
+  
+  <!-- Classic Straight Razor (Cut-throat razor) -->
+  <g transform="rotate(-25, 48, 48)">
+    <!-- Razor Steel Blade (Extended) -->
+    <path d="M46 16 L66 16 C67 28 66 38 65 44 L45 44 Z" fill="url(#chromeSteel)" stroke="#64748b" stroke-width="1.2" />
+    <!-- Blade Edge Hollow Ground Line -->
+    <line x1="64" y1="18" x2="63" y2="42" stroke="#475569" stroke-width="1" />
+    
+    <!-- Pivot Pin / Brass Rivet -->
+    <circle cx="45" cy="46" r="3.2" fill="#fbbf24" stroke="#92400e" stroke-width="0.8" />
+    
+    <!-- Razor Scales / Handle (Angled back) -->
+    <path d="M45 46 Q38 62 30 78 Q36 82 42 78 Q48 64 47 48 Z" fill="url(#razorHandle)" stroke="#1e40af" stroke-width="1.2" />
+    <!-- Handle Accent Inlay -->
+    <line x1="38" y1="62" x2="35" y2="72" stroke="#93c5fd" stroke-width="1.2" stroke-linecap="round" />
+  </g>
+
+  <!-- Foam / Lather Cloud -->
+  <circle cx="70" cy="62" r="5" fill="#ffffff" opacity="0.9" />
+  <circle cx="76" cy="60" r="4" fill="#ffffff" opacity="0.9" />
+  <circle cx="73" cy="66" r="4.5" fill="#ffffff" opacity="0.85" />
+
+  <!-- Shaving Sparkles -->
+  <path d="M28 22 L29.5 25.5 L33 27 L29.5 28.5 L28 32 L26.5 28.5 L23 27 L26.5 25.5 Z" fill="#fbbf24" />
+
+  <!-- Label Badge -->
+  <rect x="18" y="72" width="64" height="15" rx="4" fill="#ffffff" stroke="#3b82f6" stroke-width="1.2" />
+  <text x="50" y="83" font-family="sans-serif" font-size="5.8" font-weight="900" text-anchor="middle" fill="#1d4ed8">SHAVING / THREADING</text>
+</svg>
