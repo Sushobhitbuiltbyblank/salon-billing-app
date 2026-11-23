@@ -4,6 +4,7 @@ import {
   DEFAULT_PRIZES,
   WheelInventoryItem,
   DEFAULT_WHEEL_INVENTORY,
+  DEFAULT_KANPEKI_INVENTORY,
   SpinBrandConfig,
   DEFAULT_KANPEKI_CONFIG,
 } from "@/types/rewards";
@@ -582,11 +583,16 @@ export async function fetchServerWheelInventory(): Promise<WheelInventoryItem[]>
     if (res.ok) {
       const json = await res.json();
       if (json.success && Array.isArray(json.items) && json.items.length > 0) {
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("belezia_wheel_inventory_cache_v1", JSON.stringify(json.items));
+          } catch {}
+        }
         return json.items;
       }
     }
   } catch {}
-  return DEFAULT_WHEEL_INVENTORY;
+  return DEFAULT_KANPEKI_INVENTORY;
 }
 
 /**

@@ -340,6 +340,65 @@ export const DEFAULT_PRIZES: RewardPrize[] = [
   },
 ];
 
+export const DEFAULT_KANPEKI_PRIZES: RewardPrize[] = [
+  {
+    id: "00000000-0000-0000-0000-000000000301",
+    label: "Free Detan Service",
+    shortLabel: "Detan Service",
+    type: "service",
+    value: 500,
+    color: "#10b981", // Emerald
+    textColor: "#ffffff",
+    iconName: "Sparkles",
+    description: "Complimentary face & neck Detan brightening glow treatment",
+    requiresInventoryDeduction: false,
+    weight: 50,
+    quantity: 30,
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000302",
+    label: "Free Hair Cut",
+    shortLabel: "Hair Cut",
+    type: "service",
+    value: 500,
+    color: "#ec4899", // Pink
+    textColor: "#ffffff",
+    iconName: "Scissors",
+    description: "Precision hair styling & cut by senior stylist",
+    requiresInventoryDeduction: false,
+    weight: 16.67,
+    quantity: 30,
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000303",
+    label: "Free Shaving / Face Threading",
+    shortLabel: "Shaving / Threading",
+    type: "service",
+    value: 300,
+    color: "#3b82f6", // Blue
+    textColor: "#ffffff",
+    iconName: "Scissors",
+    description: "Professional clean shaving or delicate face threading",
+    requiresInventoryDeduction: false,
+    weight: 16.67,
+    quantity: 30,
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000304",
+    label: "Free Head Wash",
+    shortLabel: "Head Wash",
+    type: "service",
+    value: 300,
+    color: "#8b5cf6", // Purple
+    textColor: "#ffffff",
+    iconName: "Sparkles",
+    description: "Relaxing deep cleanse scalp & head wash ritual",
+    requiresInventoryDeduction: false,
+    weight: 16.66,
+    quantity: 30,
+  },
+];
+
 /**
  * Strips product quantities and volumes (e.g., "300ml", "300 ml", "(300ml)", "100g", "250 ml")
  * from offer names, prize labels, and descriptions.

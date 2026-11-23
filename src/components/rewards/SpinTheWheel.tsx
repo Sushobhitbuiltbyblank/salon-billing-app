@@ -22,11 +22,13 @@ import confetti from "canvas-confetti";
 import {
   RewardPrize,
   DEFAULT_PRIZES,
+  DEFAULT_KANPEKI_PRIZES,
   SpinGameState,
   SpinClaimRecord,
   PrizeType,
   WheelInventoryItem,
   DEFAULT_WHEEL_INVENTORY,
+  DEFAULT_KANPEKI_INVENTORY,
   removeProductQuantity,
   SpinBrandConfig,
   DEFAULT_KANPEKI_CONFIG,
@@ -121,8 +123,31 @@ export function SpinTheWheel({
   isExternalLink = false,
 }: SpinTheWheelProps) {
   // Dedicated Standalone Wheel Inventory State (Zero AppContext / POS Dependency)
-  const [wheelInventory, setWheelInventory] = useState<WheelInventoryItem[]>(DEFAULT_WHEEL_INVENTORY);
-  const [brandConfig, setBrandConfig] = useState<SpinBrandConfig>(DEFAULT_KANPEKI_CONFIG);
+  // Initialize with local cache or Kanpeki defaults so there is ZERO delay/flash of old wheel
+  const [wheelInventory, setWheelInventory] = useState<WheelInventoryItem[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("belezia_wheel_inventory_cache_v1");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return DEFAULT_KANPEKI_INVENTORY;
+  });
+  const [brandConfig, setBrandConfig] = useState<SpinBrandConfig>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("belezia_brand_config_cache_v1");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.brandName) return parsed;
+        }
+      } catch {}
+    }
+    return DEFAULT_KANPEKI_CONFIG;
+  });
 
   // Fetch wheel inventory and brand configuration once on mount from /api/wheel-inventory
   useEffect(() => {
@@ -132,9 +157,15 @@ export function SpinTheWheel({
         if (!isMounted) return;
         if (items && items.length > 0) {
           setWheelInventory(items);
+          try {
+            localStorage.setItem("belezia_wheel_inventory_cache_v1", JSON.stringify(items));
+          } catch {}
         }
         if (config) {
           setBrandConfig(config);
+          try {
+            localStorage.setItem("belezia_brand_config_cache_v1", JSON.stringify(config));
+          } catch {}
         }
       })
       .catch(() => {});
@@ -277,7 +308,7 @@ export function SpinTheWheel({
         });
       }
     }
-    return DEFAULT_PRIZES;
+    return DEFAULT_KANPEKI_PRIZES;
   }, [wheelInventory, brandConfig.brandName]);
 
   const numSlices = prizes.length;

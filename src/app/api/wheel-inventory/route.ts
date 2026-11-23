@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { WheelInventoryItem, DEFAULT_WHEEL_INVENTORY, DEFAULT_KANPEKI_CONFIG } from "@/types/rewards";
+import { WheelInventoryItem, DEFAULT_WHEEL_INVENTORY, DEFAULT_KANPEKI_INVENTORY, DEFAULT_KANPEKI_CONFIG } from "@/types/rewards";
 import {
   loadCloudWheelInventory,
   saveCloudWheelInventory,
@@ -53,8 +53,8 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        items: DEFAULT_WHEEL_INVENTORY,
-        count: DEFAULT_WHEEL_INVENTORY.length,
+        items: DEFAULT_KANPEKI_INVENTORY,
+        count: DEFAULT_KANPEKI_INVENTORY.length,
         is_spin_active: true,
         brand_config: DEFAULT_KANPEKI_CONFIG,
       },

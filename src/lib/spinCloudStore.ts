@@ -5,6 +5,7 @@ import {
   SpinClaimRecord,
   WheelInventoryItem,
   DEFAULT_WHEEL_INVENTORY,
+  DEFAULT_KANPEKI_INVENTORY,
   SpinBrandConfig,
   DEFAULT_KANPEKI_CONFIG,
 } from "@/types/rewards";
@@ -223,7 +224,7 @@ async function getSupabaseSystemData(): Promise<{
 
     return {
       claims: sysClaims,
-      wheel_inventory: sysInv.length > 0 ? sysInv : DEFAULT_WHEEL_INVENTORY,
+      wheel_inventory: sysInv.length > 0 ? sysInv : DEFAULT_KANPEKI_INVENTORY,
       is_spin_active: isSpinActive,
       brand_config: brandConfig,
     };
@@ -730,7 +731,7 @@ export async function loadCloudWheelInventory(): Promise<WheelInventoryItem[]> {
     return sanitizeWheelInventory(diskData);
   }
 
-  const initial = sanitizeWheelInventory(DEFAULT_WHEEL_INVENTORY);
+  const initial = sanitizeWheelInventory(DEFAULT_KANPEKI_INVENTORY);
   if (isSupabaseConfigured()) {
     saveSupabaseSystemData({ wheel_inventory: initial }).catch(() => {});
   }
