@@ -30,6 +30,8 @@ import {
   removeProductQuantity,
   SpinBrandConfig,
   DEFAULT_KANPEKI_CONFIG,
+  getPrizeWeight,
+  pickWeightedPrizeIndex,
 } from "@/types/rewards";
 import {
   playTickSound,
@@ -71,15 +73,21 @@ function splitTitleIntoLines(title: string): string[] {
   const clean = removeProductQuantity(title || "").trim();
   const lower = clean.toLowerCase();
 
-  // Optimized line splits for the 4 official event offers
+  // Optimized line splits for the official event offers
   if (lower.includes("shampoo")) {
     return ["Free L'Oréal", "Shampoo"];
   }
-  if (lower.includes("d-tan") || lower.includes("de-tan")) {
-    return ["Free D-Tan", "Service"];
+  if (lower.includes("detan") || lower.includes("d-tan") || lower.includes("de-tan")) {
+    return ["Free Detan", "Service"];
   }
   if (lower.includes("hair cut") || lower.includes("haircut")) {
-    return ["Free Hair Cut", "Service"];
+    return ["Free Hair", "Cut"];
+  }
+  if (lower.includes("shaving") || lower.includes("threading")) {
+    return ["Shaving /", "Threading"];
+  }
+  if (lower.includes("head wash") || lower.includes("headwash") || lower.includes("hair wash")) {
+    return ["Free Head", "Wash"];
   }
   if (lower.includes("mask") || lower.includes("repair")) {
     return ["Free L'Oréal", "Absolut Repair", "Hair Mask"];
@@ -263,12 +271,14 @@ export function SpinTheWheel({
               removeProductQuantity(matchingDefault?.description || "") ||
               `Complimentary ${cleanTitle} for ${brandConfig.brandName || "Salon"} Consultation Day`,
             requiresInventoryDeduction: false,
+            weight: item.weight !== undefined ? item.weight : getPrizeWeight(item),
+            quantity: item.quantity,
           };
         });
       }
     }
     return DEFAULT_PRIZES;
-  }, [wheelInventory]);
+  }, [wheelInventory, brandConfig.brandName]);
 
   const numSlices = prizes.length;
   const sliceAngle = 360 / numSlices;
@@ -318,19 +328,14 @@ export function SpinTheWheel({
     setGameState("SPINNING");
     setPhoneError(null);
 
-    // Pick in-stock active prize index if available, otherwise random
-    const inStockIndices =
-      wheelInventory && wheelInventory.length > 0
-        ? wheelInventory
-            .map((item, idx) => ({ idx, available: item.is_active && item.quantity > 0 }))
-            .filter((i) => i.available)
-            .map((i) => i.idx)
-        : [];
-
-    const targetIndex =
-      inStockIndices.length > 0
-        ? inStockIndices[Math.floor(Math.random() * inStockIndices.length)]
-        : Math.floor(Math.random() * numSlices);
+    // Pre-calculate the winner using weighted probabilities BEFORE starting the spin animation
+    // Probability distribution:
+    // • Detan: 50% chance (weight: 50)
+    // • Hair cut: 16.67% chance (weight: 16.67)
+    // • Shaving / face threading: 16.67% chance (weight: 16.67)
+    // • Head wash: 16.66% chance (weight: 16.66)
+    // Slices with 0 stock (quantity <= 0) or inactive items are excluded (weight = 0).
+    const targetIndex = pickWeightedPrizeIndex(prizes);
 
     const selectedPrize = prizes[targetIndex];
     setWinningPrize(selectedPrize);

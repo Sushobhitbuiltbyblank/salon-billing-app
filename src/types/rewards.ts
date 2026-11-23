@@ -18,6 +18,7 @@ export interface WheelInventoryItem {
   is_active: boolean;
   color?: string;
   created_at?: string;
+  weight?: number; // Probability weight (e.g. 50, 16.67)
 }
 
 export interface SpinBrandConfig {
@@ -51,35 +52,39 @@ export const DEFAULT_KANPEKI_CONFIG: SpinBrandConfig = {
 export const DEFAULT_KANPEKI_INVENTORY: WheelInventoryItem[] = [
   {
     id: "00000000-0000-0000-0000-000000000301",
-    title: "Free Kanpeki Skin Facial",
-    category: "free_service",
-    quantity: 30,
-    is_active: true,
-    color: "#ec4899", // Pink
-  },
-  {
-    id: "00000000-0000-0000-0000-000000000302",
-    title: "Free Kanpeki Hair Spa Ritual",
-    category: "free_service",
-    quantity: 30,
-    is_active: true,
-    color: "#8b5cf6", // Purple
-  },
-  {
-    id: "00000000-0000-0000-0000-000000000303",
-    title: "Free Kanpeki Professional Gift",
-    category: "gift",
-    quantity: 30,
-    is_active: true,
-    color: "#3b82f6", // Blue
-  },
-  {
-    id: "00000000-0000-0000-0000-000000000304",
-    title: "Free D-Tan Brightening Service",
+    title: "Free Detan Service",
     category: "free_service",
     quantity: 30,
     is_active: true,
     color: "#10b981", // Emerald
+    weight: 50, // 50% chance
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000302",
+    title: "Free Hair Cut",
+    category: "free_service",
+    quantity: 30,
+    is_active: true,
+    color: "#ec4899", // Pink
+    weight: 16.67, // 16.67% chance
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000303",
+    title: "Free Shaving / Face Threading",
+    category: "free_service",
+    quantity: 30,
+    is_active: true,
+    color: "#3b82f6", // Blue
+    weight: 16.67, // 16.67% chance
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000304",
+    title: "Free Head Wash",
+    category: "free_service",
+    quantity: 30,
+    is_active: true,
+    color: "#8b5cf6", // Purple
+    weight: 16.66, // 16.66% chance
   },
 ];
 
@@ -254,6 +259,8 @@ export interface RewardPrize {
   description: string;
   catalogItemId?: string; // Optional link to catalog item (product/service)
   requiresInventoryDeduction?: boolean;
+  weight?: number; // Probability weight
+  quantity?: number; // Current inventory quantity
 }
 
 export interface SpinClaimRecord {
@@ -346,4 +353,95 @@ export function removeProductQuantity(text: string): string {
     .replace(/\s{2,}/g, " ")
     .trim();
 }
+
+/**
+ * Returns the probability weight for an item/prize.
+ * Exact specified probabilities:
+ * • Detan: 50% chance (weight: 50)
+ * • Hair cut: 16.67% chance (weight: 16.67)
+ * • Shaving / face threading: 16.67% chance (weight: 16.67)
+ * • Head wash: 16.66% chance (weight: 16.66)
+ *
+ * Items with 0 quantity (out of stock) or is_active === false return 0.
+ */
+export function getPrizeWeight(item: {
+  title?: string;
+  label?: string;
+  weight?: number;
+  quantity?: number;
+  is_active?: boolean;
+}): number {
+  if (item.is_active === false) return 0;
+  if (typeof item.quantity === "number" && item.quantity <= 0) return 0;
+  if (typeof item.weight === "number" && !isNaN(item.weight) && item.weight >= 0) {
+    return item.weight;
+  }
+
+  const name = (item.title || item.label || "").toLowerCase();
+  if (name.includes("detan") || name.includes("de-tan") || name.includes("d-tan")) {
+    return 50;
+  }
+  if (name.includes("hair cut") || name.includes("haircut")) {
+    return 16.67;
+  }
+  if (name.includes("shaving") || name.includes("threading")) {
+    return 16.67;
+  }
+  if (name.includes("head wash") || name.includes("headwash") || name.includes("hair wash")) {
+    return 16.66;
+  }
+
+  return 10;
+}
+
+/**
+ * Pre-calculates the winning index using weighted probabilities before the wheel animation starts.
+ * Slices with 0 weight (or 0 inventory stock) are excluded from winning.
+ * Probabilities are normalized across all eligible in-stock items.
+ */
+export function pickWeightedPrizeIndex<
+  T extends {
+    title?: string;
+    label?: string;
+    weight?: number;
+    quantity?: number;
+    is_active?: boolean;
+  }
+>(items: T[], numSlicesFallback: number = items.length): number {
+  if (!items || items.length === 0) {
+    return Math.floor(Math.random() * Math.max(1, numSlicesFallback));
+  }
+
+  const weights = items.map((item) => Math.max(0, getPrizeWeight(item)));
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+
+  // If all items have 0 weight (e.g. everything is out of stock), pick an available item or fallback
+  if (totalWeight <= 0) {
+    const eligibleIndices = items
+      .map((it, idx) => ({
+        idx,
+        ok: it.is_active !== false && (it.quantity === undefined || it.quantity > 0),
+      }))
+      .filter((x) => x.ok)
+      .map((x) => x.idx);
+    if (eligibleIndices.length > 0) {
+      return eligibleIndices[Math.floor(Math.random() * eligibleIndices.length)];
+    }
+    return Math.floor(Math.random() * items.length);
+  }
+
+  const randomVal = Math.random() * totalWeight;
+  let cumulative = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    cumulative += weights[i];
+    if (randomVal < cumulative) {
+      return i;
+    }
+  }
+
+  // Fallback safeguard against precision error at top edge
+  return items.length - 1;
+}
+
 

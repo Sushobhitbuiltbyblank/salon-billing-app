@@ -29,6 +29,7 @@ import {
   DEFAULT_KANPEKI_INVENTORY,
   BRAND_PRESETS,
   removeProductQuantity,
+  getPrizeWeight,
 } from "@/types/rewards";
 import {
   fetchServerBrandConfig,
@@ -166,13 +167,15 @@ export function BrandCampaignManager() {
     e.preventDefault();
     if (!newPrizeTitle.trim()) return;
 
+    const titleClean = removeProductQuantity(newPrizeTitle.trim());
     const newItem: WheelInventoryItem = {
       id: `prize-${Date.now()}`,
-      title: removeProductQuantity(newPrizeTitle.trim()),
+      title: titleClean,
       category: newPrizeCategory,
       quantity: Math.max(0, newPrizeQuantity || 30),
       is_active: true,
       color: newPrizeColor,
+      weight: getPrizeWeight({ title: titleClean }),
       created_at: new Date().toISOString(),
     };
 
@@ -606,6 +609,9 @@ export function BrandCampaignManager() {
                       </span>
                       <span className="px-1.5 py-0.5 rounded-md bg-zinc-800 text-zinc-300 text-[10px] font-mono uppercase">
                         {item.category.replace("_", " ")}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-md bg-purple-950/70 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">
+                        {item.weight !== undefined ? item.weight : getPrizeWeight(item)}% Chance
                       </span>
                     </div>
                     <span className="text-[11px] text-zinc-500 font-mono">ID: {item.id}</span>

@@ -20,10 +20,12 @@ export function getOfferProductImage(title: string): string {
   const t = (title || "").toLowerCase();
   if (t.includes("shampoo")) return "/images/products/loreal-shampoo.jpg";
   if (t.includes("facewash")) return "/images/products/loreal-facewash.jpg";
-  if (t.includes("d-tan") || t.includes("de-tan")) return "/images/products/dtan-service.jpg";
+  if (t.includes("detan") || t.includes("d-tan") || t.includes("de-tan")) return "/images/products/dtan-service.jpg";
   if (t.includes("hair cut") || t.includes("haircut")) return "/images/products/haircut-service.jpg";
+  if (t.includes("shaving") || t.includes("threading")) return "/images/products/haircut-service.jpg";
+  if (t.includes("head wash") || t.includes("headwash") || t.includes("hair wash")) return "/images/products/loreal-shampoo.jpg";
   if (t.includes("mask") || t.includes("repair")) return "/images/products/loreal-mask.jpg";
-  return "/images/products/loreal-shampoo.jpg";
+  return "/images/products/dtan-service.jpg";
 }
 
 export function getActivePrizes(): RewardPrize[] {

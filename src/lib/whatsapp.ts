@@ -149,14 +149,15 @@ export interface LorealSpinInviteParams {
   salonVenue?: string;
   eventDate?: string;
   salonPhone?: string;
+  isConcluded?: boolean;
 }
 
 export const CUSTOMER_OFFERS_BASE_URL = "https://belezia-offers.vercel.app";
 export const CUSTOMER_OFFERS_SPIN_URL = "https://belezia-offers.vercel.app/spin";
 
 /**
- * Standard WhatsApp message sent to customer thanking them for the L'Oréal Day event
- * and inviting them to follow on Instagram for future event updates.
+ * Standard WhatsApp message for inviting a customer to the L'Oréal Day Spin-the-Wheel event
+ * or thanking them if the event has concluded.
  */
 export function formatLorealSpinInviteWhatsAppMessage({
   customerName,
@@ -164,7 +165,9 @@ export function formatLorealSpinInviteWhatsAppMessage({
   baseUrl = CUSTOMER_OFFERS_BASE_URL,
   salonName = "Belezia Salon",
   salonVenue = SALON_EVENT_VENUE,
+  eventDate = SALON_EVENT_DATE,
   salonPhone = SALON_BOOKING_WHATSAPP,
+  isConcluded = false,
 }: LorealSpinInviteParams = {}): string {
   const nameDisplay = customerName?.trim() ? `*${customerName.trim()}*` : "Valued Customer";
   const cleanPhone = cleanPhoneNumber(customerPhone);
@@ -173,22 +176,46 @@ export function formatLorealSpinInviteWhatsAppMessage({
   if (customerName?.trim()) queryParams.set("name", customerName.trim());
   if (cleanPhone) queryParams.set("phone", cleanPhone);
   const paramString = queryParams.toString();
-  const offersUrl = `${baseUrl.replace(/\/$/, "")}/${paramString ? `?${paramString}` : ""}`;
+
+  if (isConcluded) {
+    const offersUrl = `${baseUrl.replace(/\/$/, "")}/${paramString ? `?${paramString}` : ""}`;
+    return (
+      `✨ *BELEZIA SALON × L’ORÉAL PROFESSIONNEL* ✨\n` +
+      `*The Event Was Great! Thank You For Making It a Grand Success!* 🎉\n\n` +
+      `Dear ${nameDisplay},\n\n` +
+      `A huge, heartfelt thank you from all of us at *${salonName}* for celebrating our *L'Oréal Professionnel Hair Consultation & Lucky Wheel Event* with us! Thanks to your incredible love and enthusiasm, the event was a massive success.\n\n` +
+      `🚀 *More Exciting Events Coming Soon!*\n` +
+      `Missed this one or want more? We will launch more such exciting beauty events, expert hair consultations, and lucky wheel giveaways in the future.\n\n` +
+      `📸 *Please follow us on Instagram for all future event updates & exclusive offers:*\n` +
+      `👉 https://www.instagram.com/beleziasalonlaxminagar/\n\n` +
+      `🔗 *Event Page & Updates:*\n` +
+      `👉 ${offersUrl}\n\n` +
+      `📍 *Location:* ${salonVenue}\n` +
+      `📞 *WhatsApp & Assistance:* ${salonPhone}\n\n` +
+      `We look forward to welcoming you back to the salon soon!\n— *${salonName} Team* 💇‍♀️✨`
+    );
+  }
+
+  const spinUrl = `${baseUrl.replace(/\/$/, "")}/spin${paramString ? `?${paramString}` : ""}`;
 
   return (
     `✨ *BELEZIA SALON × L’ORÉAL PROFESSIONNEL* ✨\n` +
-    `*The Event Was Great! Thank You For Making It a Grand Success!* 🎉\n\n` +
+    `*Exclusive Hair Consultation Event with Corporate Experts*\n\n` +
     `Dear ${nameDisplay},\n\n` +
-    `A huge, heartfelt thank you from all of us at *${salonName}* for celebrating our *L'Oréal Professionnel Hair Consultation & Lucky Wheel Event* with us! Thanks to your incredible love and enthusiasm, the event was a massive success.\n\n` +
-    `🚀 *More Exciting Events Coming Soon!*\n` +
-    `Missed this one or want more? We will launch more such exciting beauty events, expert hair consultations, and lucky wheel giveaways in the future.\n\n` +
-    `📸 *Please follow us on Instagram for all future event updates & exclusive offers:*\n` +
-    `👉 https://www.instagram.com/beleziasalonlaxminagar/\n\n` +
-    `🔗 *Event Page & Updates:*\n` +
-    `👉 ${offersUrl}\n\n` +
+    `Belezia Salon is partnering with L’Oréal Professionnel to bring you an exclusive, one-day-only Hair Consultation Event with visiting corporate experts!\n\n` +
+    `🎁 *THE ENTRY BONUS:* Every single person who walks through our doors for a consultation gets an *Absolute Free L'Oréal Goodie Bag!* No hidden catches, no purchases required—just pure hair love.\n\n` +
+    `✨ *What to expect from your free session:*\n` +
+    `* 🔬 Professional scalp & damage micro-analysis\n` +
+    `* 🎨 Personalized hair contouring & color mapping\n` +
+    `* 🧴 A customized routine mapped out by certified L'Oréal Experts\n\n` +
+    `🎰 *Spin our Lucky Wheel to reveal your exclusive event bonus & VIP pass:*\n` +
+    `👉 ${spinUrl}\n\n` +
+    `📅 *Date:* ${eventDate}\n` +
     `📍 *Location:* ${salonVenue}\n` +
-    `📞 *WhatsApp & Assistance:* ${salonPhone}\n\n` +
-    `We look forward to welcoming you back to the salon soon!\n— *${salonName} Team* 💇‍♀️✨`
+    `💰 *Entry & Consult:* 100% FREE\n` +
+    `📞 *WhatsApp Assistance & Booking:* ${salonPhone}\n\n` +
+    `${LOREAL_EVENT_TERMS}\n\n` +
+    `Slots are booking out rapidly. Ensure your name is on the expert's list and secure your guaranteed goodie bag now! 💇‍♀️💅`
   );
 }
 

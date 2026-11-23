@@ -1,34 +1,38 @@
 [
   {
     "id": "00000000-0000-0000-0000-000000000301",
-    "title": "Free Kanpeki Skin Facial",
+    "title": "Free Detan Service",
     "category": "free_service",
     "quantity": 30,
     "is_active": true,
-    "color": "#ec4899"
+    "color": "#10b981",
+    "weight": 50
   },
   {
     "id": "00000000-0000-0000-0000-000000000302",
-    "title": "Free Kanpeki Hair Spa Ritual",
+    "title": "Free Hair Cut",
     "category": "free_service",
     "quantity": 30,
     "is_active": true,
-    "color": "#8b5cf6"
+    "color": "#ec4899",
+    "weight": 16.67
   },
   {
     "id": "00000000-0000-0000-0000-000000000303",
-    "title": "Free Kanpeki Professional Gift",
-    "category": "gift",
-    "quantity": 30,
-    "is_active": true,
-    "color": "#3b82f6"
-  },
-  {
-    "id": "00000000-0000-0000-0000-000000000304",
-    "title": "Free D-Tan Brightening Service",
+    "title": "Free Shaving / Face Threading",
     "category": "free_service",
     "quantity": 30,
     "is_active": true,
-    "color": "#10b981"
+    "color": "#3b82f6",
+    "weight": 16.67
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000304",
+    "title": "Free Head Wash",
+    "category": "free_service",
+    "quantity": 30,
+    "is_active": true,
+    "color": "#8b5cf6",
+    "weight": 16.66
   }
 ]
