@@ -666,21 +666,21 @@ export function SpinTheWheel({
       const textAngle = startDeg + sliceAngle / 2;
       const textRad = ((textAngle - 90) * Math.PI) / 180;
 
-      // Dummy product image badge coordinates (at 75% radius)
-      const imgRadius = radius * 0.75;
+      // Product image badge coordinates (enlarged ~2x: 36px -> 64px for clear visibility)
+      const imgRadius = radius * 0.73;
       const imgX = center + imgRadius * Math.cos(textRad);
       const imgY = center + imgRadius * Math.sin(textRad);
-      const imgSize = 36;
+      const imgSize = numSlices <= 4 ? 64 : 48;
       const productImgUrl = getOfferProductImage(prize.label || prize.shortLabel);
 
-      // Multi-line text coordinates (at 46% radius)
-      const textRadius = radius * 0.46;
+      // Multi-line text coordinates (at 38% radius to give room for 2x larger badge)
+      const textRadius = radius * 0.38;
       const textX = center + textRadius * Math.cos(textRad);
       const textY = center + textRadius * Math.sin(textRad);
       const lines = splitTitleIntoLines(prize.label || prize.shortLabel);
       const isThreeLines = lines.length >= 3;
-      const fontSize = isThreeLines ? 12.5 : 14;
-      const lineHeight = isThreeLines ? 15 : 17;
+      const fontSize = isThreeLines ? 11.5 : 13;
+      const lineHeight = isThreeLines ? 14 : 16;
 
       return (
         <g key={prize.id} className="cursor-pointer">
@@ -1011,20 +1011,20 @@ export function SpinTheWheel({
               )}
             </div>
 
-            {/* WON PRIZE SHOWCASE - COMPACT HORIZONTAL ON MOBILE, NO STOCK OR COUNTS */}
+            {/* WON PRIZE SHOWCASE - ENLARGED 2X IMAGE DISPLAY */}
             <div
-              className="p-3 rounded-2xl border text-left shadow-lg relative overflow-hidden flex items-center gap-3"
+              className="p-3.5 rounded-2xl border text-left shadow-lg relative overflow-hidden flex items-center gap-3.5"
               style={{
                 backgroundColor: `${winningPrize.color}15`,
                 borderColor: `${winningPrize.color}40`,
               }}
             >
-              <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl flex items-center justify-center p-1.5 bg-white border border-amber-500/40 shadow-md shrink-0 overflow-hidden">
+              <div className="h-24 w-24 sm:h-28 sm:w-28 rounded-2xl flex items-center justify-center p-1.5 bg-white border-2 border-amber-500/50 shadow-md shrink-0 overflow-hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={getOfferProductImage(winningPrize.label)}
                   alt={winningPrize.label}
-                  className="h-full w-full object-contain filter drop-shadow-sm"
+                  className="h-full w-full object-cover rounded-xl filter drop-shadow-sm"
                 />
               </div>
 

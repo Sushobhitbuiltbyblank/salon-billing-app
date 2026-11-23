@@ -367,37 +367,38 @@ export function OfferVoucherCard({
             gap: "12px",
           }}
         >
-          {/* Strictly-constrained product image container */}
+          {/* Strictly-constrained product image container (Enlarged 2x area for clear visibility) */}
           <div
             style={{
-              width: "64px",
-              height: "64px",
-              minWidth: "64px",
-              minHeight: "64px",
-              maxWidth: "64px",
-              maxHeight: "64px",
-              borderRadius: "12px",
+              width: "96px",
+              height: "96px",
+              minWidth: "96px",
+              minHeight: "96px",
+              maxWidth: "96px",
+              maxHeight: "96px",
+              borderRadius: "16px",
               overflow: "hidden",
               backgroundColor: "#000000",
-              border: "1.5px solid rgba(251, 191, 36, 0.5)",
+              border: "2px solid rgba(251, 191, 36, 0.6)",
               flexShrink: 0,
               position: "relative",
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.4)",
             }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={getOfferProductImage(displayWonItem)}
               alt={displayWonItem}
-              width={64}
-              height={64}
+              width={96}
+              height={96}
               style={{
-                width: "64px",
-                height: "64px",
-                maxWidth: "64px",
-                maxHeight: "64px",
+                width: "96px",
+                height: "96px",
+                maxWidth: "96px",
+                maxHeight: "96px",
                 objectFit: "cover",
                 display: "block",
-                borderRadius: "10px",
+                borderRadius: "14px",
               }}
               crossOrigin="anonymous"
             />
