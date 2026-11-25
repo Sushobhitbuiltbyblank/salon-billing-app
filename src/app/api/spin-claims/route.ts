@@ -79,6 +79,14 @@ export async function GET(request: Request) {
       if (match) {
         const spinSettings = await loadCloudSpinSettings();
         const brand = spinSettings.brand_config || DEFAULT_KANPEKI_CONFIG;
+        let eventDate = brand.eventDate || "Saturday, December 5, 2026";
+        if (
+          eventDate.includes("November 28") ||
+          eventDate.includes("October 31") ||
+          eventDate.includes("31st October")
+        ) {
+          eventDate = "Saturday, December 5, 2026";
+        }
         return NextResponse.json(
           {
             isValid: true,
@@ -92,7 +100,7 @@ export async function GET(request: Request) {
               isRedeemed: true,
               redeemedAt: match.createdAt,
               createdAt: match.createdAt,
-              eventDate: brand.eventDate || SALON_EVENT_DATE,
+              eventDate: eventDate,
               terms: brand.disclaimerTerms || LOREAL_EVENT_TERMS_SHORT,
               venue: brand.eventVenue || SALON_EVENT_VENUE,
               brandName: brand.brandName || "Kanpeki",

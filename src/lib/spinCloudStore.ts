@@ -763,17 +763,25 @@ export async function loadCloudSpinSettings(): Promise<{
   // 1. Try reading from disk / tmp
   const disk = await safeReadJson(LOCAL_SETTINGS_FILE, TMP_SETTINGS_FILE);
   if (disk && typeof disk.is_spin_active === "boolean") {
+    const brandConfig = disk.brand_config || DEFAULT_KANPEKI_CONFIG;
+    if (brandConfig.eventDate && (brandConfig.eventDate.includes("November 28") || brandConfig.eventDate.includes("October 31"))) {
+      brandConfig.eventDate = "Saturday, December 5, 2026";
+    }
     return {
       is_spin_active: disk.is_spin_active,
-      brand_config: disk.brand_config || DEFAULT_KANPEKI_CONFIG,
+      brand_config: brandConfig,
     };
   }
 
   // 2. Fallback to Supabase system record
   const sys = await getSupabaseSystemData();
+  const brandConfig = sys.brand_config || DEFAULT_KANPEKI_CONFIG;
+  if (brandConfig.eventDate && (brandConfig.eventDate.includes("November 28") || brandConfig.eventDate.includes("October 31"))) {
+    brandConfig.eventDate = "Saturday, December 5, 2026";
+  }
   return {
     is_spin_active: Boolean(sys.is_spin_active),
-    brand_config: sys.brand_config || DEFAULT_KANPEKI_CONFIG,
+    brand_config: brandConfig,
   };
 }
 

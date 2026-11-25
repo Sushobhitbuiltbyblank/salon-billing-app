@@ -1229,6 +1229,7 @@ export function SpinTheWheel({
           eventTime="10:00 AM – 9:00 PM"
           salonName="Belezia Salon"
           salonAddress={brandConfig.eventVenue || "Laxmi Nagar, Delhi"}
+          disclaimerTerms={brandConfig.disclaimerTerms}
         />
       )}
     </div>

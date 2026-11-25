@@ -55,7 +55,8 @@ import Link from "next/link";
 import { WheelInventoryManager } from "./WheelInventoryManager";
 import { BrandCampaignManager } from "./BrandCampaignManager";
 import { OfferVoucherCard } from "@/components/rewards/OfferVoucherCard";
-import { fetchServerWheelStatus, updateServerWheelStatus } from "@/lib/rewardStorage";
+import { fetchServerWheelStatus, updateServerWheelStatus, fetchServerBrandConfig } from "@/lib/rewardStorage";
+import { DEFAULT_KANPEKI_CONFIG, SpinBrandConfig } from "@/types/rewards";
 import {
   LOREAL_EVENT_TERMS,
   SALON_BOOKING_WHATSAPP,
@@ -126,6 +127,15 @@ export function AdminRewardsManagement({
   const [selectedVoucherForModal, setSelectedVoucherForModal] = useState<VerificationDetails | null>(
     null
   );
+  const [brandConfig, setBrandConfig] = useState<SpinBrandConfig>(DEFAULT_KANPEKI_CONFIG);
+
+  useEffect(() => {
+    fetchServerBrandConfig()
+      .then((cfg) => {
+        if (cfg) setBrandConfig(cfg);
+      })
+      .catch(() => {});
+  }, []);
 
   // Verification Gate URLs
   const [reviewUrl, setReviewUrl] = useState(settings.google_review_url || "");
@@ -627,7 +637,7 @@ export function AdminRewardsManagement({
 
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold shrink-0">
                 <Clock className="h-3.5 w-3.5 text-amber-400" />
-                <span>Event: 31st October</span>
+                <span>Event: {brandConfig?.eventDate || "Saturday, December 5, 2026"}</span>
               </div>
             </div>
 
@@ -795,7 +805,11 @@ export function AdminRewardsManagement({
                         <span>Event Date &amp; Venue</span>
                       </div>
                       <div className="text-sm font-extrabold text-amber-400">
-                        {verificationResult.offerDetails.eventDate}
+                        {verificationResult.offerDetails.eventDate?.includes("November 28") ||
+                        verificationResult.offerDetails.eventDate?.includes("31st October") ||
+                        verificationResult.offerDetails.eventDate?.includes("October 31")
+                          ? brandConfig?.eventDate || "Saturday, December 5, 2026"
+                          : verificationResult.offerDetails.eventDate || brandConfig?.eventDate || "Saturday, December 5, 2026"}
                       </div>
                       <div className="text-xs text-zinc-400 truncate mt-0.5 flex items-center gap-1">
                         <MapPin className="h-3 w-3 text-zinc-500" />
@@ -1319,7 +1333,13 @@ export function AdminRewardsManagement({
           customerPhone={selectedVoucherForModal.phoneNumber}
           wonItem={selectedVoucherForModal.wonItem}
           offerId={selectedVoucherForModal.offerToken}
-          eventDate="31st October"
+          eventDate={
+            selectedVoucherForModal.eventDate?.includes("31st October") ||
+            selectedVoucherForModal.eventDate?.includes("November 28")
+              ? brandConfig?.eventDate || "Saturday, December 5, 2026"
+              : selectedVoucherForModal.eventDate || brandConfig?.eventDate || "Saturday, December 5, 2026"
+          }
+          disclaimerTerms={brandConfig?.disclaimerTerms}
           eventTime="10:00 AM – 9:00 PM"
           salonName="Belezia Salon"
           salonAddress="Laxmi Nagar, Delhi"

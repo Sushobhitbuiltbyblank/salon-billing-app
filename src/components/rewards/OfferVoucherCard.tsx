@@ -27,6 +27,7 @@ export interface OfferVoucherCardProps {
   eventTime?: string;
   salonName?: string;
   salonAddress?: string;
+  disclaimerTerms?: string;
   onClose?: () => void;
   showModalWrapper?: boolean;
 }
@@ -38,6 +39,7 @@ export function OfferVoucherCard({
   offerId,
   eventDate = "Saturday, December 5, 2026",
   salonName = "Belezia Salon",
+  disclaimerTerms,
   onClose,
   showModalWrapper = false,
 }: OfferVoucherCardProps) {
@@ -559,7 +561,7 @@ export function OfferVoucherCard({
               lineHeight: "1.35",
             }}
           >
-            <strong style={{ color: "#f4f4f5" }}>Show at Front Desk</strong> to redeem on 31st October.
+            <strong style={{ color: "#f4f4f5" }}>Show at Front Desk</strong> to redeem on {eventDate || "Saturday, December 5, 2026"}.
             Present this voucher pass during checkout.
           </div>
         </div>
@@ -581,7 +583,14 @@ export function OfferVoucherCard({
               margin: 0,
             }}
           >
-            {LOREAL_EVENT_TERMS}
+            {(
+              disclaimerTerms ||
+              `🚨 Disclaimer: This exclusive offer and the free goodies are valid strictly on ${
+                eventDate || "Saturday, December 5, 2026"
+              } on a First-Come, First-Served basis, only till stocks last! Doors open at 10:00 AM sharp—make sure to arrive early so you don't miss out!`
+            )
+              .replace(/31\s*October|31st\s*October/gi, eventDate || "Saturday, December 5, 2026")
+              .replace(/November\s*28(?:,\s*2026)?|28th\s*November/gi, eventDate || "Saturday, December 5, 2026")}
           </p>
         </div>
       </div>

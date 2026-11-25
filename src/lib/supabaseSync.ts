@@ -1874,6 +1874,8 @@ export const SupabaseSync = {
           .single();
 
         if (!error && data) {
+          const isKanpeki = cleanId.toUpperCase().includes("KANPEKI");
+          const defaultEventDate = isKanpeki ? "Saturday, December 5, 2026" : SALON_EVENT_DATE;
           return {
             isValid: true,
             offerDetails: {
@@ -1886,7 +1888,7 @@ export const SupabaseSync = {
               isRedeemed: Boolean(data.is_redeemed),
               redeemedAt: data.redeemed_at || data.created_at,
               createdAt: data.created_at,
-              eventDate: SALON_EVENT_DATE,
+              eventDate: defaultEventDate,
               terms: LOREAL_EVENT_TERMS_SHORT,
               venue: SALON_EVENT_VENUE,
             },
@@ -1900,6 +1902,8 @@ export const SupabaseSync = {
     // Fallback to local storage records
     const localRecord = findLocalOfferById(cleanId);
     if (localRecord) {
+      const isKanpeki = cleanId.toUpperCase().includes("KANPEKI");
+      const defaultEventDate = isKanpeki ? "Saturday, December 5, 2026" : SALON_EVENT_DATE;
       return {
         isValid: true,
         offerDetails: {
@@ -1912,7 +1916,7 @@ export const SupabaseSync = {
           isRedeemed: Boolean(localRecord.is_redeemed),
           redeemedAt: localRecord.redeemed_at || localRecord.created_at,
           createdAt: localRecord.created_at,
-          eventDate: SALON_EVENT_DATE,
+          eventDate: defaultEventDate,
           terms: LOREAL_EVENT_TERMS_SHORT,
           venue: SALON_EVENT_VENUE,
         },
@@ -1923,6 +1927,13 @@ export const SupabaseSync = {
     try {
       const serverResult = await verifyOfferOnServer(cleanId);
       if (serverResult && serverResult.isValid && serverResult.offerDetails) {
+        if (
+          serverResult.offerDetails.eventDate?.includes("November 28") ||
+          serverResult.offerDetails.eventDate?.includes("31st October") ||
+          serverResult.offerDetails.eventDate?.includes("October 31")
+        ) {
+          serverResult.offerDetails.eventDate = "Saturday, December 5, 2026";
+        }
         return serverResult;
       }
     } catch {}
